@@ -1,0 +1,22 @@
+{
+  "name": "harbor",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "an open desktop host for coding agents",
+  "packageManager": "pnpm@10.9.0",
+  "engines": {
+    "node": ">=22.11.0",
+    "pnpm": "10.9.0"
+  },
+  "scripts": {
+    "check": "pnpm check:brand && pnpm check:rust && pnpm check:workspace",
+    "check:brand": "bash scripts/deny-brand.sh",
+    "check:rust": "cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings",
+    "check:workspace": "turbo run check",
+    "fmt": "cargo fmt --all"
+  },
+  "devDependencies": {
+    "turbo": "2.10.12"
+  }
+}

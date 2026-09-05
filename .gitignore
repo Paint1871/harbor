@@ -1,0 +1,29 @@
+# Dependencies and build products
+node_modules/
+target/
+dist/
+.turbo/
+.pnpm-store/
+coverage/
+
+# Local environment and signing material
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.key
+*.keychain-db
+
+# Local runtime data and visual QA captures
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+.local/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

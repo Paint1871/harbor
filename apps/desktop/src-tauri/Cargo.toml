@@ -1,0 +1,13 @@
+[package]
+name = "harbor-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Native desktop host for Harbor"
+
+[lib]
+name = "harbor_desktop"
+
+[dependencies]
+harbor-core.workspace = true
