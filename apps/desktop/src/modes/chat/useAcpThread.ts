@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { ContentPart } from "@harbor/schema/commands";
 import type { PermissionRequest } from "./PermissionCard";
 
@@ -14,6 +15,25 @@ export function useAcpThread(threadId: string | null) {
   const [configOptions, setConfigOptions] = useState<{ id: string; category: string }[]>([]);
   const [model, setModel] = useState<string | null>(null);
   const [turn, setTurn] = useState(0);
+
+  useEffect(() => {
+    const unlisten = listen<{
+      sessionRef: string;
+      payload: { text?: string; configOptions?: { id: string; category: string }[] };
+    }>("acp_update", (event) => {
+      if (event.payload.sessionRef !== threadId) return;
+      const text = event.payload.payload?.text;
+      if (text) {
+        setLines((current) => [...current, { id: `${Date.now()}-acp`, text }]);
+      }
+      if (event.payload.payload?.configOptions) {
+        setConfigOptions(event.payload.payload.configOptions);
+      }
+    });
+    return () => {
+      void unlisten.then((stop) => stop());
+    };
+  }, [threadId]);
 
   const send = useCallback(
     async (text: string) => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
 import type { Theme } from "@harbor/ui/theme";
@@ -66,6 +67,13 @@ export function Settings({ theme, onThemeChange, onClose, onShowWelcome }: Setti
             <>
               <h3>Voice</h3>
               <p>Dictation is on-device. Cloud STT only if you paste your own URL. Voice copilot is a later release.</p>
+              <Button onClick={() => void invoke("dictation_begin").catch(() => undefined)}>Test dictation</Button>
+              <Button variant="ghost" onClick={() => void invoke("dictation_end").catch(() => undefined)}>
+                Stop
+              </Button>
+              <Button variant="ghost" onClick={() => void invoke("dictation_prepare_model").catch(() => undefined)}>
+                Prepare Whisper model
+              </Button>
             </>
           ) : null}
           {page === "agents" ? (

@@ -3,6 +3,7 @@
 pub mod permissions;
 pub mod session;
 pub mod spawn;
+pub mod transport;
 
 pub use permissions::{PermissionKind, map_permission_kind};
 pub use session::{InitializeCaps, ResumeKind, resume_or_new};

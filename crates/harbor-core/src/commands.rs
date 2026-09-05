@@ -104,28 +104,28 @@ pub async fn pty_kill(_pane_id: String) -> Result<(), Error> {
 }
 
 pub async fn fs_read(
-    _pool: &SqlitePool,
-    _workspace_id: String,
-    _path: String,
+    pool: &SqlitePool,
+    workspace_id: String,
+    path: String,
 ) -> Result<String, Error> {
-    Err(Error::unimplemented("fs_read"))
+    crate::files::read(pool, &workspace_id, &path).await
 }
 
 pub async fn fs_write(
-    _pool: &SqlitePool,
-    _workspace_id: String,
-    _path: String,
-    _contents: String,
+    pool: &SqlitePool,
+    workspace_id: String,
+    path: String,
+    contents: String,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("fs_write"))
+    crate::files::write(pool, &workspace_id, &path, &contents).await
 }
 
 pub async fn fs_list(
-    _pool: &SqlitePool,
-    _workspace_id: String,
-    _path: String,
+    pool: &SqlitePool,
+    workspace_id: String,
+    path: String,
 ) -> Result<Vec<FsEntry>, Error> {
-    Err(Error::unimplemented("fs_list"))
+    crate::files::list(pool, &workspace_id, &path).await
 }
 
 pub async fn thread_list(
@@ -156,11 +156,11 @@ pub async fn thread_pin(pool: &SqlitePool, id: String, pinned: bool) -> Result<(
 }
 
 pub async fn thread_send(
-    _pool: &SqlitePool,
-    _id: String,
-    _parts: Vec<crate::types::ContentPart>,
+    pool: &SqlitePool,
+    id: String,
+    parts: Vec<crate::types::ContentPart>,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_send"))
+    crate::threads::send(pool, &id, &parts).await
 }
 
 pub async fn thread_cancel(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
@@ -302,16 +302,61 @@ pub async fn acp_permission_resolve(
     Err(Error::unimplemented("acp_permission_resolve"))
 }
 
-pub async fn plugin_list(_pool: &SqlitePool) -> Result<Vec<PluginRow>, Error> {
+pub async fn plugin_list(pool: &SqlitePool) -> Result<Vec<PluginRow>, Error> {
+    let stored: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT status, display_name FROM plugins WHERE id = 'github'")
+            .fetch_optional(pool)
+            .await?;
+    let status = stored
+        .as_ref()
+        .map(|(status, _)| status.clone())
+        .unwrap_or_else(|| "available".into());
     Ok(vec![PluginRow {
         id: "github".into(),
-        display_name: "GitHub".into(),
-        status: "available".into(),
+        display_name: stored
+            .and_then(|(_, name)| name)
+            .unwrap_or_else(|| "GitHub".into()),
+        status,
     }])
 }
 
 pub async fn plugin_connect(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
     Err(Error::unimplemented("plugin_connect"))
+}
+
+pub async fn plugin_mark_connected(
+    pool: &SqlitePool,
+    id: &str,
+    display_name: &str,
+    account_label: Option<&str>,
+) -> Result<(), Error> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or_default();
+    sqlx::query(
+        "INSERT INTO plugins (id, display_name, status, account_label, connected_at)
+         VALUES (?1, ?2, 'connected', ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET
+            status = 'connected',
+            account_label = excluded.account_label,
+            connected_at = excluded.connected_at",
+    )
+    .bind(id)
+    .bind(display_name)
+    .bind(account_label)
+    .bind(ts)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn plugin_mark_disconnected(pool: &SqlitePool, id: &str) -> Result<(), Error> {
+    sqlx::query("UPDATE plugins SET status = 'available', account_label = NULL, connected_at = NULL WHERE id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 pub async fn plugin_disconnect(_pool: &SqlitePool, _id: String) -> Result<(), Error> {

@@ -5,6 +5,7 @@ pub mod commands;
 pub mod db;
 pub mod engines;
 pub mod error;
+pub mod files;
 pub mod restore;
 pub mod settings;
 pub mod threads;

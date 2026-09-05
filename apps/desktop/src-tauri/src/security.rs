@@ -74,6 +74,20 @@ impl ExecutableAllowlist {
             ))
         }
     }
+
+    pub fn granted(&self, kind: ExecutableKind) -> Vec<PathBuf> {
+        self.0
+            .read()
+            .ok()
+            .map(|grants| {
+                grants
+                    .iter()
+                    .filter(|(_, granted)| **granted == kind)
+                    .map(|(path, _)| path.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 fn executable_path(path: &Path) -> io::Result<PathBuf> {

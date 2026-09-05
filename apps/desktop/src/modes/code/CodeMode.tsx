@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
 import { Composer } from "@harbor/ui/Composer";
 import type { PaneLayout } from "@harbor/schema/commands";
@@ -6,6 +7,14 @@ import { tidy } from "../../layout/tidy";
 import { LaunchWizard } from "./LaunchWizard";
 import { TerminalPane } from "../../panes/TerminalPane";
 import { FilesPane } from "../../panes/files/FilesPane";
+
+function bytesToB64(bytes: Uint8Array): string {
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
 
 export function CodeMode() {
   const [layout, setLayout] = useState<PaneLayout>({
@@ -39,7 +48,8 @@ export function CodeMode() {
         disabled={!canSend}
         onSend={(value) => {
           setCommand("");
-          void value;
+          const bytes = new TextEncoder().encode(`${value}\r`);
+          void invoke("pty_write_b64", { paneId: "term", b64: bytesToB64(bytes) });
         }}
         controls={<span className="harbor-muted">{canSend ? "Enter sends to the focused terminal" : "Focus a terminal"}</span>}
       />

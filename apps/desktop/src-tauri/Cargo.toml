@@ -18,11 +18,17 @@ tauri-build = "=2.6.3"
 
 [dependencies]
 harbor-core.workspace = true
+harbor-acp.workspace = true
+harbor-plugins = { path = "../../../crates/harbor-plugins" }
+harbor-pty = { path = "../../../crates/harbor-pty" }
+harbor-speech = { path = "../../../crates/harbor-speech" }
+harbor-updater = { path = "../../../crates/harbor-updater" }
 tauri = { version = "=2.11.5", features = ["macos-private-api"] }
 tauri-plugin-fs = "=2.5.2"
 tauri-plugin-http = { version = "=2.6.0", default-features = false, features = ["rustls-tls"] }
 tauri-plugin-clipboard-manager = "=2.3.3"
 dirs = "=6.0.0"
+reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls", "blocking"] }
 serde_json = "=1.0.151"
 
 [target.'cfg(target_os = "macos")'.dependencies]

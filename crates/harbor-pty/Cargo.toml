@@ -8,6 +8,7 @@ description = "PTY spawn behind Harbor's executable allowlist"
 
 [dependencies]
 harbor-paths = { path = "../harbor-paths" }
+portable-pty = "0.8.1"
 thiserror = "=2.0.20"
 
 [dev-dependencies]

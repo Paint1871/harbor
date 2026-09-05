@@ -22,6 +22,32 @@ pub fn begin() -> DictationEvent {
     }
 }
 
+pub fn engine_available() -> bool {
+    false
+}
+
+pub fn start() -> DictationEvent {
+    if engine_available() {
+        begin()
+    } else {
+        silence_timeout()
+    }
+}
+
+pub fn end() -> DictationEvent {
+    DictationEvent {
+        state: DictationState::Idle,
+        copy: "",
+    }
+}
+
+pub fn model_missing() -> DictationEvent {
+    DictationEvent {
+        state: DictationState::Error,
+        copy: "Whisper model is not bundled in this build",
+    }
+}
+
 pub fn silence_timeout() -> DictationEvent {
     DictationEvent {
         state: DictationState::Error,
@@ -46,5 +72,7 @@ mod tests {
         );
         assert!(ignore_phantom_tap(120));
         assert!(!ignore_phantom_tap(200));
+        assert_eq!(start().state, DictationState::Error);
+        assert_eq!(end().state, DictationState::Idle);
     }
 }

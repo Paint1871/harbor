@@ -14,6 +14,7 @@ thiserror = "=2.0.20"
 ts-rs = "=10.1.0"
 uuid = { version = "=1.26.0", features = ["v7"] }
 harbor-git = { path = "../harbor-git" }
+harbor-paths = { path = "../harbor-paths" }
 
 [dev-dependencies]
 tempfile = "=3.27.0"

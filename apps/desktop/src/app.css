@@ -270,7 +270,9 @@ body {
 .harbor-pane header { display: flex; align-items: center; gap: var(--harbor-space-2); padding: var(--harbor-space-2); border-bottom: 1px solid var(--harbor-border); }
 .harbor-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--harbor-muted); }
 .harbor-live-dot[data-on="true"] { background: var(--harbor-live); }
-.harbor-xterm, .harbor-editor { flex: 1; margin: 0; padding: var(--harbor-space-3); background: var(--harbor-bg); color: var(--harbor-text); border: 0; font-family: var(--harbor-font-mono); font-size: var(--harbor-text-sm); }
+.harbor-xterm, .harbor-editor { flex: 1; margin: 0; padding: 0; min-height: 120px; background: var(--harbor-bg); color: var(--harbor-text); border: 0; font-family: var(--harbor-font-mono); font-size: var(--harbor-text-sm); }
+.harbor-xterm .xterm { height: 100%; }
+.harbor-xterm .xterm-viewport { overflow-y: auto !important; }
 .harbor-files-body { display: flex; flex: 1; min-height: 0; }
 .harbor-files-tree { border-right: 1px solid var(--harbor-border); padding: var(--harbor-space-2); overflow: auto; }
 .harbor-files-editor { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -287,7 +289,8 @@ body {
 .harbor-face {
   display: inline-flex; align-items: center; justify-content: center;
   width: var(--harbor-face); height: var(--harbor-face); border-radius: 50%;
-  font-size: 9px; font-weight: 600;
+  font-size: 9px; font-weight: 600; color: transparent; overflow: hidden;
+  background-repeat: no-repeat; background-color: #1c1c22;
 }
 .harbor-face-picker { display: flex; flex-wrap: wrap; gap: var(--harbor-space-1); }
 .harbor-face-picker button { border: 1px solid transparent; background: transparent; padding: 2px; cursor: pointer; }

@@ -1,5 +1,6 @@
 # Face atlas provenance
 
-Harbor 0.1.0 ships a geometric fallback (initials + palette) when `atlas.webp`
-is absent. An illustrated 8×8 atlas will be generated in-house; prompts and
-seeds belong in this file. The atlas must not be traced from another product.
+`atlas.webp` / `atlas.png` are original Harbor geometry from `render_atlas.py`:
+an 8×8 grid of circular heads with two highlights, recolored by 12 hues.
+No external prompt, seed, or third-party likeness. The UI falls back to
+initials if the atlas file is missing.

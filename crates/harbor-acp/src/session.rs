@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::AcpError;
 use crate::spawn::{McpServer, SpawnSpec};
@@ -127,27 +127,104 @@ pub fn parse_initialize_caps(result: &Value) -> InitializeCaps {
 }
 
 pub struct AcpHostSession {
+    conn: crate::transport::AcpConn,
     pub session_id: Option<String>,
     pub engine_id: String,
     pub cwd: String,
+    pub caps: InitializeCaps,
+    pub resume_kind: ResumeKind,
 }
 
 impl AcpHostSession {
-    pub async fn start(spec: SpawnSpec) -> Result<Self, AcpError> {
+    pub fn connect(spec: SpawnSpec) -> Result<Self, AcpError> {
+        let mut conn = crate::transport::AcpConn::spawn(&spec)?;
+        let init = conn.request(
+            "initialize",
+            json!({
+                "protocolVersion": 1,
+                "clientCapabilities": {
+                    "fs": { "readTextFile": false, "writeTextFile": false },
+                    "terminal": false
+                },
+                "clientInfo": { "name": "harbor", "version": "0.1.0" }
+            }),
+        )?;
+        let caps = parse_initialize_caps(&init);
+        if !caps.auth_methods.is_empty() {
+            return Err(AcpError::Protocol("auth-required"));
+        }
         Ok(Self {
+            conn,
             session_id: None,
             engine_id: spec.engine_id,
-            cwd: spec.cwd,
+            cwd: spec.cwd.clone(),
+            caps,
+            resume_kind: ResumeKind::Fresh,
         })
     }
 
-    pub async fn resume_or_new(&mut self, stored: Option<String>) -> Result<ResumeKind, AcpError> {
-        let caps = InitializeCaps::default();
-        let kind = resume_or_new(stored.as_deref(), &caps);
-        self.session_id = match kind {
-            ResumeKind::Resumed | ResumeKind::LoadedNoReplayPersist => stored,
-            ResumeKind::FreshWithBanner | ResumeKind::Fresh => None,
-        };
+    pub fn open_session(
+        &mut self,
+        stored: Option<String>,
+        spec: &SpawnSpec,
+        extra_roots: &[String],
+    ) -> Result<ResumeKind, AcpError> {
+        let kind = resume_or_new(stored.as_deref(), &self.caps);
+        let params = session_params(kind, stored.clone(), spec, extra_roots, &self.caps);
+        let result = self
+            .conn
+            .request(method_for(kind), serde_json::to_value(&params)?)?;
+        if matches!(kind, ResumeKind::LoadedNoReplayPersist) {
+            self.conn.notifications.retain(|note| {
+                !should_drop_session_update(
+                    kind,
+                    note.get("params")
+                        .and_then(|p| p.get("sessionUpdate"))
+                        .and_then(Value::as_str)
+                        == Some("replay"),
+                )
+            });
+        }
+        self.session_id = result
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or(stored);
+        self.resume_kind = kind;
         Ok(kind)
+    }
+
+    pub fn prompt(&mut self, parts: &[Value]) -> Result<Value, AcpError> {
+        self.conn.request(
+            "session/prompt",
+            json!({
+                "sessionId": self.session_id,
+                "prompt": parts
+            }),
+        )
+    }
+
+    pub fn cancel(&mut self) -> Result<Value, AcpError> {
+        self.conn
+            .request("session/cancel", json!({ "sessionId": self.session_id }))
+    }
+
+    pub fn set_config_option(&mut self, id: &str, value: Value) -> Result<Value, AcpError> {
+        self.conn.request(
+            "session/set_config_option",
+            json!({
+                "sessionId": self.session_id,
+                "configId": id,
+                "value": value
+            }),
+        )
+    }
+
+    pub fn notifications(&self) -> &[Value] {
+        &self.conn.notifications
+    }
+
+    pub fn take_notifications(&mut self) -> Vec<Value> {
+        std::mem::take(&mut self.conn.notifications)
     }
 }

@@ -1,7 +1,10 @@
 //! Native window foundation. Product commands are added in their designated PRs.
 
+pub mod acp_host;
 pub mod crash;
 pub mod ipc;
+pub mod plugins_host;
+pub mod pty_host;
 pub mod security;
 
 use std::path::PathBuf;
@@ -44,7 +47,11 @@ pub fn run() {
                 main.set_decorations(false)?;
             }
             // No workspace roots or engine processes are opened on cold start.
-            app.manage(security::ExecutableAllowlist::bootstrap()?);
+            let allowlist = security::ExecutableAllowlist::bootstrap()?;
+            acp_host::grant_engines(&allowlist, &harbor_core::engines::recheck());
+            app.manage(allowlist);
+            app.manage(pty_host::PtyRegistry::default());
+            app.manage(acp_host::AcpRegistry::default());
             let db_path = data_root.join("harbor.sqlite");
             let pool = tauri::async_runtime::block_on(harbor_core::db::open(&db_path))?;
             app.manage(pool);
