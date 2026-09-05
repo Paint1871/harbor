@@ -14,8 +14,10 @@ adds `@harbor/ui`: Black/Light tokens, theme and motion handling, and six UI
 primitives. PR-03 adds the native Harbor window (1280×768, `#0B0B0C` before
 first paint), a hidden overlay stub, least-privilege capabilities, a host-owned
 executable allowlist, and a panic hook that writes `logs/crash.log`. PR-04 adds
-the title-bar chrome: mode switch, mute orb, rail, and footer. Version 0.1.0 is
-a development target, not a published release.
+the title-bar chrome: mode switch, mute orb, rail, and footer. PR-05 adds
+local SQLite (`harbor.sqlite`), settings get/set, and the full 0.1.0 IPC
+command list (unused commands return unimplemented, with no auth gate). Version
+0.1.0 is a development target, not a published release.
 
 Run the isolated component preview with `pnpm --filter @harbor/ui dev`. See
 [the UI package](packages/ui/README.md) for component contracts and verification.

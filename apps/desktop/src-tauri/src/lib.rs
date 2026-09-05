@@ -1,6 +1,7 @@
 //! Native window foundation. Product commands are added in their designated PRs.
 
 pub mod crash;
+pub mod ipc;
 pub mod security;
 
 use std::path::PathBuf;
@@ -44,8 +45,12 @@ pub fn run() {
             }
             // No workspace roots or engine processes are opened on cold start.
             app.manage(security::ExecutableAllowlist::bootstrap()?);
+            let db_path = data_root.join("harbor.sqlite");
+            let pool = tauri::async_runtime::block_on(harbor_core::db::open(&db_path))?;
+            app.manage(pool);
             Ok(())
         })
+        .invoke_handler(ipc::handlers())
         .run(tauri::generate_context!())
         .expect("Harbor native runtime failed");
 }

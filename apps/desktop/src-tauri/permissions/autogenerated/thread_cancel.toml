@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-thread-cancel"
+description = "Enables the thread_cancel command without any pre-configured scope."
+commands.allow = ["thread_cancel"]
+
+[[permission]]
+identifier = "deny-thread-cancel"
+description = "Denies the thread_cancel command without any pre-configured scope."
+commands.deny = ["thread_cancel"]

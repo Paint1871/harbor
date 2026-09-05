@@ -185,5 +185,11 @@ fn release_panics_abort_and_no_renderer_grant_commands() {
     let cargo = fs::read_to_string(manifest_dir().join("Cargo.toml")).unwrap();
     assert!(cargo.contains("name = \"harbor\""));
     let build = fs::read_to_string(manifest_dir().join("build.rs")).unwrap();
-    assert!(build.contains("commands(&[])"));
+    assert!(build.contains("\"settings_get\""));
+    assert!(build.contains("\"settings_set\""));
+    let schema =
+        fs::read_to_string(manifest_dir().join("../../../packages/schema/src/commands.ts"))
+            .unwrap();
+    assert!(schema.contains("settings_get"));
+    assert!(!schema.contains("thread_messages"));
 }

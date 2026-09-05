@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-acp-permission-resolve"
+description = "Enables the acp_permission_resolve command without any pre-configured scope."
+commands.allow = ["acp_permission_resolve"]
+
+[[permission]]
+identifier = "deny-acp-permission-resolve"
+description = "Denies the acp_permission_resolve command without any pre-configured scope."
+commands.deny = ["acp_permission_resolve"]

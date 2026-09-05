@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dictation-begin"
+description = "Enables the dictation_begin command without any pre-configured scope."
+commands.allow = ["dictation_begin"]
+
+[[permission]]
+identifier = "deny-dictation-begin"
+description = "Denies the dictation_begin command without any pre-configured scope."
+commands.deny = ["dictation_begin"]

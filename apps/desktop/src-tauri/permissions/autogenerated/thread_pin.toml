@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-thread-pin"
+description = "Enables the thread_pin command without any pre-configured scope."
+commands.allow = ["thread_pin"]
+
+[[permission]]
+identifier = "deny-thread-pin"
+description = "Denies the thread_pin command without any pre-configured scope."
+commands.deny = ["thread_pin"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-thread-attach-files"
+description = "Enables the thread_attach_files command without any pre-configured scope."
+commands.allow = ["thread_attach_files"]
+
+[[permission]]
+identifier = "deny-thread-attach-files"
+description = "Denies the thread_attach_files command without any pre-configured scope."
+commands.deny = ["thread_attach_files"]

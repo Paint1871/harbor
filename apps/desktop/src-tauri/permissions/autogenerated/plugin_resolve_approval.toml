@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-plugin-resolve-approval"
+description = "Enables the plugin_resolve_approval command without any pre-configured scope."
+commands.allow = ["plugin_resolve_approval"]
+
+[[permission]]
+identifier = "deny-plugin-resolve-approval"
+description = "Denies the plugin_resolve_approval command without any pre-configured scope."
+commands.deny = ["plugin_resolve_approval"]

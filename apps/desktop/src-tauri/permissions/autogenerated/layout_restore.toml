@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-layout-restore"
+description = "Enables the layout_restore command without any pre-configured scope."
+commands.allow = ["layout_restore"]
+
+[[permission]]
+identifier = "deny-layout-restore"
+description = "Denies the layout_restore command without any pre-configured scope."
+commands.deny = ["layout_restore"]

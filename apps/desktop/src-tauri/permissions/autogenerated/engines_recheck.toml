@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engines-recheck"
+description = "Enables the engines_recheck command without any pre-configured scope."
+commands.allow = ["engines_recheck"]
+
+[[permission]]
+identifier = "deny-engines-recheck"
+description = "Denies the engines_recheck command without any pre-configured scope."
+commands.deny = ["engines_recheck"]
