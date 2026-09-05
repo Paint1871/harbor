@@ -1,5 +1,9 @@
 [workspace]
-members = ["apps/desktop/src-tauri", "crates/harbor-core"]
+members = [
+    "apps/desktop/src-tauri",
+    "crates/harbor-core",
+    "crates/harbor-acp",
+]
 resolver = "3"
 
 [workspace.package]
