@@ -16,9 +16,9 @@ export interface DetectedEngine {
 }
 
 export type PaneLayout =
-  | { type: "Leaf"; pane_id: string }
-  | { type: "Split"; dir: string; ratio: number; a: PaneLayout; b: PaneLayout }
-  | { type: "Tabs"; active: number; kids: string[] };
+  | { type: "leaf"; paneId: string }
+  | { type: "split"; dir: string; ratio: number; a: PaneLayout; b: PaneLayout }
+  | { type: "tabs"; active: number; kids: string[] };
 
 export interface PaneState {
   kind: string;
@@ -48,6 +48,7 @@ export interface CreateAgent {
   name: string;
   brief: string;
   engineId: string;
+  faceIndex?: number;
 }
 
 export interface UpdateAgent {

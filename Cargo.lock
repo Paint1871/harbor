@@ -1479,6 +1479,7 @@ dependencies = [
 name = "harbor-core"
 version = "0.1.0"
 dependencies = [
+ "harbor-git",
  "serde",
  "serde_json",
  "sqlx",
@@ -1486,6 +1487,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "ts-rs",
+ "uuid",
 ]
 
 [[package]]
@@ -1502,6 +1504,49 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-http",
  "tempfile",
+]
+
+[[package]]
+name = "harbor-git"
+version = "0.1.0"
+
+[[package]]
+name = "harbor-paths"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "harbor-plugins"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "harbor-pty"
+version = "0.1.0"
+dependencies = [
+ "harbor-paths",
+ "tempfile",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "harbor-speech"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "harbor-updater"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
 ]
 
 [[package]]

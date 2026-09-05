@@ -1,0 +1,2 @@
+# whisper.cpp base model. SHA-256 filled when the Harbor release asset is published.
+whisper-base.bin  sha256:UNPUBLISHED

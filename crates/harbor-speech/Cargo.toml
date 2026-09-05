@@ -1,0 +1,11 @@
+[package]
+name = "harbor-speech"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "On-device dictation host for Harbor"
+
+[dependencies]
+thiserror = "=2.0.20"
+serde = { version = "=1.0.229", features = ["derive"] }

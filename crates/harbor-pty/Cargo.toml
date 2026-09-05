@@ -1,0 +1,14 @@
+[package]
+name = "harbor-pty"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "PTY spawn behind Harbor's executable allowlist"
+
+[dependencies]
+harbor-paths = { path = "../harbor-paths" }
+thiserror = "=2.0.20"
+
+[dev-dependencies]
+tempfile = "=3.27.0"

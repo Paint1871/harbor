@@ -12,6 +12,8 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error("unimplemented: {0}")]
     Unimplemented(&'static str),
+    #[error("{0}")]
+    Message(String),
 }
 
 impl Error {

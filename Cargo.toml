@@ -3,6 +3,12 @@ members = [
     "apps/desktop/src-tauri",
     "crates/harbor-core",
     "crates/harbor-acp",
+    "crates/harbor-git",
+    "crates/harbor-paths",
+    "crates/harbor-pty",
+    "crates/harbor-updater",
+    "crates/harbor-speech",
+    "crates/harbor-plugins",
 ]
 resolver = "3"
 
@@ -14,6 +20,9 @@ publish = false
 
 [workspace.dependencies]
 harbor-core = { path = "crates/harbor-core" }
+harbor-acp = { path = "crates/harbor-acp" }
+harbor-git = { path = "crates/harbor-git" }
+harbor-paths = { path = "crates/harbor-paths" }
 
 [profile.release]
 panic = "abort"

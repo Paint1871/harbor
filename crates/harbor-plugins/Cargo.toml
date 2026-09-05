@@ -1,0 +1,11 @@
+[package]
+name = "harbor-plugins"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Outbound MCP plugin proxy for Harbor"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+thiserror = "=2.0.20"

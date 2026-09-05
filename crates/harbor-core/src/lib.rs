@@ -1,11 +1,15 @@
 //! Local application core for Harbor.
 
+pub mod agents;
 pub mod commands;
 pub mod db;
 pub mod engines;
 pub mod error;
+pub mod restore;
 pub mod settings;
+pub mod threads;
 pub mod types;
+pub mod workspaces;
 
 pub use sqlx::SqlitePool;
 
@@ -100,31 +104,20 @@ mod tests {
         let pool = db::open(&dir.path().join("harbor.sqlite")).await.unwrap();
         let engines = commands::engines_detect(&pool).await.unwrap();
         assert!(!engines.is_empty());
-        for result in [
-            commands::agent_list(&pool)
-                .await
-                .err()
-                .map(|error| error.to_string()),
-            commands::thread_list(&pool, None)
-                .await
-                .err()
-                .map(|error| error.to_string()),
-            commands::pty_spawn(&pool, "pane".into(), "/tmp".into(), None)
-                .await
-                .err()
-                .map(|error| error.to_string()),
-        ] {
-            let message = result.expect("unimplemented host command");
-            assert!(
-                message.contains("unimplemented"),
-                "command failed for a reason other than unimplemented: {message}"
-            );
-            assert!(
-                !message.to_ascii_lowercase().contains("token")
-                    && !message.to_ascii_lowercase().contains("entitlement")
-                    && !message.to_ascii_lowercase().contains("auth"),
-                "{message}"
-            );
-        }
+        let _agents = commands::agent_list(&pool).await.unwrap();
+        let message = commands::pty_spawn(&pool, "pane".into(), "/tmp".into(), None)
+            .await
+            .expect_err("unimplemented host command")
+            .to_string();
+        assert!(
+            message.contains("unimplemented"),
+            "command failed for a reason other than unimplemented: {message}"
+        );
+        assert!(
+            !message.to_ascii_lowercase().contains("token")
+                && !message.to_ascii_lowercase().contains("entitlement")
+                && !message.to_ascii_lowercase().contains("auth"),
+            "{message}"
+        );
     }
 }

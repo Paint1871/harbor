@@ -29,20 +29,20 @@ pub async fn engines_recheck(_pool: &SqlitePool) -> Result<Vec<DetectedEngine>, 
     Ok(crate::engines::recheck())
 }
 
-pub async fn workspace_list(_pool: &SqlitePool) -> Result<Vec<Workspace>, Error> {
-    Err(Error::unimplemented("workspace_list"))
+pub async fn workspace_list(pool: &SqlitePool) -> Result<Vec<Workspace>, Error> {
+    crate::workspaces::list(pool).await
 }
 
-pub async fn workspace_add(_pool: &SqlitePool, _folder: String) -> Result<Workspace, Error> {
-    Err(Error::unimplemented("workspace_add"))
+pub async fn workspace_add(pool: &SqlitePool, folder: String) -> Result<Workspace, Error> {
+    crate::workspaces::add(pool, folder).await
 }
 
-pub async fn workspace_remove(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("workspace_remove"))
+pub async fn workspace_remove(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::workspaces::remove(pool, &id).await
 }
 
-pub async fn workspace_pin(_pool: &SqlitePool, _id: String, _pinned: bool) -> Result<(), Error> {
-    Err(Error::unimplemented("workspace_pin"))
+pub async fn workspace_pin(pool: &SqlitePool, id: String, pinned: bool) -> Result<(), Error> {
+    crate::workspaces::pin(pool, &id, pinned).await
 }
 
 pub async fn workspace_save_layout(
@@ -129,30 +129,30 @@ pub async fn fs_list(
 }
 
 pub async fn thread_list(
-    _pool: &SqlitePool,
-    _workspace_id: Option<String>,
+    pool: &SqlitePool,
+    workspace_id: Option<String>,
 ) -> Result<Vec<ThreadRecord>, Error> {
-    Err(Error::unimplemented("thread_list"))
+    crate::threads::list(pool, workspace_id.as_deref()).await
 }
 
 pub async fn thread_create(
-    _pool: &SqlitePool,
-    _workspace_id: Option<String>,
-    _engine_id: String,
+    pool: &SqlitePool,
+    workspace_id: Option<String>,
+    engine_id: String,
 ) -> Result<ThreadRecord, Error> {
-    Err(Error::unimplemented("thread_create"))
+    crate::threads::create(pool, workspace_id, engine_id).await
 }
 
-pub async fn thread_rename(_pool: &SqlitePool, _id: String, _title: String) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_rename"))
+pub async fn thread_rename(pool: &SqlitePool, id: String, title: String) -> Result<(), Error> {
+    crate::threads::rename(pool, &id, &title).await
 }
 
-pub async fn thread_delete(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_delete"))
+pub async fn thread_delete(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::threads::delete(pool, &id).await
 }
 
-pub async fn thread_pin(_pool: &SqlitePool, _id: String, _pinned: bool) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_pin"))
+pub async fn thread_pin(pool: &SqlitePool, id: String, pinned: bool) -> Result<(), Error> {
+    crate::threads::pin(pool, &id, pinned).await
 }
 
 pub async fn thread_send(
@@ -176,12 +176,8 @@ pub async fn thread_set_config(
     Err(Error::unimplemented("thread_set_config"))
 }
 
-pub async fn thread_grant_root(
-    _pool: &SqlitePool,
-    _id: String,
-    _path: String,
-) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_grant_root"))
+pub async fn thread_grant_root(pool: &SqlitePool, id: String, path: String) -> Result<(), Error> {
+    crate::threads::grant_root(pool, &id, &path).await
 }
 
 pub async fn thread_attach_files(
@@ -192,20 +188,20 @@ pub async fn thread_attach_files(
     Err(Error::unimplemented("thread_attach_files"))
 }
 
-pub async fn agent_list(_pool: &SqlitePool) -> Result<Vec<AgentRecord>, Error> {
-    Err(Error::unimplemented("agent_list"))
+pub async fn agent_list(pool: &SqlitePool) -> Result<Vec<AgentRecord>, Error> {
+    crate::agents::list(pool).await
 }
 
-pub async fn agent_create(_pool: &SqlitePool, _input: CreateAgent) -> Result<AgentRecord, Error> {
-    Err(Error::unimplemented("agent_create"))
+pub async fn agent_create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord, Error> {
+    crate::agents::create(pool, input).await
 }
 
-pub async fn agent_update(_pool: &SqlitePool, _input: UpdateAgent) -> Result<(), Error> {
-    Err(Error::unimplemented("agent_update"))
+pub async fn agent_update(pool: &SqlitePool, input: UpdateAgent) -> Result<(), Error> {
+    crate::agents::update(pool, input).await
 }
 
-pub async fn agent_delete(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("agent_delete"))
+pub async fn agent_delete(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::agents::delete(pool, &id).await
 }
 
 pub async fn agent_draft_with_ai(_pool: &SqlitePool, _hint: String) -> Result<CreateAgent, Error> {
@@ -307,7 +303,11 @@ pub async fn acp_permission_resolve(
 }
 
 pub async fn plugin_list(_pool: &SqlitePool) -> Result<Vec<PluginRow>, Error> {
-    Err(Error::unimplemented("plugin_list"))
+    Ok(vec![PluginRow {
+        id: "github".into(),
+        display_name: "GitHub".into(),
+        status: "available".into(),
+    }])
 }
 
 pub async fn plugin_connect(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
@@ -359,6 +359,17 @@ pub async fn updater_install() -> Result<(), Error> {
     Err(Error::unimplemented("updater_install"))
 }
 
-pub async fn git_diff(_pool: &SqlitePool, _workspace_id: String) -> Result<Vec<FileDiff>, Error> {
-    Err(Error::unimplemented("git_diff"))
+pub async fn git_diff(pool: &SqlitePool, workspace_id: String) -> Result<Vec<FileDiff>, Error> {
+    let (folder,): (String,) = sqlx::query_as("SELECT folder FROM workspaces WHERE id = ?1")
+        .bind(&workspace_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| Error::Message("workspace not found".into()))?;
+    Ok(harbor_git::unified_diffs(&folder)?
+        .into_iter()
+        .map(|diff| FileDiff {
+            path: diff.path,
+            patch: diff.patch,
+        })
+        .collect())
 }

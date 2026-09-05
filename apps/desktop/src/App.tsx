@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { ThemeProvider } from "@harbor/ui/ThemeProvider";
 import type { Theme } from "@harbor/ui/theme";
+import { Inbox } from "./chrome/Inbox";
 import { Rail } from "./chrome/Rail";
 import { TitleBar } from "./chrome/TitleBar";
+import { Settings } from "./settings/Settings";
 import type { Mode } from "./chrome/ModeSwitch";
 import { AgentMode } from "./modes/AgentMode";
 import { ChatMode } from "./modes/ChatMode";
@@ -18,6 +20,8 @@ export function App() {
   const [voiceNotice, setVoiceNotice] = useState(false);
   const [ready, setReady] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
 
   useEffect(() => {
     void settingsGet("onboarded_local").then((value) => {
@@ -47,8 +51,20 @@ export function App() {
             onToggleRail={() => setRailOpen((open) => !open)}
             onOrbClick={() => setVoiceNotice(true)}
             onTidy={() => undefined}
-            onBellClick={() => undefined}
+            onBellClick={() => setInboxOpen((open) => !open)}
           />
+          <Inbox open={inboxOpen} />
+          {settingsOpen ? (
+            <Settings
+              theme={theme}
+              onThemeChange={setTheme}
+              onClose={() => setSettingsOpen(false)}
+              onShowWelcome={() => {
+                setSettingsOpen(false);
+                setOnboarded(false);
+              }}
+            />
+          ) : null}
           {voiceNotice ? (
             <div className="harbor-voice-notice" role="status">
               <p>Voice is off until a later release</p>
@@ -58,7 +74,7 @@ export function App() {
             </div>
           ) : null}
           <div className="harbor-body">
-            {railOpen ? <Rail theme={theme} onThemeChange={setTheme} onSettings={() => undefined} /> : null}
+            {railOpen ? <Rail theme={theme} onThemeChange={setTheme} onSettings={() => setSettingsOpen(true)} /> : null}
             <div className="harbor-modes">
               <section className="harbor-mode" data-active={mode === "agent"} aria-hidden={mode !== "agent"} aria-label="Agent">
                 <AgentMode />

@@ -14,6 +14,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@harbor/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
       '@harbor/ui':
         specifier: workspace:*
         version: link:../../packages/ui

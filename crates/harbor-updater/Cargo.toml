@@ -1,0 +1,10 @@
+[package]
+name = "harbor-updater"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "minisign-checked Harbor updates"
+
+[dependencies]
+thiserror = "=2.0.20"

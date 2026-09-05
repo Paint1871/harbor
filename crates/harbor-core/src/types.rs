@@ -83,6 +83,8 @@ pub struct CreateAgent {
     pub name: String,
     pub brief: String,
     pub engine_id: String,
+    #[serde(default)]
+    pub face_index: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
