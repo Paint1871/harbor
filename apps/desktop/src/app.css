@@ -149,3 +149,80 @@ body {
   pointer-events: auto;
 }
 .harbor-mode-body { width: 100%; height: 100%; background: var(--harbor-bg); }
+
+.harbor-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: var(--harbor-space-3);
+  background: var(--harbor-bg);
+  text-align: center;
+}
+.harbor-welcome-mark {
+  display: flex;
+  align-items: center;
+  gap: var(--harbor-space-3);
+}
+.harbor-welcome-mark h1 {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -1.5px;
+}
+.harbor-welcome-tagline {
+  margin: 0 0 var(--harbor-space-4);
+  color: var(--harbor-muted);
+  font-size: var(--harbor-text-lg);
+}
+.harbor-welcome-actions { display: flex; gap: var(--harbor-space-2); }
+.harbor-dialog {
+  position: absolute;
+  width: min(360px, calc(100% - 48px));
+  padding: var(--harbor-space-4);
+  border: 1px solid var(--harbor-border);
+  border-radius: var(--harbor-radius-chrome);
+  background: var(--harbor-surface);
+  text-align: left;
+}
+.harbor-dialog h2 { margin: 0 0 var(--harbor-space-2); font-size: var(--harbor-text-xl); font-weight: 500; }
+.harbor-dialog p { margin: 0 0 var(--harbor-space-3); color: var(--harbor-muted); }
+.harbor-dialog label { display: flex; flex-direction: column; gap: var(--harbor-space-1); margin-bottom: var(--harbor-space-3); }
+.harbor-dialog input {
+  padding: var(--harbor-space-2);
+  border: 1px solid var(--harbor-border);
+  border-radius: var(--harbor-radius-control);
+  background: var(--harbor-bg);
+  color: var(--harbor-text);
+  font: inherit;
+}
+
+.harbor-orbit {
+  width: 220px;
+  height: 220px;
+  margin-bottom: var(--harbor-space-2);
+}
+.harbor-orbit-ring {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  animation: harbor-orbit 28s linear infinite;
+}
+.harbor-orbit[data-still] .harbor-orbit-ring { animation: none; }
+.harbor-orbit-ring span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px;
+  border-radius: 50%;
+  background: var(--harbor-raised);
+  color: var(--harbor-muted);
+  font-size: var(--harbor-text-xs);
+  line-height: 28px;
+  transform: rotate(calc(var(--i) * 60deg)) translate(84px) rotate(calc(var(--i) * -60deg));
+}
+@keyframes harbor-orbit { to { transform: rotate(360deg); } }
