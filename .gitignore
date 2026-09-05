@@ -27,3 +27,6 @@ coverage/
 Thumbs.db
 .idea/
 *.swp
+
+# Tauri generated schemas
+apps/desktop/src-tauri/gen/

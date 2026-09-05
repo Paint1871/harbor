@@ -1,6 +1,47 @@
-//! Desktop host bootstrap. Tauri window setup follows in PR-03.
+//! Native window foundation. Product commands are added in their designated PRs.
 
-/// The application version shared with the core.
+pub mod crash;
+pub mod security;
+
+use std::path::PathBuf;
+
+use tauri::Manager;
+use tauri_plugin_fs::FsExt;
+
+#[cfg(test)]
+mod host_config;
+
 pub fn version() -> &'static str {
     harbor_core::version()
+}
+
+/// App-support root `harbor/`. Filesystem plugin scope is this directory, not `$HOME`.
+pub fn application_data_root() -> PathBuf {
+    dirs::data_dir()
+        .expect("could not resolve local application data directory")
+        .join("harbor")
+}
+
+pub fn run() {
+    let data_root = application_data_root();
+    crash::install(&data_root);
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("local-navigation")
+                .on_navigation(|_, url| security::allows_navigation(url, cfg!(debug_assertions)))
+                .build(),
+        )
+        .setup(move |app| {
+            crash::prepare_directory(&data_root)?;
+            app.fs_scope().allow_directory(&data_root, true)?;
+            // No workspace roots or engine processes are opened on cold start.
+            app.manage(security::ExecutableAllowlist::bootstrap()?);
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("Harbor native runtime failed");
 }
