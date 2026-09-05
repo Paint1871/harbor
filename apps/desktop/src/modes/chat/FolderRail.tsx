@@ -25,7 +25,7 @@ export function FolderRail({
   children,
 }: FolderRailProps) {
   return (
-    <aside className="harbor-chat-rail" aria-label="Workspaces">
+    <div className="harbor-chat-rail" aria-label="Workspaces">
       <h2>Workspaces</h2>
       {workspaces.map((workspace) => (
         <RailRow
@@ -52,6 +52,6 @@ export function FolderRail({
         selected={selectedId === null}
         onClick={() => onSelect(null)}
       />
-    </aside>
+    </div>
   );
 }

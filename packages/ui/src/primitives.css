@@ -42,6 +42,12 @@
   padding: var(--harbor-space-1);
   flex: 0 0 auto;
 }
+.harbor-composer-footer .harbor-button[data-size="icon"][data-variant="primary"] {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+}
 
 .harbor-button:hover:not(:disabled) {
   background: color-mix(in srgb, var(--harbor-raised), var(--harbor-text) 8%);
@@ -166,10 +172,10 @@
 .harbor-composer {
   min-width: 0;
   min-height: var(--harbor-composer-min-h);
-  padding: var(--harbor-space-3);
+  padding: var(--harbor-space-3) var(--harbor-space-4);
   border: 1px solid var(--harbor-border);
-  border-radius: var(--harbor-radius-chrome);
-  background: var(--harbor-surface);
+  border-radius: 16px;
+  background: var(--harbor-bg);
 }
 
 .harbor-composer:focus-within {

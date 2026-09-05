@@ -1,8 +1,8 @@
 import { Button } from "@harbor/ui/Button";
 import { RailRow } from "@harbor/ui/RailRow";
-import { Pill } from "@harbor/ui/Pill";
 import type { AgentRecord } from "@harbor/schema/commands";
 import { Face } from "./Face";
+import { useChrome } from "../../chrome/chrome-context";
 
 interface AgentRailProps {
   agents: AgentRecord[];
@@ -12,38 +12,52 @@ interface AgentRailProps {
 }
 
 export function AgentRail({ agents, selectedId, onSelect, onNew }: AgentRailProps) {
+  const { setDestination } = useChrome();
   const pinned = agents.filter((agent) => agent.pinned);
   const rest = agents.filter((agent) => !agent.pinned);
   return (
-    <div className="harbor-agent-rail">
+    <div className="harbor-rail-section">
+      <div className="harbor-rail-heading">
+        <h2>Agents</h2>
+        <Button size="icon" variant="ghost" aria-label="New Agent" onClick={onNew}>
+          +
+        </Button>
+      </div>
       <Button variant="primary" onClick={onNew}>
         New Agent
       </Button>
-      {pinned.length > 0 ? (
-        <div className="harbor-pin-band">
-          {pinned.map((agent) => (
-            <RailRow
-              key={agent.id}
-              label={agent.name}
-              description={agent.brief}
-              leading={<Face name={agent.name} index={agent.faceIndex} />}
-              selected={selectedId === agent.id}
-              onClick={() => onSelect(agent.id)}
-            />
-          ))}
-        </div>
-      ) : null}
-      {rest.map((agent) => (
-        <RailRow
-          key={agent.id}
-          label={agent.name}
-          description={agent.brief}
-          leading={<Face name={agent.name} index={agent.faceIndex} />}
-          trailing={<Pill>idle</Pill>}
-          selected={selectedId === agent.id}
-          onClick={() => onSelect(agent.id)}
-        />
-      ))}
+      <div className="harbor-roster" aria-label="Agent roster">
+        {pinned.length > 0 ? (
+          <div className="harbor-pin-band">
+            {pinned.map((agent) => (
+              <RailRow
+                key={agent.id}
+                label={agent.name}
+                description={agent.brief}
+                leading={<Face name={agent.name} index={agent.faceIndex} />}
+                selected={selectedId === agent.id}
+                onClick={() => {
+                  setDestination("mode");
+                  onSelect(agent.id);
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+        {rest.map((agent) => (
+          <RailRow
+            key={agent.id}
+            label={agent.name}
+            description={agent.brief}
+            leading={<Face name={agent.name} index={agent.faceIndex} />}
+            selected={selectedId === agent.id}
+            onClick={() => {
+              setDestination("mode");
+              onSelect(agent.id);
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

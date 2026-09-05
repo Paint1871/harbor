@@ -9,8 +9,11 @@ import { ChangesPanel } from "./ChangesPanel";
 import { PermissionCard } from "./PermissionCard";
 import { ModelMenu } from "./ModelMenu";
 import { useAcpThread } from "./useAcpThread";
+import { AppRail } from "../../chrome/AppRail";
+import { Transcript } from "../../chrome/Transcript";
+import { Button } from "@harbor/ui/Button";
 
-export function ChatMode() {
+export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [threads, setThreads] = useState<ThreadRecord[]>([]);
@@ -66,34 +69,42 @@ export function ChatMode() {
 
   return (
     <div className="harbor-chat">
-      <FolderRail
-        workspaces={workspaces}
-        otherCount={other.length}
-        selectedId={workspaceId}
-        folderInput={folderInput}
-        onFolderInput={setFolderInput}
-        onAddWorkspace={() => void addWorkspace()}
-        onSelect={(id) => {
-          setWorkspaceId(id);
-          setActive(null);
-        }}
-      >
-        <ThreadList
-          threads={workspaceId ? threads : other}
-          activeId={active?.id ?? null}
-          onSelect={setActive}
-          onPin={(id, pinned) => void invoke("thread_pin", { id, pinned }).then(reload)}
-        />
-      </FolderRail>
-      <div className="harbor-chat-main">
+      {railOpen ? (
+        <AppRail>
+          <div className="harbor-rail-section">
+            <div className="harbor-rail-heading">
+              <h2>Chats</h2>
+              <Button size="icon" variant="ghost" aria-label="New thread" onClick={() => void newThread()}>
+                +
+              </Button>
+            </div>
+            <FolderRail
+              workspaces={workspaces}
+              otherCount={other.length}
+              selectedId={workspaceId}
+              folderInput={folderInput}
+              onFolderInput={setFolderInput}
+              onAddWorkspace={() => void addWorkspace()}
+              onSelect={(id) => {
+                setWorkspaceId(id);
+                setActive(null);
+              }}
+            >
+              <ThreadList
+                threads={workspaceId ? threads : other}
+                activeId={active?.id ?? null}
+                onSelect={setActive}
+                onPin={(id, pinned) => void invoke("thread_pin", { id, pinned }).then(reload)}
+              />
+            </FolderRail>
+          </div>
+        </AppRail>
+      ) : null}
+      <div className="harbor-stage-panel harbor-chat-main">
         <ThreadHeader thread={active} workspace={workspaces.find((item) => item.id === workspaceId)} onNew={() => void newThread()} />
         <ChangesPanel workspaceId={workspaceId} refreshToken={acp.turn} />
-        <div className="harbor-chat-transcript">
-          {acp.lines.map((line) => (
-            <p key={line.id}>{line.text}</p>
-          ))}
-          {acp.permission ? <PermissionCard request={acp.permission} onResolve={acp.resolve} /> : null}
-        </div>
+        <Transcript lines={acp.lines} />
+        {acp.permission ? <PermissionCard request={acp.permission} onResolve={acp.resolve} /> : null}
         <Composer
           value={draft}
           onValueChange={setDraft}

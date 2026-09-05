@@ -4,13 +4,16 @@ import type { Workspace } from "@harbor/schema/commands";
 import { Tree } from "./Tree";
 import { Editor } from "./Editor";
 import { TabBar } from "./TabBar";
+import { PaneHeader } from "../PaneHeader";
 
 interface FilesPaneProps {
   focused: boolean;
   onFocus: () => void;
+  onSplit?: () => void;
+  onClose?: () => void;
 }
 
-export function FilesPane({ focused, onFocus }: FilesPaneProps) {
+export function FilesPane({ focused, onFocus, onSplit, onClose }: FilesPaneProps) {
   const [workspaceId, setWorkspaceId] = useState<string | undefined>();
   useEffect(() => {
     void invoke<Workspace[]>("workspace_list")
@@ -32,7 +35,7 @@ export function FilesPane({ focused, onFocus }: FilesPaneProps) {
 
   return (
     <section className="harbor-pane harbor-files" data-focused={focused} onClick={onFocus} aria-label="Files">
-      <header>Files</header>
+      <PaneHeader title="Files" live={focused} onSplit={onSplit} onClose={onClose} />
       <div className="harbor-files-body">
         <div className="harbor-files-tree" style={{ width }}>
           <Tree

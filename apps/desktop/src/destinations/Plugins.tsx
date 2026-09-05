@@ -17,11 +17,16 @@ export function Plugins() {
   const [device, setDevice] = useState<DevicePayload | null>(null);
   useEffect(() => {
     void invoke<PluginRow[]>("plugin_list").then(setRows).catch(() => setRows([]));
-    const unlisten = listen<DevicePayload>("plugin_device", (event) => {
+    let stop = () => undefined;
+    void listen<DevicePayload>("plugin_device", (event) => {
       setDevice(event.payload);
-    });
+    })
+      .then((unlisten) => {
+        stop = unlisten;
+      })
+      .catch(() => undefined);
     return () => {
-      void unlisten.then((stop) => stop());
+      stop();
     };
   }, []);
   return (

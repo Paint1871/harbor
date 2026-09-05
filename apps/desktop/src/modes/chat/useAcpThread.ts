@@ -4,9 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import type { ContentPart } from "@harbor/schema/commands";
 import type { PermissionRequest } from "./PermissionCard";
 
-interface Line {
+export interface Line {
   id: string;
   text: string;
+  role: "user" | "assistant";
 }
 
 export function useAcpThread(threadId: string | null) {
@@ -17,21 +18,26 @@ export function useAcpThread(threadId: string | null) {
   const [turn, setTurn] = useState(0);
 
   useEffect(() => {
-    const unlisten = listen<{
+    let stop = () => undefined;
+    void listen<{
       sessionRef: string;
       payload: { text?: string; configOptions?: { id: string; category: string }[] };
     }>("acp_update", (event) => {
       if (event.payload.sessionRef !== threadId) return;
       const text = event.payload.payload?.text;
       if (text) {
-        setLines((current) => [...current, { id: `${Date.now()}-acp`, text }]);
+        setLines((current) => [...current, { id: `${Date.now()}-acp`, text, role: "assistant" }]);
       }
       if (event.payload.payload?.configOptions) {
         setConfigOptions(event.payload.payload.configOptions);
       }
-    });
+    })
+      .then((unlisten) => {
+        stop = unlisten;
+      })
+      .catch(() => undefined);
     return () => {
-      void unlisten.then((stop) => stop());
+      stop();
     };
   }, [threadId]);
 
@@ -39,7 +45,7 @@ export function useAcpThread(threadId: string | null) {
     async (text: string) => {
       if (!threadId || !text.trim()) return;
       const parts: ContentPart[] = [{ type: "text", text }];
-      setLines((current) => [...current, { id: `${Date.now()}`, text }]);
+      setLines((current) => [...current, { id: `${Date.now()}`, text, role: "user" }]);
       try {
         await invoke("thread_send", { id: threadId, parts });
       } catch (error) {
@@ -47,6 +53,7 @@ export function useAcpThread(threadId: string | null) {
           ...current,
           {
             id: `${Date.now()}-err`,
+            role: "assistant" as const,
             text: String(error).includes("unimplemented")
               ? "Engine session starts when OpenCode ACP is connected."
               : String(error),
