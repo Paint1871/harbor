@@ -9,10 +9,14 @@ Harbor never proxies their API keys.
 
 ## Development status
 
-PR-01 establishes the Rust and pnpm/Turborepo workspaces and CI checks. There is
-no runnable desktop window yet. Design tokens follow in PR-02; the Tauri window
-and React renderer follow in PR-03. Version 0.1.0 is a development target, not a
-published release.
+PR-01 established the Rust and pnpm/Turborepo workspaces and CI checks. PR-02
+adds `@harbor/ui`: Black/Light tokens, theme and motion handling, and six UI
+primitives. There is no runnable desktop window yet; the Tauri window and app
+renderer follow in PR-03. Version 0.1.0 is a development target, not a published
+release.
+
+Run the isolated component preview with `pnpm --filter @harbor/ui dev`. See
+[the UI package](packages/ui/README.md) for component contracts and verification.
 
 The planned app has three modes: named teammates in Agent, real PTY terminals
 and files in Code, and folder-scoped ACP v1 threads with diffs in Chat. The
@@ -44,7 +48,8 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 pnpm check:workspace
 ```
 
-Turborepo runs the desktop package's Cargo check. Caching is disabled for that
+Turborepo runs the desktop package's Cargo check and the UI package's TypeScript
+check and Vite preview build. Caching is disabled for that
 task because Rust sources and the lockfile span package boundaries; Cargo still
 handles incremental compilation. No remote cache account is required.
 
@@ -53,11 +58,12 @@ handles incremental compilation. No remote cache account is required.
 ```text
 apps/desktop/            Desktop package and native host bootstrap
 crates/harbor-core/      Shared local application core
+packages/ui/            Design tokens, primitives, and development preview
 scripts/                Repository checks
 .github/workflows/      Continuous integration
 ```
 
-Shared UI, engine catalog, IPC schema, and additional Rust crates will be added
+The engine catalog, IPC schema, and additional Rust crates will be added
 in their designated PRs. The implementation specification is supplied separately
 as `../DESIGN.md` in this workspace; read its PR Plan before contributing.
 

@@ -1,0 +1,78 @@
+/* Design §5.2 v0 targets. Calibrate in a separate visual QA change. */
+:root {
+  --harbor-accent-speak: #22D3EE;
+  --harbor-accent-think: #8B5CF6;
+  --harbor-accent-error: #F59E0B;
+  --harbor-live: #34D399;
+  --harbor-needs-you: #FBBF24;
+  --harbor-radius-chrome: 12px;
+  --harbor-radius-control: 8px;
+  --harbor-titlebar-h: 44px;
+  --harbor-orb-d: 28px;
+  --harbor-rail-w: 280px;
+  --harbor-composer-min-h: 72px;
+  --harbor-tab-h: 32px;
+  --harbor-face: 28px;
+  --harbor-pip: 8px;
+  --harbor-space-1: 4px;
+  --harbor-space-2: 8px;
+  --harbor-space-3: 12px;
+  --harbor-space-4: 16px;
+  --harbor-font-ui: "Inter", "SF Pro Text", system-ui, sans-serif;
+  --harbor-font-mono: "JetBrains Mono", "Iosevka", ui-monospace, monospace;
+  --harbor-text-xs: 11px;
+  --harbor-text-sm: 12px;
+  --harbor-text-md: 13px;
+  --harbor-text-lg: 16px;
+  --harbor-text-xl: 22px;
+  --harbor-motion-duration: 120ms;
+  --harbor-motion-easing: ease-out;
+}
+
+/* Black is also the fallback before a provider mounts, regardless of OS theme. */
+:root,
+:root[data-theme="black"] {
+  color-scheme: dark;
+  --harbor-bg: #0B0B0C;
+  --harbor-surface: #141416;
+  --harbor-raised: #1C1C1F;
+  --harbor-border: rgba(255, 255, 255, 0.08);
+  --harbor-text: #F5F5F5;
+  --harbor-muted: #A1A1AA;
+  --harbor-glow-opacity: 0.2;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --harbor-bg: #F7F7F8;
+  --harbor-surface: #FFFFFF;
+  --harbor-raised: #F1F1F3;
+  --harbor-border: rgba(0, 0, 0, 0.08);
+  --harbor-text: #111113;
+  --harbor-muted: #71717A;
+  --harbor-glow-opacity: 0.06;
+}
+
+:root[data-reduce-motion="true"] {
+  --harbor-motion-duration: 0ms;
+}
+
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --harbor-motion-duration: 0ms;
+  }
+
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

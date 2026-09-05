@@ -1,0 +1,234 @@
+.harbor-button,
+.harbor-segmented,
+.harbor-rail-row,
+.harbor-composer,
+.harbor-card,
+.harbor-pill {
+  box-sizing: border-box;
+  font-family: var(--harbor-font-ui);
+  font-size: var(--harbor-text-md);
+  line-height: 1.5;
+  color: var(--harbor-text);
+}
+
+.harbor-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--harbor-space-2);
+  min-height: var(--harbor-tab-h);
+  padding: var(--harbor-space-1) var(--harbor-space-3);
+  border: 1px solid var(--harbor-border);
+  border-radius: var(--harbor-radius-control);
+  background: var(--harbor-raised);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--harbor-motion-duration) var(--harbor-motion-easing);
+}
+
+.harbor-button[data-variant="primary"] {
+  background: var(--harbor-text);
+  color: var(--harbor-bg);
+  border-color: transparent;
+}
+
+.harbor-button[data-variant="ghost"] {
+  border-color: transparent;
+  background: transparent;
+}
+
+.harbor-button[data-size="icon"] {
+  width: var(--harbor-tab-h);
+  padding: var(--harbor-space-1);
+  flex: 0 0 auto;
+}
+
+.harbor-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--harbor-raised), var(--harbor-text) 8%);
+}
+
+.harbor-button[data-variant="primary"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--harbor-text), var(--harbor-bg) 12%);
+}
+
+.harbor-button:focus-visible,
+.harbor-rail-row:focus-visible,
+.harbor-segment:has(input:focus-visible) {
+  outline: 2px solid var(--harbor-accent-think);
+  outline-offset: 2px;
+}
+
+.harbor-button:disabled,
+.harbor-rail-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.harbor-segmented {
+  display: inline-flex;
+  gap: var(--harbor-space-1);
+  padding: 2px;
+  border: 1px solid var(--harbor-border);
+  border-radius: var(--harbor-radius-control);
+  background: var(--harbor-bg);
+}
+
+.harbor-segment {
+  position: relative;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.harbor-segment input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.harbor-segment span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 var(--harbor-space-3);
+  border-radius: inherit;
+  color: var(--harbor-muted);
+  font-size: var(--harbor-text-sm);
+  font-weight: 500;
+}
+
+.harbor-segment input:checked + span {
+  background: var(--harbor-raised);
+  color: var(--harbor-text);
+}
+
+.harbor-segment:hover input:not(:disabled):not(:checked) + span {
+  color: var(--harbor-text);
+}
+
+.harbor-segment:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.harbor-rail-row {
+  display: flex;
+  align-items: center;
+  gap: var(--harbor-space-3);
+  width: 100%;
+  min-width: 0;
+  min-height: 60px;
+  padding: var(--harbor-space-2) var(--harbor-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--harbor-radius-control);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.harbor-rail-row:hover:not(:disabled),
+.harbor-rail-row[aria-current="true"] {
+  background: var(--harbor-raised);
+}
+
+.harbor-rail-leading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--harbor-face);
+  width: var(--harbor-face);
+  height: var(--harbor-face);
+}
+
+.harbor-rail-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.harbor-rail-label,
+.harbor-rail-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.harbor-rail-label { font-weight: 500; }
+.harbor-rail-description { color: var(--harbor-muted); font-size: var(--harbor-text-sm); }
+.harbor-rail-trailing { flex: 0 0 auto; color: var(--harbor-muted); font-size: var(--harbor-text-xs); }
+
+.harbor-composer {
+  min-width: 0;
+  min-height: var(--harbor-composer-min-h);
+  padding: var(--harbor-space-3);
+  border: 1px solid var(--harbor-border);
+  border-radius: var(--harbor-radius-chrome);
+  background: var(--harbor-surface);
+}
+
+.harbor-composer:focus-within {
+  border-color: var(--harbor-accent-think);
+}
+
+.harbor-composer-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--harbor-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.harbor-composer-input::placeholder { color: var(--harbor-muted); opacity: 1; }
+.harbor-composer-input:focus-visible { outline: none; }
+.harbor-composer-input:disabled { cursor: not-allowed; opacity: 0.45; }
+.harbor-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--harbor-space-2); margin-top: var(--harbor-space-2); }
+.harbor-composer-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--harbor-space-2); min-width: 0; }
+
+.harbor-card {
+  min-width: 0;
+  padding: var(--harbor-space-4);
+  border: 1px solid var(--harbor-border);
+  border-radius: var(--harbor-radius-chrome);
+  background: var(--harbor-surface);
+}
+
+.harbor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--harbor-space-1);
+  padding: 2px var(--harbor-space-2);
+  border: 1px solid var(--harbor-border);
+  border-radius: 999px;
+  background: var(--harbor-raised);
+  color: var(--harbor-muted);
+  font-size: var(--harbor-text-xs);
+  white-space: nowrap;
+}
+
+/* Status retains a text label. A colored pip is supplementary, never the only signal. */
+.harbor-pill[data-tone="live"]::before,
+.harbor-pill[data-tone="attention"]::before {
+  content: "";
+  width: var(--harbor-pip);
+  height: var(--harbor-pip);
+  border-radius: 50%;
+  background: var(--harbor-live);
+}
+
+.harbor-pill[data-tone="attention"]::before { background: var(--harbor-needs-you); }
+
+@media (forced-colors: active) {
+  .harbor-button, .harbor-segmented, .harbor-rail-row, .harbor-card, .harbor-composer, .harbor-pill { border: 1px solid ButtonText; }
+  .harbor-segment input:checked + span, .harbor-rail-row[aria-current="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+}
