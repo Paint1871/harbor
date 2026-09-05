@@ -2,6 +2,7 @@
 
 pub mod commands;
 pub mod db;
+pub mod engines;
 pub mod error;
 pub mod settings;
 pub mod types;
@@ -97,11 +98,9 @@ mod tests {
     async fn host_commands_do_not_require_auth() {
         let dir = tempfile::tempdir().unwrap();
         let pool = db::open(&dir.path().join("harbor.sqlite")).await.unwrap();
+        let engines = commands::engines_detect(&pool).await.unwrap();
+        assert!(!engines.is_empty());
         for result in [
-            commands::engines_detect(&pool)
-                .await
-                .err()
-                .map(|error| error.to_string()),
             commands::agent_list(&pool)
                 .await
                 .err()

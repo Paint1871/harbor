@@ -22,11 +22,11 @@ pub async fn settings_set(pool: &SqlitePool, key: &str, value: Value) -> Result<
 }
 
 pub async fn engines_detect(_pool: &SqlitePool) -> Result<Vec<DetectedEngine>, Error> {
-    Err(Error::unimplemented("engines_detect"))
+    Ok(crate::engines::recheck())
 }
 
 pub async fn engines_recheck(_pool: &SqlitePool) -> Result<Vec<DetectedEngine>, Error> {
-    Err(Error::unimplemented("engines_recheck"))
+    Ok(crate::engines::recheck())
 }
 
 pub async fn workspace_list(_pool: &SqlitePool) -> Result<Vec<Workspace>, Error> {

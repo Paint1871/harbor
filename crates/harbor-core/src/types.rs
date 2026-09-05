@@ -2,6 +2,24 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineSpec {
+    pub id: String,
+    pub display_name: String,
+    pub binaries: Vec<String>,
+    pub acp_args: Option<Vec<String>>,
+    pub pty_args: Vec<String>,
+    pub supports_terminal: bool,
+    pub adapter_package: Option<String>,
+    pub min_version: Option<String>,
+    pub last_handshake: Option<String>,
+    pub auth_hint: String,
+    pub chat_mode: String,
+    #[serde(default)]
+    pub workspace_settings_arg: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct Workspace {
     pub id: String,
     pub folder: String,
