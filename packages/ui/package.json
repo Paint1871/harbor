@@ -9,6 +9,7 @@
     "./primitives.css": "./src/primitives.css",
     "./ThemeProvider": "./src/ThemeProvider.tsx",
     "./theme": "./src/theme.ts",
+    "./Logo": "./src/Logo.tsx",
     "./Button": "./src/Button.tsx",
     "./Segmented": "./src/Segmented.tsx",
     "./RailRow": "./src/RailRow.tsx",

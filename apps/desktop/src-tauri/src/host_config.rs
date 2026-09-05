@@ -71,6 +71,7 @@ fn main_and_overlay_match_pr03_geometry() {
         main["decorations"], true,
         "Linux uses native window decorations"
     );
+    assert_eq!(main["titleBarStyle"], "Overlay");
 
     let overlay = window(&config, "overlay");
     assert_eq!(overlay["visible"], false);

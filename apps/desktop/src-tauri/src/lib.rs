@@ -38,6 +38,10 @@ pub fn run() {
         .setup(move |app| {
             crash::prepare_directory(&data_root)?;
             app.fs_scope().allow_directory(&data_root, true)?;
+            #[cfg(windows)]
+            if let Some(main) = app.get_webview_window("main") {
+                main.set_decorations(false)?;
+            }
             // No workspace roots or engine processes are opened on cold start.
             app.manage(security::ExecutableAllowlist::bootstrap()?);
             Ok(())

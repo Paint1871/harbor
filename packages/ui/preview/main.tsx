@@ -9,6 +9,7 @@ import { RailRow } from "../src/RailRow";
 import { Composer } from "../src/Composer";
 import { Card } from "../src/Card";
 import { Pill } from "../src/Pill";
+import { Logo } from "../src/Logo";
 import "../src/tokens.css";
 import "../src/primitives.css";
 import "./preview.css";
@@ -49,7 +50,7 @@ function Preview() {
         <header className="preview-header">
           <div>
             <p className="eyebrow">HARBOR / UI LIBRARY</p>
-            <h1>A quiet place to work.</h1>
+            <h1><Logo size={28} /> A quiet place to work.</h1>
             <p className="intro">Design tokens and primitives · development preview</p>
           </div>
           <div className="preview-preferences">
