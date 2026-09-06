@@ -21,8 +21,47 @@ pub fn detect_engines(search_path: &str) -> Vec<DetectedEngine> {
 }
 
 pub fn recheck() -> Vec<DetectedEngine> {
-    let path = env::var("PATH").unwrap_or_default();
-    detect_engines(&path)
+    detect_engines(&runtime_path())
+}
+
+/// GUI apps on macOS do not always inherit the interactive shell's PATH.
+/// Include the common user-managed CLI locations so a CLI installed through
+/// Homebrew, Volta, Bun, npm, or nvm is discoverable without asking the user
+/// to edit Harbor's environment manually.
+fn runtime_path() -> String {
+    let mut entries = env::var_os("PATH")
+        .map(|path| env::split_paths(&path).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let mut candidates = Vec::new();
+    if let Some(home) = env::var_os("HOME") {
+        let home = PathBuf::from(home);
+        candidates.extend([
+            home.join(".local/bin"),
+            home.join(".npm-global/bin"),
+            home.join(".volta/bin"),
+            home.join(".bun/bin"),
+            home.join(".asdf/shims"),
+            home.join(".nvm/current/bin"),
+        ]);
+        if let Ok(versions) = fs::read_dir(home.join(".nvm/versions/node")) {
+            for version in versions.flatten() {
+                candidates.push(version.path().join("bin"));
+            }
+        }
+    }
+    candidates.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/local/bin"),
+    ]);
+    for candidate in candidates {
+        if candidate.is_dir() && !entries.iter().any(|entry| entry == &candidate) {
+            entries.push(candidate);
+        }
+    }
+    env::join_paths(entries)
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 fn detect_one(spec: &EngineSpec, search_path: &str, cwd: Option<&Path>) -> DetectedEngine {
@@ -41,13 +80,15 @@ fn detect_one(spec: &EngineSpec, search_path: &str, cwd: Option<&Path>) -> Detec
         None
     };
 
-    let status = if found.is_none() {
+    let status: String = if found.is_none() {
         "cli-missing".into()
     } else if spec.chat_mode == "adapter" && spec.binaries.len() > 1 && adapter.is_none() {
         "adapter-missing".into()
     } else {
         "ready".into()
     };
+
+    let supports_chat = status == "ready" && spec.acp_args.is_some();
 
     DetectedEngine {
         id: spec.id.clone(),
@@ -57,7 +98,8 @@ fn detect_one(spec: &EngineSpec, search_path: &str, cwd: Option<&Path>) -> Detec
             .map(|path| path.display().to_string())
             .unwrap_or_default(),
         status,
-        supports_chat: false,
+        supports_chat,
+        supports_terminal: spec.supports_terminal && found.is_some(),
     }
 }
 
@@ -120,6 +162,51 @@ mod tests {
         let found = detect_engines("");
         assert!(found.iter().all(|engine| engine.status == "cli-missing"));
         assert!(found.iter().all(|engine| !engine.supports_chat));
+    }
+
+    #[test]
+    fn installed_acp_engine_is_available_for_chat() {
+        let root = tempfile::tempdir().unwrap();
+        let bin = root.path().join("opencode");
+        fs::write(&bin, "fixture").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&bin, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let engines = detect_engines(&root.path().display().to_string());
+        let engine = engines
+            .iter()
+            .find(|engine| engine.id == "opencode")
+            .unwrap();
+        assert_eq!(engine.status, "ready");
+        assert!(engine.supports_chat);
+        assert!(engine.supports_terminal);
+        assert!(
+            engines
+                .iter()
+                .filter(|engine| engine.status != "ready")
+                .all(|engine| !engine.supports_chat)
+        );
+    }
+
+    #[test]
+    fn terminal_cli_remains_available_when_chat_adapter_is_missing() {
+        let root = tempfile::tempdir().unwrap();
+        let bin = root.path().join("claude");
+        fs::write(&bin, "fixture").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&bin, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let engine = detect_engines(&root.path().display().to_string())
+            .into_iter()
+            .find(|engine| engine.id == "claude-code")
+            .unwrap();
+        assert_eq!(engine.status, "adapter-missing");
+        assert!(engine.supports_terminal);
+        assert!(!engine.supports_chat);
     }
 
     #[test]

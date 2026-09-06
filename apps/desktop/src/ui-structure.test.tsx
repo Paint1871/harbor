@@ -54,6 +54,7 @@ const chromeStub: ChromeValue = {
   profileName: "Builder",
   destination: "mode",
   setDestination: () => undefined,
+  onModeChange: () => undefined,
   onThemeChange: () => undefined,
   onSettings: () => undefined,
   onTidy: () => undefined,
@@ -76,7 +77,7 @@ const teammate: AgentRecord = {
 };
 
 describe("shipped Harbor chrome and mode trees", () => {
-  it("renders Agent, Code, Chat, destinations, Ask anything, roster, New chat, panes, and a user bubble", () => {
+  it("renders Agent, Code, Chat, destinations, roster, New chat, panes, and a user bubble", () => {
     const shell = renderToStaticMarkup(
       createElement(
         ThemeProvider,
@@ -91,11 +92,14 @@ describe("shipped Harbor chrome and mode trees", () => {
     expect(shell).toContain("Agent");
     expect(shell).toContain("Code");
     expect(shell).toContain("Chat");
-    expect(shell).toContain("Ask anything...");
+    expect(shell).not.toContain("Run in the focused terminal");
+    expect(shell).not.toContain('aria-label="Terminal command"');
     expect(shell).toContain("Dashboard");
+    expect(shell).toContain("Routines");
     expect(shell).toContain("Plugins");
+    expect(shell).toContain("Skills");
     expect(shell).toContain("Harbor");
-    expect(shell).not.toContain("Credits");
+    expect(shell).toContain("Credits");
 
     const agentTree = wrap(
       createElement(
@@ -118,8 +122,8 @@ describe("shipped Harbor chrome and mode trees", () => {
 
     const codeHeader = wrap(
       createElement("div", null, [
-        createElement(PaneHeader, { key: "t", title: "Terminal", live: true }),
-        createElement(PaneHeader, { key: "f", title: "Files", live: false }),
+        createElement(PaneHeader, { key: "t", title: "Terminal", live: true, onExpand: () => undefined }),
+        createElement(PaneHeader, { key: "f", title: "Files", live: false, onExpand: () => undefined }),
       ]),
     );
     expect(codeHeader).toContain("harbor-live-dot");
@@ -145,7 +149,7 @@ describe("shipped Harbor chrome and mode trees", () => {
     const tokens = readFileSync(resolve(repo, "packages/ui/src/tokens.css"), "utf8");
     const composer = readFileSync(resolve(repo, "packages/ui/src/Composer.tsx"), "utf8");
     expect(tokens).toContain("--harbor-bg: #0B0B0C");
-    expect(tokens).toContain("--harbor-rail-w: 280px");
+    expect(tokens).toContain("--harbor-rail-w: 260px");
     expect(tokens).toContain("--harbor-titlebar-h: 44px");
     expect(composer).toContain('placeholder="Ask anything..."');
   });

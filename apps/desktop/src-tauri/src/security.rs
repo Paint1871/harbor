@@ -32,6 +32,12 @@ impl ExecutableAllowlist {
                 .unwrap_or_else(|| default.into());
             // An unavailable configured shell must not prevent the local window opening.
             let _ = allowlist.grant(&shell, ExecutableKind::LoginShell);
+            // Settings can explicitly select either of the shells Harbor exposes.
+            // Grant both known system locations during trusted host bootstrap so a
+            // renderer preference never has to register an arbitrary executable.
+            for shell in ["/bin/zsh", "/bin/bash"] {
+                let _ = allowlist.grant(Path::new(shell), ExecutableKind::LoginShell);
+            }
         }
         #[cfg(windows)]
         {

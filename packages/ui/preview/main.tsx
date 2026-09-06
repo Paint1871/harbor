@@ -22,7 +22,7 @@ const modes = [
   { value: "chat", label: "Chat" },
 ] as const;
 const themes = [{ value: "black", label: "Black" }, { value: "light", label: "Light" }] as const;
-const swatches = ["bg", "surface", "raised", "accent-speak", "accent-think", "accent-error"];
+const swatches = ["bg", "surface", "raised", "field", "accent-speak", "accent-think", "accent-error", "live"];
 
 function MotionSample() {
   const { reducedMotion } = useTheme();
@@ -46,75 +46,86 @@ function Preview() {
 
   return (
     <ThemeProvider theme={theme} reduceMotion={reduceMotion}>
-      <main className="preview">
-        <header className="preview-header">
-          <div>
-            <p className="eyebrow">HARBOR / UI LIBRARY</p>
-            <h1><Logo size={28} /> A quiet place to work.</h1>
-            <p className="intro">Design tokens and primitives · development preview</p>
+      <div className="preview-shell">
+        <header className="preview-chrome">
+          <div className="preview-chrome-start">
+            <Logo size={18} />
+            <span className="preview-wordmark">Harbor</span>
           </div>
-          <div className="preview-preferences">
+          <Segmented label="Mode sample" value={mode} options={modes} onValueChange={setMode} disabled={disabled} />
+          <div className="preview-chrome-end">
             <Segmented label="Appearance" value={theme} options={themes} onValueChange={setTheme} />
-            <label><input type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> Reduce Motion</label>
           </div>
         </header>
-
-        <section className="swatches" aria-label="Surface and accent tokens">
-          {swatches.map((name) => (
-            <div className="swatch" key={name}>
-              <div style={{ background: `var(--harbor-${name})` }} />
-              <span>{name.replace("accent-", "")}</span>
+        <main className="preview">
+          <header className="preview-header">
+            <div>
+              <p className="eyebrow">UI library</p>
+              <h1>A quiet place to work.</h1>
+              <p className="intro">an open desktop host for coding agents</p>
             </div>
-          ))}
-        </section>
-
-        <div className="preview-grid">
-          <section aria-labelledby="rail-heading">
-            <h2 id="rail-heading">01 / Rail rows</h2>
-            <Card className="rail-sample">
-              <RailRow label="Release manager" description="The checks are ready to review." leading={<span className="initials">RM</span>} trailing={<Pill tone="live">2</Pill>} selected={selected === "release"} onClick={() => setSelected("release")} />
-              <RailRow label="Design partner" description="A note on spacing and contrast." leading={<span className="initials violet">DP</span>} trailing="2h" selected={selected === "design"} onClick={() => setSelected("design")} />
-              <RailRow label="Research partner" description="Waiting for an engine." leading={<span className="initials amber">RP</span>} disabled />
-            </Card>
-            <h2>02 / Pills</h2>
-            <div className="sample-row">
-              <Pill>Free · local</Pill>
-              <Pill tone="attention">Needs you</Pill>
+            <div className="preview-preferences">
+              <label><input type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /> Reduce Motion</label>
+              <label className="muted"><input type="checkbox" checked={disabled} onChange={(event) => setDisabled(event.target.checked)} /> Disable controls</label>
             </div>
-            <h2>03 / Motion</h2>
-            <Card><MotionSample /></Card>
+          </header>
+
+          <section className="swatches" aria-label="Surface and accent tokens">
+            {swatches.map((name) => (
+              <div className="swatch" key={name}>
+                <div style={{ background: `var(--harbor-${name})` }} />
+                <span>{name.replace("accent-", "")}</span>
+              </div>
+            ))}
           </section>
 
-          <section aria-labelledby="controls-heading">
-            <h2 id="controls-heading">04 / Controls</h2>
-            <Card>
-              <div className="controls-row">
-                <Segmented label="Mode sample" value={mode} options={modes} onValueChange={setMode} disabled={disabled} />
-                <label className="muted"><input type="checkbox" checked={disabled} onChange={(event) => setDisabled(event.target.checked)} /> Disable controls</label>
+          <div className="preview-grid">
+            <section aria-labelledby="rail-heading">
+              <h2 id="rail-heading">01 / Rail rows</h2>
+              <Card className="rail-sample">
+                <RailRow label="Release manager" description="The checks are ready to review." leading={<span className="initials">RM</span>} trailing={<Pill tone="live">2</Pill>} selected={selected === "release"} onClick={() => setSelected("release")} />
+                <RailRow label="Design partner" description="A note on spacing and contrast." leading={<span className="initials violet">DP</span>} trailing="2h" selected={selected === "design"} onClick={() => setSelected("design")} />
+                <RailRow label="Research partner" description="Waiting for an engine." leading={<span className="initials amber">RP</span>} disabled />
+              </Card>
+              <h2>02 / Pills</h2>
+              <div className="sample-row">
+                <Pill>Free · local</Pill>
+                <Pill tone="attention">Needs you</Pill>
               </div>
-              <div className="sample-row button-samples">
-                <Button variant="primary" disabled={disabled} onClick={() => setAction("Primary action selected")}>Start local</Button>
-                <Button disabled={disabled} onClick={() => setAction("Secondary action selected")}>Local profile</Button>
-                <Button variant="ghost" disabled={disabled} onClick={() => setAction("Ghost action selected")}>Cancel</Button>
-                <Button size="icon" aria-label="Add item" disabled={disabled} onClick={() => setAction("Icon action selected")}>+</Button>
+              <h2>03 / Motion</h2>
+              <Card><MotionSample /></Card>
+            </section>
+
+            <section aria-labelledby="controls-heading">
+              <h2 id="controls-heading">04 / Controls</h2>
+              <Card>
+                <div className="controls-row">
+                  <Segmented label="Mode duplicate" value={mode} options={modes} onValueChange={setMode} disabled={disabled} />
+                </div>
+                <div className="sample-row button-samples">
+                  <Button variant="primary" disabled={disabled} onClick={() => setAction("Primary action selected")}>Start local</Button>
+                  <Button disabled={disabled} onClick={() => setAction("Secondary action selected")}>Local profile</Button>
+                  <Button variant="ghost" disabled={disabled} onClick={() => setAction("Ghost action selected")}>Cancel</Button>
+                  <Button size="icon" aria-label="Add item" disabled={disabled} onClick={() => setAction("Icon action selected")}>+</Button>
+                </div>
+                <p className="sample-feedback" role="status">{action} · Selected mode: {mode}</p>
+              </Card>
+              <h2>05 / Composer</h2>
+              <Composer value={draft} onValueChange={setDraft} disabled={disabled} onSend={(value) => { setSent((messages) => [...messages, value]); setDraft(""); }} controls={<span className="muted">Enter to send · Shift+Enter for a new line</span>} />
+              <div className="composer-result" role="status">
+                <span className="eyebrow">Local preview · {sent.length} sent</span>
+                <p>{sent.at(-1) ?? "Your message stays in this preview. No engine is connected."}</p>
               </div>
-              <p className="sample-feedback" role="status">{action} · Selected mode: {mode}</p>
-            </Card>
-            <h2>05 / Composer</h2>
-            <Composer value={draft} onValueChange={setDraft} disabled={disabled} onSend={(value) => { setSent((messages) => [...messages, value]); setDraft(""); }} controls={<span className="muted">Enter to send · Shift+Enter for a new line</span>} />
-            <div className="composer-result" role="status">
-              <span className="eyebrow">LOCAL PREVIEW · {sent.length} SENT</span>
-              <p>{sent.at(-1) ?? "Your message stays in this preview. No engine is connected."}</p>
-            </div>
-            <h2>06 / Dimensions</h2>
-            <div className="dimensions">
-              <div><span className="orb-size" />Orb seat · 28 px</div>
-              <div><span className="tab-size" />Tab · 32 px</div>
-              <div><span className="spacing-sample"><i /><i /><i /><i /></span>Space · 4 / 8 / 12 / 16</div>
-            </div>
-          </section>
-        </div>
-      </main>
+              <h2>06 / Dimensions</h2>
+              <div className="dimensions">
+                <div><span className="orb-size" />Orb seat · 28 px</div>
+                <div><span className="tab-size" />Tab · 32 px</div>
+                <div><span className="spacing-sample"><i /><i /><i /><i /></span>Space · 4 / 8 / 12 / 16</div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
     </ThemeProvider>
   );
 }

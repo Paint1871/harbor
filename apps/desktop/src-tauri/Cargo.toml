@@ -14,11 +14,12 @@ name = "harbor"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = "=2.6.3"
+tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
 harbor-core.workspace = true
 harbor-acp.workspace = true
+harbor-paths = { path = "../../../crates/harbor-paths" }
 harbor-plugins = { path = "../../../crates/harbor-plugins" }
 harbor-pty = { path = "../../../crates/harbor-pty" }
 harbor-speech = { path = "../../../crates/harbor-speech" }
@@ -30,6 +31,10 @@ tauri-plugin-clipboard-manager = "=2.3.3"
 dirs = "=6.0.0"
 reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls", "blocking"] }
 serde_json = "=1.0.151"
+sqlx = { version = "=0.8.6", default-features = false, features = ["runtime-tokio", "sqlite"] }
+tauri-plugin-dialog = "=2.7.3"
+tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "sync"] }
+uuid = { version = "=1.26.0", features = ["v7"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 oslog = { version = "=0.2.0", default-features = false }
@@ -37,3 +42,4 @@ oslog = { version = "=0.2.0", default-features = false }
 [dev-dependencies]
 tempfile = "=3.27.0"
 serde_json = "=1.0.151"
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread"] }

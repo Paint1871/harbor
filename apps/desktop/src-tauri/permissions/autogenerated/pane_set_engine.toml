@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pane-set-engine"
+description = "Enables the pane_set_engine command without any pre-configured scope."
+commands.allow = ["pane_set_engine"]
+
+[[permission]]
+identifier = "deny-pane-set-engine"
+description = "Denies the pane_set_engine command without any pre-configured scope."
+commands.deny = ["pane_set_engine"]

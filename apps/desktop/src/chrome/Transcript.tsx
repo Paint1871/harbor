@@ -1,7 +1,7 @@
 export interface TranscriptLine {
   id: string;
   text: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "mail";
 }
 
 export function Transcript({ lines }: { lines: TranscriptLine[] }) {
@@ -10,11 +10,10 @@ export function Transcript({ lines }: { lines: TranscriptLine[] }) {
       {lines.map((line) => (
         <div
           key={line.id}
-          className={
-            line.role === "user" ? "harbor-bubble harbor-bubble-user" : "harbor-assistant-block"
-          }
+          className={`${line.role === "user" ? "harbor-bubble harbor-bubble-user" : "harbor-assistant-block"} harbor-transcript-line`}
+          data-role={line.role === "user" ? "You" : line.role === "mail" ? "Handoff" : "Agent"}
         >
-          {line.text}
+          {line.role === "mail" ? `Mail: ${line.text}` : line.text}
         </div>
       ))}
     </div>

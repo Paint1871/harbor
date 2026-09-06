@@ -10,26 +10,12 @@ interface ThreadListProps {
 }
 
 export function ThreadList({ threads, activeId, onSelect, onPin }: ThreadListProps) {
-  return (
-    <div className="harbor-thread-list">
-      {threads.map((thread) => (
-        <RailRow
-          key={thread.id}
-          label={thread.title}
-          description={thread.engineId}
-          selected={activeId === thread.id}
-          trailing={
-            thread.unread ? (
-              <Pill tone="attention">Unread</Pill>
-            ) : (
-              <button type="button" className="harbor-pin" onClick={(event) => { event.stopPropagation(); onPin(thread.id, !thread.pinned); }}>
-                {thread.pinned ? "Unpin" : "Pin"}
-              </button>
-            )
-          }
-          onClick={() => onSelect(thread)}
-        />
-      ))}
-    </div>
-  );
+  return <div className="harbor-thread-list">
+    {threads.map((thread) => <div className="harbor-thread-row" key={thread.id}>
+      <RailRow label={thread.title} description={thread.engineId} selected={activeId === thread.id}
+        trailing={thread.unread ? <Pill tone="attention">Unread</Pill> : null} onClick={() => onSelect(thread)} />
+      <button type="button" className="harbor-pin" aria-label={`${thread.pinned ? "Unpin" : "Pin"} ${thread.title}`}
+        aria-pressed={thread.pinned} onClick={() => onPin(thread.id, !thread.pinned)}>{thread.pinned ? "Unpin" : "Pin"}</button>
+    </div>)}
+  </div>;
 }

@@ -7,12 +7,26 @@ export interface Workspace {
   pinned: boolean;
 }
 
+export interface WorkspaceSetup {
+  additionalTerminals: number;
+  browserPreview: boolean;
+  threadPane: boolean;
+  terminalEngineIds: string[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "mail";
+  text: string;
+}
+
 export interface DetectedEngine {
   id: string;
   displayName: string;
   path: string;
   status: string;
   supportsChat: boolean;
+  supportsTerminal: boolean;
 }
 
 export type PaneLayout =
@@ -24,6 +38,7 @@ export interface PaneState {
   kind: string;
   cwd?: string | null;
   paused?: boolean | null;
+  engineId?: string | null;
 }
 
 export interface ThreadRecord {
@@ -73,6 +88,11 @@ export interface Memory {
   kind: string;
 }
 
+export interface Place {
+  id: string;
+  path: string;
+}
+
 export interface SearchHit {
   chat_id: string;
   prose: string;
@@ -83,6 +103,37 @@ export interface PluginRow {
   id: string;
   displayName: string;
   status: string;
+  accountLabel?: string | null;
+  description: string;
+  category: string;
+  authKind: "device" | "token" | string;
+}
+
+export interface PluginGrant {
+  pluginId: string;
+  enabled: boolean;
+}
+
+export interface PluginApproval {
+  id: string;
+  pluginId: string;
+  agentId: string | null;
+  action: string;
+  status: string;
+}
+
+export interface RestoredPane {
+  id: string;
+  kind: string;
+  paused: boolean;
+  engineId?: string | null;
+}
+
+export interface WorkspaceTab {
+  id: string;
+  workspaceId: string;
+  layout: PaneLayout;
+  panes: RestoredPane[];
 }
 
 export interface FsEntry {
@@ -115,17 +166,27 @@ export interface HarborCommands {
   engines_recheck: () => Promise<DetectedEngine[]>;
 
   workspace_list: () => Promise<Workspace[]>;
+  workspace_pick_folder: () => Promise<string | null>;
   workspace_add: (folder: string) => Promise<Workspace>;
   workspace_remove: (id: string) => Promise<void>;
   workspace_pin: (id: string, pinned: boolean) => Promise<void>;
   workspace_save_layout: (tabId: string, layout: PaneLayout) => Promise<void>;
   workspace_tidy: (tabId: string) => Promise<PaneLayout>;
-  layout_restore: () => Promise<void>;
+  workspace_ensure_tab: (workspaceId: string) => Promise<WorkspaceTab>;
+  workspace_configure_tab: (workspaceId: string, setup: WorkspaceSetup) => Promise<WorkspaceTab>;
+  layout_restore: () => Promise<WorkspaceTab[]>;
 
-  pane_create: (tabId: string, kind: "terminal" | "files", state: PaneState) => Promise<string>;
+  pane_create: (tabId: string, kind: "terminal" | "files" | "browser" | "thread", state: PaneState) => Promise<string>;
   pane_close: (id: string) => Promise<void>;
 
-  pty_spawn: (input: { paneId: string; cwd: string; shell?: string }) => Promise<void>;
+  pty_spawn: (input: {
+    paneId: string;
+    workspaceId: string;
+    cols: number;
+    rows: number;
+    shell?: string | null;
+    engineId?: string | null;
+  }) => Promise<void>;
   pty_write_b64: (paneId: string, b64: string) => Promise<void>;
   pty_resize: (paneId: string, cols: number, rows: number) => Promise<void>;
   pty_pause: (paneId: string) => Promise<void>;
@@ -137,6 +198,7 @@ export interface HarborCommands {
   fs_list: (workspaceId: string, path: string) => Promise<FsEntry[]>;
 
   thread_list: (workspaceId: string | null) => Promise<ThreadRecord[]>;
+  thread_history: (id: string) => Promise<ChatMessage[]>;
   thread_create: (workspaceId: string | null, engineId: string) => Promise<ThreadRecord>;
   thread_rename: (id: string, title: string) => Promise<void>;
   thread_delete: (id: string) => Promise<void>;
@@ -154,12 +216,14 @@ export interface HarborCommands {
   agent_draft_with_ai: (hint: string) => Promise<{ name: string; brief: string }>;
   agent_chat_list: (agentId: string) => Promise<AgentChat[]>;
   agent_chat_create: (agentId: string) => Promise<AgentChat>;
+  agent_chat_history: (chatId: string) => Promise<ChatMessage[]>;
   agent_chat_send: (chatId: string, parts: ContentPart[]) => Promise<void>;
   agent_chat_cancel: (chatId: string) => Promise<void>;
   agent_chat_set_config: (chatId: string, optionId: string, value: unknown) => Promise<void>;
   memory_list: (agentId: string) => Promise<Memory[]>;
   memory_upsert: (agentId: string, body: string) => Promise<Memory>;
   memory_delete: (id: string) => Promise<void>;
+  places_list: (agentId: string) => Promise<Place[]>;
   places_grant: (agentId: string, path: string) => Promise<void>;
   places_revoke: (id: string) => Promise<void>;
   session_search: (agentId: string, query: string) => Promise<SearchHit[]>;
@@ -169,10 +233,13 @@ export interface HarborCommands {
   acp_permission_resolve: (id: string, optionId: string | null, cancelled: boolean) => Promise<void>;
 
   plugin_list: () => Promise<PluginRow[]>;
-  plugin_connect: (id: "github") => Promise<void>;
+  plugin_connect: (id: string) => Promise<void>;
+  plugin_configure: (id: string, credential: string, accountLabel?: string | null) => Promise<void>;
   plugin_disconnect: (id: string) => Promise<void>;
   plugin_set_agent_grant: (agentId: string, pluginId: string, enabled: boolean) => Promise<void>;
   plugin_resolve_approval: (id: string, allow: boolean) => Promise<void>;
+  plugin_approvals_list: () => Promise<PluginApproval[]>;
+  plugin_grants_list: (agentId: string) => Promise<PluginGrant[]>;
 
   dictation_begin: () => Promise<void>;
   dictation_end: () => Promise<void>;

@@ -11,8 +11,9 @@ export type Mode = (typeof MODES)[number]["value"];
 interface ModeSwitchProps {
   value: Mode;
   onValueChange: (value: Mode) => void;
+  onValueClick?: (value: Mode) => void;
 }
 
-export function ModeSwitch({ value, onValueChange }: ModeSwitchProps) {
-  return <Segmented label="Mode" value={value} options={MODES} onValueChange={onValueChange} />;
+export function ModeSwitch({ value, onValueChange, onValueClick }: ModeSwitchProps) {
+  return <Segmented label="Mode" value={value} options={MODES} onValueChange={onValueChange} onValueClick={onValueClick} />;
 }

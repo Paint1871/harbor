@@ -10,6 +10,8 @@ export interface ChromeValue {
   profileName: string;
   destination: Destination;
   setDestination: (destination: Destination) => void;
+  onModeChange: (mode: Mode) => void;
+  onCodePaneSelect?: (workspaceId: string, paneId: string) => void;
   onThemeChange: (theme: Theme) => void;
   onSettings: () => void;
   onTidy: () => void;
@@ -26,4 +28,9 @@ export function useChrome(): ChromeValue {
     throw new Error("useChrome must be used within DesktopShell");
   }
   return value;
+}
+
+/** Context-aware screens can also be rendered in isolation by the UI tests. */
+export function useOptionalChrome(): ChromeValue | null {
+  return useContext(ChromeContext);
 }

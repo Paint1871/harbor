@@ -52,3 +52,33 @@ fn stdio_neither_uses_session_new() {
     assert_eq!(kind, ResumeKind::FreshWithBanner);
     assert_eq!(method_for(kind), "session/new");
 }
+
+#[test]
+fn stdio_permissions_default_cancel_completes_prompt() {
+    let spec = spec("permissions");
+    let mut session = AcpHostSession::connect(spec.clone()).unwrap();
+    session.open_session(None, &spec, &[]).unwrap();
+    let result = session
+        .prompt(&[serde_json::json!({"type":"text","text":"hi"})])
+        .unwrap();
+    assert_eq!(result["stopReason"], "end_turn");
+}
+
+#[test]
+fn stdio_permissions_hook_echoes_option_id() {
+    use harbor_acp::permission_outcome;
+    use std::sync::Arc;
+
+    let spec = spec("permissions");
+    let mut session = AcpHostSession::connect(spec.clone()).unwrap();
+    session.set_permission_hook(Arc::new(|params| {
+        let option_id = params["options"][0]["optionId"].as_str().unwrap();
+        assert_eq!(option_id, "opt-allow");
+        Ok(permission_outcome(Some(option_id), false))
+    }));
+    session.open_session(None, &spec, &[]).unwrap();
+    let result = session
+        .prompt(&[serde_json::json!({"type":"text","text":"hi"})])
+        .unwrap();
+    assert_eq!(result["stopReason"], "end_turn");
+}

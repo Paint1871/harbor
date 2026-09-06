@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-agent-chat-history"
+description = "Enables the agent_chat_history command without any pre-configured scope."
+commands.allow = ["agent_chat_history"]
+
+[[permission]]
+identifier = "deny-agent-chat-history"
+description = "Denies the agent_chat_history command without any pre-configured scope."
+commands.deny = ["agent_chat_history"]

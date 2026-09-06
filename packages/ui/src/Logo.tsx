@@ -4,7 +4,7 @@ interface LogoProps {
   className?: string;
 }
 
-/** Geometric harbor mouth: open ring and inner beacon. */
+/** A compact two-tone bolt mark that stays legible in the native title bar. */
 export function Logo({ size = 20, title = "Harbor", className = "" }: LogoProps) {
   return (
     <svg
@@ -16,14 +16,9 @@ export function Logo({ size = 20, title = "Harbor", className = "" }: LogoProps)
       aria-label={title}
     >
       <title>{title}</title>
-      <circle cx="16" cy="16" r="3.2" fill="currentColor" />
-      <path
-        d="M10.91 25.19A10.5 10.5 0 1 1 21.09 25.19"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-      />
+      <path d="M16 2.2 27.2 8.6v14.8L16 29.8 4.8 23.4V8.6L16 2.2Z" fill="#20252f" />
+      <path d="M13.7 4.4 7.7 15.1h5.2l-2.1 11.2 7.2-11.9h-5.1l2.1-10Z" fill="#F6C445" />
+      <path d="m18.1 4.2-3 10.3h4.8l-2.1 11.1 7-11.8h-4.7l2.1-9.4Z" fill="#5D8DFF" />
     </svg>
   );
 }

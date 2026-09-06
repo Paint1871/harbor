@@ -25,6 +25,7 @@ export function Composer({ value, onValueChange, onSend, disabled = false, contr
       <textarea
         aria-label="Message"
         placeholder="Ask anything..."
+        enterKeyHint="send"
         rows={2}
         {...inputProps}
         className={`harbor-composer-input ${textareaClassName}`}
@@ -44,7 +45,7 @@ export function Composer({ value, onValueChange, onSend, disabled = false, contr
         <div className="harbor-composer-controls">{controls}</div>
         <Button type="submit" variant="primary" size="icon" aria-label="Send" disabled={!canSend}>
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M8 12.5V3.5M8 3.5 4.5 7M8 3.5 11.5 7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M8 12.5V3.5M8 3.5 4.5 7M8 3.5 11.5 7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </Button>
       </div>

@@ -44,6 +44,7 @@ export function ThemeProvider({ children, theme = "black", reduceMotion = false 
     const root = document.documentElement;
     const previousTheme = root.dataset.theme;
     const previousScheme = root.style.colorScheme;
+    const previousBackground = root.style.background;
     const previousMotion = root.dataset.reduceMotion;
     applyTheme(theme, root);
     root.dataset.reduceMotion = String(reducedMotion);
@@ -51,6 +52,7 @@ export function ThemeProvider({ children, theme = "black", reduceMotion = false 
       if (previousTheme === undefined) delete root.dataset.theme;
       else root.dataset.theme = previousTheme;
       root.style.colorScheme = previousScheme;
+      root.style.background = previousBackground;
       if (previousMotion === undefined) delete root.dataset.reduceMotion;
       else root.dataset.reduceMotion = previousMotion;
     };

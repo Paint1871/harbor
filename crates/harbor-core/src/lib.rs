@@ -1,12 +1,20 @@
 //! Local application core for Harbor.
 
+pub mod acp;
 pub mod agents;
+pub mod chats;
 pub mod commands;
 pub mod db;
 pub mod engines;
 pub mod error;
 pub mod files;
+pub mod layout;
+pub mod mail;
+pub mod memory;
+pub mod places;
+pub mod plugins;
 pub mod restore;
+pub mod search;
 pub mod settings;
 pub mod threads;
 pub mod types;
@@ -106,10 +114,11 @@ mod tests {
         let engines = commands::engines_detect(&pool).await.unwrap();
         assert!(!engines.is_empty());
         let _agents = commands::agent_list(&pool).await.unwrap();
-        let message = commands::pty_spawn(&pool, "pane".into(), "/tmp".into(), None)
-            .await
-            .expect_err("unimplemented host command")
-            .to_string();
+        let message =
+            commands::pty_spawn(&pool, "pane".into(), "workspace".into(), 80, 24, None, None)
+                .await
+                .expect_err("unimplemented host command")
+                .to_string();
         assert!(
             message.contains("unimplemented"),
             "command failed for a reason other than unimplemented: {message}"
@@ -120,5 +129,20 @@ mod tests {
                 && !message.to_ascii_lowercase().contains("auth"),
             "{message}"
         );
+        assert!(commands::thread_cancel(&pool, "any".into()).await.is_ok());
+        assert!(
+            commands::agent_chat_history(&pool, "missing".into())
+                .await
+                .is_err()
+        );
+        assert!(
+            commands::places_list(&pool, "missing".into())
+                .await
+                .is_err()
+        );
+        let draft = commands::agent_draft_with_ai(&pool, "local helper".into())
+            .await
+            .unwrap();
+        assert_eq!(draft.engine_id, "opencode");
     }
 }

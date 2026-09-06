@@ -1,8 +1,12 @@
+use std::process::ChildStdin;
+use std::sync::{Arc, Mutex};
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::AcpError;
 use crate::spawn::{McpServer, SpawnSpec};
+use crate::transport::PermissionHook;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InitializeCaps {
@@ -150,9 +154,7 @@ impl AcpHostSession {
             }),
         )?;
         let caps = parse_initialize_caps(&init);
-        if !caps.auth_methods.is_empty() {
-            return Err(AcpError::Protocol("auth-required"));
-        }
+        // Advertised authentication methods do not mean an existing CLI login is invalid.
         Ok(Self {
             conn,
             session_id: None,
@@ -206,7 +208,16 @@ impl AcpHostSession {
 
     pub fn cancel(&mut self) -> Result<Value, AcpError> {
         self.conn
-            .request("session/cancel", json!({ "sessionId": self.session_id }))
+            .notify("session/cancel", json!({ "sessionId": self.session_id }))?;
+        Ok(Value::Null)
+    }
+
+    pub fn set_permission_hook(&mut self, hook: PermissionHook) {
+        self.conn.permission_hook = Some(hook);
+    }
+
+    pub fn stdin_handle(&self) -> Arc<Mutex<ChildStdin>> {
+        self.conn.stdin_handle()
     }
 
     pub fn set_config_option(&mut self, id: &str, value: Value) -> Result<Value, AcpError> {

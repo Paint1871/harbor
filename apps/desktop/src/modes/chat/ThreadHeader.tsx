@@ -1,21 +1,9 @@
 import { Button } from "@harbor/ui/Button";
 import type { ThreadRecord, Workspace } from "@harbor/schema/commands";
 
-interface ThreadHeaderProps {
-  thread: ThreadRecord | null;
-  workspace?: Workspace;
-  onNew: () => void;
-}
-
-export function ThreadHeader({ thread, workspace, onNew }: ThreadHeaderProps) {
-  return (
-    <header className="harbor-thread-header">
-      <div>
-        <strong>{workspace?.title ?? workspace?.folder ?? "Other chats"}</strong>
-        <span>{thread?.title ?? "No thread"}</span>
-        <span>{thread?.engineId ?? "OpenCode"}</span>
-      </div>
-      <Button onClick={onNew}>New thread</Button>
-    </header>
-  );
+export function ThreadHeader({ thread, workspace, onNew, disabled }: { thread: ThreadRecord | null; workspace?: Workspace; onNew: () => void; disabled?: boolean }) {
+  return <header className="harbor-thread-header">
+    <div className="harbor-thread-heading"><strong>{thread?.title ?? workspace?.title ?? "Folder conversations"}</strong><p>{workspace?.folder ?? "Other chats"}{thread ? ` · ${thread.engineId}` : ""}</p></div>
+    <Button disabled={disabled} onClick={onNew}>New thread</Button>
+  </header>;
 }

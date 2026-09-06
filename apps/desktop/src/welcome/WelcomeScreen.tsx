@@ -1,13 +1,29 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Button } from "@harbor/ui/Button";
 import { Logo } from "@harbor/ui/Logo";
+import { useTheme } from "@harbor/ui/ThemeProvider";
 import { Orbit } from "./Orbit";
 
 export interface WelcomeScreenProps {
   onStartLocal: (profileName: string) => void | Promise<void>;
 }
 
+const TAGLINE = ["An open desktop host", "for coding agents"] as const;
+
+function RisingLine({ text, offset }: { text: string; offset: number }) {
+  return (
+    <span className="harbor-welcome-line">
+      {Array.from(text).map((glyph, index) => (
+        <span key={`${glyph}-${index}`} style={{ "--d": offset + index } as CSSProperties}>
+          {glyph === " " ? "\u00a0" : glyph}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function WelcomeScreen({ onStartLocal }: WelcomeScreenProps) {
+  const { reducedMotion } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
   const [name, setName] = useState("Builder");
   const [busy, setBusy] = useState(false);
@@ -24,13 +40,21 @@ export function WelcomeScreen({ onStartLocal }: WelcomeScreenProps) {
   const valid = name.trim().length >= 1 && name.trim().length <= 40;
 
   return (
-    <main className="harbor-welcome">
+    <main
+      className="harbor-welcome"
+      data-still={reducedMotion || undefined}
+      data-dialog={profileOpen || undefined}
+    >
       <Orbit />
       <div className="harbor-welcome-mark">
         <Logo size={28} />
-        <h1>Harbor</h1>
+        <h1 className="harbor-welcome-wordmark">Harbor</h1>
       </div>
-      <p className="harbor-welcome-tagline">An open desktop host for coding agents</p>
+      <hr className="harbor-welcome-rule" />
+      <p className="harbor-welcome-tagline" aria-label="An open desktop host for coding agents">
+        <RisingLine text={TAGLINE[0]} offset={0} />
+        <RisingLine text={TAGLINE[1]} offset={TAGLINE[0].length + 4} />
+      </p>
       <div className="harbor-welcome-actions">
         <Button variant="primary" disabled={busy} onClick={() => void start("Builder")}>
           Start local

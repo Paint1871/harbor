@@ -11,17 +11,18 @@ export interface SegmentedProps<Value extends string> {
   value: Value;
   options: readonly SegmentOption<Value>[];
   onValueChange: (value: Value) => void;
+  onValueClick?: (value: Value) => void;
   disabled?: boolean;
   className?: string;
 }
 
 /** Native radio inputs provide one tab stop, arrow navigation, and disabled-item skipping. */
-export function Segmented<Value extends string>({ label, value, options, onValueChange, disabled = false, className = "" }: SegmentedProps<Value>) {
+export function Segmented<Value extends string>({ label, value, options, onValueChange, onValueClick, disabled = false, className = "" }: SegmentedProps<Value>) {
   const name = useId();
   return (
     <div className={`harbor-segmented ${className}`} role="radiogroup" aria-label={label}>
       {options.map((option) => (
-        <label key={option.value} className="harbor-segment">
+        <label key={option.value} className="harbor-segment" onClick={() => onValueClick?.(option.value)}>
           <input
             type="radio"
             name={name}

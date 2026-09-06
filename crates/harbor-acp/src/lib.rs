@@ -5,9 +5,10 @@ pub mod session;
 pub mod spawn;
 pub mod transport;
 
-pub use permissions::{PermissionKind, map_permission_kind};
+pub use permissions::{PermissionKind, map_permission_kind, permission_outcome};
 pub use session::{InitializeCaps, ResumeKind, resume_or_new};
 pub use spawn::{McpServer, SpawnSpec};
+pub use transport::PermissionHook;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AcpError {

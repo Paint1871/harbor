@@ -16,12 +16,15 @@ export function Inbox({ open }: InboxProps) {
   if (!open) return null;
   return (
     <Card className="harbor-inbox" aria-label="Notifications">
-      <h2>Inbox</h2>
-      <p className="harbor-muted">Event types only — no transcript dumps.</p>
+      <header>
+        <h2>Inbox</h2>
+        <span className="harbor-eyebrow">Events</span>
+      </header>
       <ul>
         {EVENTS.map((event) => (
           <li key={event.kind}>
-            <strong>{event.kind}</strong> — {`{agent} ${event.copy}`}
+            <span className="harbor-inbox-kind">{event.kind}</span>
+            <span className="harbor-inbox-copy">{`Local agent ${event.copy}`}</span>
           </li>
         ))}
       </ul>

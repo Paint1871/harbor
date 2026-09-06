@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
-import { Card } from "@harbor/ui/Card";
 import type { DetectedEngine } from "@harbor/schema/commands";
 
 interface LaunchWizardProps {
@@ -14,19 +13,27 @@ export function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
   const [seat, setSeat] = useState("opencode");
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
     void invoke<DetectedEngine[]>("engines_detect")
       .then(setEngines)
       .catch(() => setEngines([]));
-  }, []);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   const ready = engines.filter((engine) => engine.status === "ready");
   const selected = ready.find((engine) => engine.id === seat) ?? ready[0];
 
   return (
-    <div className="harbor-dialog" role="dialog" aria-labelledby="launch-title">
-      <Card>
-        <h2 id="launch-title">Launch wizard</h2>
-        <p>Preset: Solo · Isolation: Shared checkout</p>
+    <div className="harbor-modal-layer" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <div className="harbor-dialog harbor-launch-dialog" role="dialog" aria-modal="true" aria-labelledby="launch-title" onMouseDown={(event) => event.stopPropagation()}>
+        <span className="harbor-eyebrow">WORKSPACE</span>
+        <h2 id="launch-title">Launch a terminal</h2>
+        <p>Choose the engine for this workspace. Harbor keeps the checkout shared and local.</p>
         <label>
           Seat 1
           <select value={selected?.id ?? ""} onChange={(event) => setSeat(event.target.value)}>
@@ -38,7 +45,8 @@ export function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
             {ready.length === 0 ? <option value="shell">Terminal</option> : null}
           </select>
         </label>
-        <div className="harbor-welcome-actions">
+        <div className="harbor-dialog-actions">
+          <Button onClick={onClose}>Cancel</Button>
           <Button
             variant="primary"
             onClick={() => onLaunch(selected?.id ?? "shell")}
@@ -48,11 +56,10 @@ export function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
               }
             }}
           >
-            Launch 1 terminal
+            Launch terminal
           </Button>
-          <Button onClick={onClose}>Cancel</Button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

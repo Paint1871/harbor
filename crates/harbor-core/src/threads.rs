@@ -1,4 +1,6 @@
-use serde_json::json;
+use std::path::{Path, PathBuf};
+
+use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -49,6 +51,18 @@ pub async fn list(
                 unread: unread != 0,
             },
         )
+        .collect())
+}
+
+/// Read one thread's persisted transcript without starting its engine.
+pub async fn history(pool: &SqlitePool, id: &str) -> Result<Vec<crate::types::ChatMessage>, Error> {
+    context(pool, id).await?;
+    let rows = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT id, role, prose FROM messages WHERE chat_kind = 'thread' AND chat_id = ?1 ORDER BY created_at, rowid",
+    ).bind(id).fetch_all(pool).await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, role, text)| crate::types::ChatMessage { id, role, text })
         .collect())
 }
 
@@ -129,7 +143,103 @@ pub async fn grant_root(pool: &SqlitePool, id: &str, path: &str) -> Result<(), E
         .bind(id)
         .execute(pool)
         .await?;
-    let _ = json!(roots);
+    Ok(())
+}
+
+pub async fn set_config(
+    pool: &SqlitePool,
+    id: &str,
+    option_id: &str,
+    value: Value,
+) -> Result<(), Error> {
+    if option_id.trim().is_empty() {
+        return Err(Error::Message("option_id required".into()));
+    }
+    let (json,): (String,) = sqlx::query_as("SELECT config_json FROM threads WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| Error::Message("thread not found".into()))?;
+    let mut map = match serde_json::from_str::<Value>(&json)? {
+        Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    map.insert(option_id.to_string(), value);
+    sqlx::query("UPDATE threads SET config_json = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(Value::Object(map).to_string())
+        .bind(now())
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn attach_files(pool: &SqlitePool, id: &str, paths: &[String]) -> Result<(), Error> {
+    if paths.is_empty() {
+        return Err(Error::Message("no files to attach".into()));
+    }
+    let ctx = context(pool, id).await?;
+    let (json,): (String,) = sqlx::query_as("SELECT config_json FROM threads WHERE id = ?1")
+        .bind(id)
+        .fetch_one(pool)
+        .await?;
+    let mut map = match serde_json::from_str::<Value>(&json)? {
+        Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    let mut attached: Vec<String> = map
+        .get("attachedFiles")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut extra = ctx.extra_roots;
+
+    for path in paths {
+        let given = Path::new(path);
+        let candidate: PathBuf = if given.is_absolute() {
+            given.to_path_buf()
+        } else if let Some(folder) = ctx.workspace_folder.as_deref() {
+            Path::new(folder).join(given)
+        } else {
+            return Err(Error::Message(format!("{path} is not an absolute path")));
+        };
+        if !candidate.exists() {
+            return Err(Error::Message(format!("file not found: {path}")));
+        }
+        let canon = candidate.canonicalize()?;
+        let canon_s = canon.to_string_lossy().into_owned();
+        if !attached.iter().any(|item| item == &canon_s) {
+            attached.push(canon_s);
+        }
+        let root = if canon.is_dir() {
+            canon.clone()
+        } else {
+            canon
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| canon.clone())
+        };
+        let root_s = root.to_string_lossy().into_owned();
+        if !extra.iter().any(|item| item == &root_s) {
+            extra.push(root_s);
+        }
+    }
+
+    map.insert("attachedFiles".into(), json!(attached));
+    sqlx::query(
+        "UPDATE threads SET extra_roots_json = ?1, config_json = ?2, updated_at = ?3 WHERE id = ?4",
+    )
+    .bind(serde_json::to_string(&extra)?)
+    .bind(Value::Object(map).to_string())
+    .bind(now())
+    .bind(id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -221,9 +331,17 @@ pub async fn send(pool: &SqlitePool, id: &str, parts: &[ContentPart]) -> Result<
         .collect::<Vec<_>>()
         .join("\n");
     append_message(pool, id, "thread", "user", &prose).await?;
-    sqlx::query("UPDATE threads SET updated_at = ?1, unread = 0 WHERE id = ?2")
+    let title: String = prose
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(64)
+        .collect();
+    sqlx::query("UPDATE threads SET updated_at = ?1, unread = 0, title = CASE WHEN title = 'New thread' AND ?3 != '' THEN ?3 ELSE title END WHERE id = ?2")
         .bind(now())
         .bind(id)
+        .bind(title)
         .execute(pool)
         .await?;
     Ok(())
@@ -234,6 +352,36 @@ mod tests {
     use super::*;
     use crate::db;
     use crate::types::ContentPart;
+
+    #[tokio::test]
+    async fn history_is_ordered_and_scoped_to_one_thread_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let a = create(&pool, None, "opencode".into()).await.unwrap();
+        let b = create(&pool, None, "opencode".into()).await.unwrap();
+        append_message(&pool, &a.id, "thread", "user", "first")
+            .await
+            .unwrap();
+        append_message(&pool, &b.id, "thread", "user", "other thread")
+            .await
+            .unwrap();
+        append_message(&pool, &a.id, "agent", "assistant", "other kind")
+            .await
+            .unwrap();
+        append_message(&pool, &a.id, "thread", "assistant", "second")
+            .await
+            .unwrap();
+        let lines = history(&pool, &a.id).await.unwrap();
+        assert_eq!(
+            lines
+                .iter()
+                .map(|line| line.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first", "second"]
+        );
+        assert_eq!(lines[1].role, "assistant");
+        assert!(history(&pool, "missing").await.is_err());
+    }
 
     #[tokio::test]
     async fn send_persists_user_and_context() {
@@ -256,6 +404,20 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(count, 1);
+        assert_eq!(list(&pool, None).await.unwrap()[0].title, "hi");
+        rename(&pool, &thread.id, "My chosen title").await.unwrap();
+        send(
+            &pool,
+            &thread.id,
+            &[ContentPart {
+                r#type: "text".into(),
+                text: Some("second turn".into()),
+                path: None,
+            }],
+        )
+        .await
+        .unwrap();
+        assert_eq!(list(&pool, None).await.unwrap()[0].title, "My chosen title");
         append_message(&pool, &thread.id, "thread", "assistant", "ok")
             .await
             .unwrap();
@@ -263,5 +425,48 @@ mod tests {
         let ctx = context(&pool, &thread.id).await.unwrap();
         assert_eq!(ctx.engine_id, "opencode");
         assert_eq!(ctx.acp_session.as_deref(), Some("sess-1"));
+    }
+
+    #[tokio::test]
+    async fn set_config_merges_and_attach_files_persist() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let thread = create(&pool, None, "opencode".into()).await.unwrap();
+        set_config(&pool, &thread.id, "model", json!("local"))
+            .await
+            .unwrap();
+        set_config(&pool, &thread.id, "effort", json!("high"))
+            .await
+            .unwrap();
+        let (config,): (String,) = sqlx::query_as("SELECT config_json FROM threads WHERE id = ?1")
+            .bind(&thread.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(config.contains("model") && config.contains("effort"));
+
+        let file = dir.path().join("note.txt");
+        std::fs::write(&file, "hi").unwrap();
+        attach_files(&pool, &thread.id, &[file.display().to_string()])
+            .await
+            .unwrap();
+        let ctx = context(&pool, &thread.id).await.unwrap();
+        assert!(ctx.extra_roots.iter().any(|root| Path::new(root).exists()));
+        let (config,): (String,) = sqlx::query_as("SELECT config_json FROM threads WHERE id = ?1")
+            .bind(&thread.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(config.contains("attachedFiles"));
+        assert!(attach_files(&pool, &thread.id, &[]).await.is_err());
+        assert!(
+            attach_files(
+                &pool,
+                &thread.id,
+                &["/definitely-missing-harbor-file".into()]
+            )
+            .await
+            .is_err()
+        );
     }
 }

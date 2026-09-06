@@ -80,6 +80,21 @@ impl LivePty {
         rows: u16,
         allowlisted: &[PathBuf],
     ) -> Result<(Self, Receiver<Vec<u8>>), PtyError> {
+        #[cfg(unix)]
+        let args = vec!["-i".to_string()];
+        #[cfg(not(unix))]
+        let args = Vec::new();
+        Self::spawn_with_args(program, &args, cwd, cols, rows, allowlisted)
+    }
+
+    pub fn spawn_with_args(
+        program: &Path,
+        args: &[String],
+        cwd: &Path,
+        cols: u16,
+        rows: u16,
+        allowlisted: &[PathBuf],
+    ) -> Result<(Self, Receiver<Vec<u8>>), PtyError> {
         let request = prepare_spawn(program, cwd, allowlisted)?;
         let system = native_pty_system();
         let pair = system
@@ -91,8 +106,12 @@ impl LivePty {
             })
             .map_err(io::Error::other)?;
         let mut cmd = CommandBuilder::new(request.program);
+        for arg in args {
+            cmd.arg(arg);
+        }
         cmd.cwd(request.cwd);
         cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
         let child = pair.slave.spawn_command(cmd).map_err(io::Error::other)?;
         let mut reader = pair.master.try_clone_reader().map_err(io::Error::other)?;
         let writer = pair.master.take_writer().map_err(io::Error::other)?;
@@ -149,6 +168,43 @@ impl LivePty {
             .map_err(|_| io::Error::other("pty child"))?
             .kill()
     }
+
+    fn child_pid(&self) -> io::Result<Option<u32>> {
+        Ok(self
+            .child
+            .lock()
+            .map_err(|_| io::Error::other("pty child"))?
+            .process_id())
+    }
+
+    pub fn pause(&self) -> io::Result<()> {
+        self.signal_child("STOP")
+    }
+
+    pub fn resume(&self) -> io::Result<()> {
+        self.signal_child("CONT")
+    }
+
+    fn signal_child(&self, action: &str) -> io::Result<()> {
+        let Some(pid) = self.child_pid()? else {
+            return Ok(());
+        };
+        #[cfg(unix)]
+        {
+            let status = std::process::Command::new("/bin/kill")
+                .arg(format!("-{action}"))
+                .arg(pid.to_string())
+                .status()?;
+            if !status.success() {
+                return Err(io::Error::other(format!("kill -{action} {pid} failed")));
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (pid, action);
+        }
+        Ok(())
+    }
 }
 
 pub fn recv_deadline(rx: &Receiver<Vec<u8>>, needle: &str, timeout: Duration) -> bool {
@@ -197,12 +253,33 @@ mod tests {
     #[test]
     fn spawns_allowlisted_shell_and_echoes() {
         let sh = PathBuf::from("/bin/sh");
-        let (pty, rx) = LivePty::spawn(&sh, Path::new("/"), 40, 12, &[sh.clone()]).unwrap();
+        let (pty, rx) =
+            LivePty::spawn(&sh, Path::new("/"), 40, 12, std::slice::from_ref(&sh)).unwrap();
         pty.write(b"printf 'harbor-pty-ok\\n'\n").unwrap();
         assert!(
             recv_deadline(&rx, "harbor-pty-ok", Duration::from_secs(3)),
             "PTY never printed harbor-pty-ok"
         );
         let _ = pty.kill();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn interactive_shell_accepts_composer_style_carriage_return() {
+        let sh = PathBuf::from("/bin/zsh");
+        if !sh.exists() {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let other_thread = thread::spawn(|| thread::sleep(Duration::from_secs(2)));
+        let (pty, rx) =
+            LivePty::spawn(&sh, root.path(), 40, 12, std::slice::from_ref(&sh)).unwrap();
+        pty.write(b"printf 'harbor-pty-cr-ok\\n'\r\n").unwrap();
+        assert!(
+            recv_deadline(&rx, "harbor-pty-cr-ok", Duration::from_secs(3)),
+            "interactive PTY never accepted a carriage-return command"
+        );
+        let _ = pty.kill();
+        other_thread.join().unwrap();
     }
 }

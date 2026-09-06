@@ -48,6 +48,22 @@ pub fn configured_client_id() -> Option<String> {
         })
 }
 
+/// Settings key for a user-supplied GitHub App client id. Never a client secret.
+pub const CLIENT_ID_SETTING: &str = "github_client_id";
+
+pub fn resolve_client_id(settings_value: Option<&str>) -> Option<String> {
+    configured_client_id().or_else(|| {
+        settings_value
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+pub fn missing_client_id_error() -> String {
+    "Set your GitHub App client id in Settings (github_client_id) or HARBOR_GITHUB_CLIENT_ID. Enable Device Flow. Harbor never ships a client secret.".into()
+}
+
 fn form_encode(value: &str) -> String {
     let mut out = String::new();
     for ch in value.chars() {
@@ -203,5 +219,19 @@ mod tests {
     fn empty_client_id_is_refused() {
         let err = run_device_flow("", |_, _| Ok("{}".into()), |_| {}).unwrap_err();
         assert!(err.contains("HARBOR_GITHUB_CLIENT_ID"));
+    }
+
+    #[test]
+    fn settings_client_id_is_used_when_env_is_empty() {
+        assert!(CLIENT_ID.is_empty());
+        if configured_client_id().is_none() {
+            assert_eq!(
+                resolve_client_id(Some("Iv1.from-settings")),
+                Some("Iv1.from-settings".into())
+            );
+            assert!(resolve_client_id(Some("")).is_none());
+        }
+        assert!(missing_client_id_error().contains("github_client_id"));
+        assert!(missing_client_id_error().contains("never ships a client secret"));
     }
 }

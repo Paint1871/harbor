@@ -5,10 +5,10 @@ interface ModelMenuProps {
 }
 
 export function ModelMenu({ options, value, onChange }: ModelMenuProps) {
-  const models = options.filter((option) => option.category === "model" || option.category === "mode");
+  const models = options.filter((option) => option.category === "model" || option.category === "mode" || option.category === "effort");
   if (models.length === 0) return null;
   return (
-    <label>
+    <label className="harbor-model-menu">
       Model
       <select value={value ?? ""} onChange={(event) => onChange(event.target.value)}>
         {models.map((option) => (

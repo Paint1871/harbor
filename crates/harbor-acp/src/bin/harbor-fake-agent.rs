@@ -1,8 +1,7 @@
 //! In-process ACP v1 fixture. Caps come from HARBOR_FAKE_ACP_FIXTURE.
 
-use std::io::{self, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write};
 
-use harbor_acp::transport::{read_message, write_message};
 use serde_json::{Value, json};
 
 fn main() -> io::Result<()> {
@@ -12,7 +11,26 @@ fn main() -> io::Result<()> {
         .unwrap_or_else(|| "neither".into());
     let mut stdin = BufReader::new(io::stdin());
     let mut stdout = io::stdout();
-    while let Ok(message) = read_message(&mut stdin) {
+    let mut line = String::new();
+    let mut pending_prompt: Option<Value> = None;
+    while stdin.read_line(&mut line)? > 0 {
+        let message: Value = serde_json::from_str(&line)?;
+        line.clear();
+        if pending_prompt.is_some()
+            && (message.get("result").is_some() || message.get("error").is_some())
+        {
+            let prompt_id = pending_prompt.take();
+            notify(
+                &mut stdout,
+                json!({
+                    "jsonrpc": "2.0",
+                    "method": "session/update",
+                    "params": { "sessionId": "sess-fixture", "update": { "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": "ok" } } }
+                }),
+            )?;
+            respond(&mut stdout, prompt_id, json!({ "stopReason": "end_turn" }))?;
+            continue;
+        }
         let method = message.get("method").and_then(Value::as_str).unwrap_or("");
         let id = message.get("id").cloned();
         let params = message.get("params").cloned().unwrap_or(Value::Null);
@@ -33,13 +51,33 @@ fn main() -> io::Result<()> {
                 }
                 respond(&mut stdout, id, json!({ "sessionId": "sess-fixture" }))?;
             }
+            "session/prompt" if fixture == "permissions" => {
+                pending_prompt = id;
+                write_rpc(
+                    &mut stdout,
+                    &json!({
+                        "jsonrpc": "2.0",
+                        "id": 1000,
+                        "method": "session/request_permission",
+                        "params": {
+                            "sessionId": "sess-fixture",
+                            "toolCall": { "title": "Run tests", "path": "/tmp/proj", "command": "cargo test" },
+                            "options": [
+                                { "optionId": "opt-allow", "kind": "allow_once", "name": "Allow" },
+                                { "optionId": "opt-always", "kind": "allow_always", "name": "Allow for session" },
+                                { "optionId": "opt-deny", "kind": "reject_once", "name": "Deny" }
+                            ]
+                        }
+                    }),
+                )?;
+            }
             "session/prompt" => {
                 notify(
                     &mut stdout,
                     json!({
                         "jsonrpc": "2.0",
                         "method": "session/update",
-                        "params": { "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": "ok" } }
+                        "params": { "sessionId": "sess-fixture", "update": { "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": "ok" } } }
                     }),
                 )?;
                 respond(&mut stdout, id, json!({ "stopReason": "end_turn" }))?;
@@ -100,5 +138,7 @@ fn notify(stdout: &mut impl Write, body: Value) -> io::Result<()> {
 }
 
 fn write_rpc(stdout: &mut impl Write, body: &Value) -> io::Result<()> {
-    write_message(stdout, body).map_err(io::Error::other)
+    serde_json::to_writer(&mut *stdout, body)?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()
 }

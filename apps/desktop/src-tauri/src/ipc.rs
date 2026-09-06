@@ -2,15 +2,32 @@ use crate::acp_host::AcpRegistry;
 use crate::security::ExecutableAllowlist;
 use harbor_core::SqlitePool;
 use harbor_core::types::{
-    AgentChat, AgentRecord, ContentPart, CreateAgent, DetectedEngine, FileDiff, FsEntry, Memory,
-    PaneLayout, PaneState, PluginRow, SearchHit, ThreadRecord, UpdateAgent, UpdateStatus,
-    Workspace,
+    AgentChat, AgentRecord, ChatMessage, ContentPart, CreateAgent, DetectedEngine, FileDiff,
+    FsEntry, Memory, PaneLayout, PaneState, Place, PluginApproval, PluginGrant, PluginRow,
+    SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup, WorkspaceTab,
 };
 use serde_json::{Value, json};
-use tauri::{AppHandle, Emitter, Manager, State};
+use std::path::Path;
+use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_fs::FsExt;
 
 fn map_err(error: harbor_core::error::Error) -> String {
     error.to_string()
+}
+
+fn fetch_url(url: &str) -> Result<String, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .and_then(|client| {
+            client
+                .get(url)
+                .header("User-Agent", "harbor")
+                .send()
+                .and_then(|response| response.text())
+        })
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -55,21 +72,61 @@ pub async fn engines_recheck(
     Ok(engines)
 }
 
+fn allow_workspace_directory(app: &AppHandle, folder: &str) {
+    // The native picker and the persisted workspace list both feed the
+    // Tauri filesystem scope. The custom Rust commands still enforce their
+    // own root check, but this keeps plugin-backed file APIs usable too.
+    let _ = app.fs_scope().allow_directory(Path::new(folder), true);
+}
+
 #[tauri::command]
-pub async fn workspace_list(pool: State<'_, SqlitePool>) -> Result<Vec<Workspace>, String> {
-    harbor_core::commands::workspace_list(&pool)
+pub async fn workspace_list(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<Workspace>, String> {
+    let workspaces = harbor_core::commands::workspace_list(&pool)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    for workspace in &workspaces {
+        allow_workspace_directory(&app, &workspace.folder);
+    }
+    Ok(workspaces)
+}
+
+/// The native picker selects a folder and grants its recursive filesystem scope.
+#[tauri::command]
+pub async fn workspace_pick_folder(app: AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Choose a workspace folder")
+            .blocking_pick_folder()
+            .map(|path| {
+                path.into_path()
+                    .map(|path| {
+                        let value = path.to_string_lossy().into_owned();
+                        allow_workspace_directory(&app, &value);
+                        value
+                    })
+                    .map_err(|error| error.to_string())
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub async fn workspace_add(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     folder: String,
 ) -> Result<Workspace, String> {
-    harbor_core::commands::workspace_add(&pool, folder)
+    let workspace = harbor_core::commands::workspace_add(&pool, folder)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    allow_workspace_directory(&app, &workspace.folder);
+    Ok(workspace)
 }
 
 #[tauri::command]
@@ -112,7 +169,28 @@ pub async fn workspace_tidy(
 }
 
 #[tauri::command]
-pub async fn layout_restore(pool: State<'_, SqlitePool>) -> Result<(), String> {
+pub async fn workspace_ensure_tab(
+    pool: State<'_, SqlitePool>,
+    workspace_id: String,
+) -> Result<WorkspaceTab, String> {
+    harbor_core::commands::workspace_ensure_tab(&pool, workspace_id)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn workspace_configure_tab(
+    pool: State<'_, SqlitePool>,
+    workspace_id: String,
+    setup: WorkspaceSetup,
+) -> Result<WorkspaceTab, String> {
+    harbor_core::commands::workspace_configure_tab(&pool, workspace_id, setup)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn layout_restore(pool: State<'_, SqlitePool>) -> Result<Vec<WorkspaceTab>, String> {
     harbor_core::commands::layout_restore(&pool)
         .await
         .map_err(map_err)
@@ -133,6 +211,17 @@ pub async fn pane_create(
 #[tauri::command]
 pub async fn pane_close(pool: State<'_, SqlitePool>, id: String) -> Result<(), String> {
     harbor_core::commands::pane_close(&pool, id)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn pane_set_engine(
+    pool: State<'_, SqlitePool>,
+    id: String,
+    engine_id: String,
+) -> Result<(), String> {
+    harbor_core::commands::pane_set_engine(&pool, id, engine_id)
         .await
         .map_err(map_err)
 }
@@ -177,6 +266,16 @@ pub async fn thread_list(
     workspace_id: Option<String>,
 ) -> Result<Vec<ThreadRecord>, String> {
     harbor_core::commands::thread_list(&pool, workspace_id)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn thread_history(
+    pool: State<'_, SqlitePool>,
+    id: String,
+) -> Result<Vec<ChatMessage>, String> {
+    harbor_core::threads::history(&pool, &id)
         .await
         .map_err(map_err)
 }
@@ -249,13 +348,15 @@ pub async fn thread_cancel(registry: State<'_, AcpRegistry>, id: String) -> Resu
 #[tauri::command]
 pub async fn thread_set_config(
     pool: State<'_, SqlitePool>,
+    registry: State<'_, AcpRegistry>,
     id: String,
     option_id: String,
     value: Value,
 ) -> Result<(), String> {
-    harbor_core::commands::thread_set_config(&pool, id, option_id, value)
+    harbor_core::commands::thread_set_config(&pool, id.clone(), option_id.clone(), value.clone())
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    crate::acp_host::set_live_config(&registry, &id, option_id, value).await
 }
 
 #[tauri::command]
@@ -305,7 +406,12 @@ pub async fn agent_update(pool: State<'_, SqlitePool>, input: UpdateAgent) -> Re
 }
 
 #[tauri::command]
-pub async fn agent_delete(pool: State<'_, SqlitePool>, id: String) -> Result<(), String> {
+pub async fn agent_delete(
+    pool: State<'_, SqlitePool>,
+    registry: State<'_, AcpRegistry>,
+    id: String,
+) -> Result<(), String> {
+    crate::acp_host::drop_agent_sessions(&pool, &registry, &id).await;
     harbor_core::commands::agent_delete(&pool, id)
         .await
         .map_err(map_err)
@@ -342,18 +448,37 @@ pub async fn agent_chat_create(
 }
 
 #[tauri::command]
-pub async fn agent_chat_send(
+pub async fn agent_chat_history(
     pool: State<'_, SqlitePool>,
     chat_id: String,
-    parts: Vec<ContentPart>,
-) -> Result<(), String> {
-    harbor_core::commands::agent_chat_send(&pool, chat_id, parts)
+) -> Result<Vec<ChatMessage>, String> {
+    harbor_core::commands::agent_chat_history(&pool, chat_id)
         .await
         .map_err(map_err)
 }
 
 #[tauri::command]
-pub async fn agent_chat_cancel(pool: State<'_, SqlitePool>, chat_id: String) -> Result<(), String> {
+pub async fn agent_chat_send(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    allow: State<'_, ExecutableAllowlist>,
+    registry: State<'_, AcpRegistry>,
+    chat_id: String,
+    parts: Vec<ContentPart>,
+) -> Result<(), String> {
+    harbor_core::commands::agent_chat_send(&pool, chat_id.clone(), parts.clone())
+        .await
+        .map_err(map_err)?;
+    crate::acp_host::prompt_agent(&app, &pool, &allow, &registry, &chat_id, &parts).await
+}
+
+#[tauri::command]
+pub async fn agent_chat_cancel(
+    pool: State<'_, SqlitePool>,
+    registry: State<'_, AcpRegistry>,
+    chat_id: String,
+) -> Result<(), String> {
+    crate::acp_host::cancel(&registry, &chat_id).await?;
     harbor_core::commands::agent_chat_cancel(&pool, chat_id)
         .await
         .map_err(map_err)
@@ -362,13 +487,20 @@ pub async fn agent_chat_cancel(pool: State<'_, SqlitePool>, chat_id: String) -> 
 #[tauri::command]
 pub async fn agent_chat_set_config(
     pool: State<'_, SqlitePool>,
+    registry: State<'_, AcpRegistry>,
     chat_id: String,
     option_id: String,
     value: Value,
 ) -> Result<(), String> {
-    harbor_core::commands::agent_chat_set_config(&pool, chat_id, option_id, value)
-        .await
-        .map_err(map_err)
+    harbor_core::commands::agent_chat_set_config(
+        &pool,
+        chat_id.clone(),
+        option_id.clone(),
+        value.clone(),
+    )
+    .await
+    .map_err(map_err)?;
+    crate::acp_host::set_live_config(&registry, &chat_id, option_id, value).await
 }
 
 #[tauri::command]
@@ -395,6 +527,16 @@ pub async fn memory_upsert(
 #[tauri::command]
 pub async fn memory_delete(pool: State<'_, SqlitePool>, id: String) -> Result<(), String> {
     harbor_core::commands::memory_delete(&pool, id)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn places_list(
+    pool: State<'_, SqlitePool>,
+    agent_id: String,
+) -> Result<Vec<Place>, String> {
+    harbor_core::commands::places_list(&pool, agent_id)
         .await
         .map_err(map_err)
 }
@@ -454,13 +596,12 @@ pub async fn face_preview(
 #[tauri::command]
 pub async fn acp_permission_resolve(
     pool: State<'_, SqlitePool>,
+    registry: State<'_, AcpRegistry>,
     id: String,
     option_id: Option<String>,
     cancelled: bool,
 ) -> Result<(), String> {
-    harbor_core::commands::acp_permission_resolve(&pool, id, option_id, cancelled)
-        .await
-        .map_err(map_err)
+    crate::acp_host::resolve_permission(&pool, &registry, &id, option_id, cancelled).await
 }
 
 #[tauri::command]
@@ -480,6 +621,16 @@ pub async fn plugin_connect(
 }
 
 #[tauri::command]
+pub async fn plugin_configure(
+    pool: State<'_, SqlitePool>,
+    id: String,
+    credential: String,
+    account_label: Option<String>,
+) -> Result<(), String> {
+    crate::plugins_host::configure(&pool, id, credential, account_label).await
+}
+
+#[tauri::command]
 pub async fn plugin_disconnect(pool: State<'_, SqlitePool>, id: String) -> Result<(), String> {
     crate::plugins_host::disconnect(&pool, id).await
 }
@@ -491,9 +642,7 @@ pub async fn plugin_set_agent_grant(
     plugin_id: String,
     enabled: bool,
 ) -> Result<(), String> {
-    harbor_core::commands::plugin_set_agent_grant(&pool, agent_id, plugin_id, enabled)
-        .await
-        .map_err(map_err)
+    crate::plugins_host::set_agent_grant(&pool, agent_id, plugin_id, enabled).await
 }
 
 #[tauri::command]
@@ -502,7 +651,24 @@ pub async fn plugin_resolve_approval(
     id: String,
     allow: bool,
 ) -> Result<(), String> {
-    harbor_core::commands::plugin_resolve_approval(&pool, id, allow)
+    crate::plugins_host::resolve_approval(&pool, id, allow).await
+}
+
+#[tauri::command]
+pub async fn plugin_approvals_list(
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<PluginApproval>, String> {
+    harbor_core::commands::plugin_approvals_list(&pool)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn plugin_grants_list(
+    pool: State<'_, SqlitePool>,
+    agent_id: String,
+) -> Result<Vec<PluginGrant>, String> {
+    harbor_core::commands::plugin_grants_list(&pool, agent_id)
         .await
         .map_err(map_err)
 }
@@ -515,32 +681,27 @@ fn dictation_payload(event: harbor_speech::DictationEvent) -> Value {
 }
 
 #[tauri::command]
-pub async fn dictation_begin(app: AppHandle) -> Result<(), String> {
-    let event = harbor_speech::start();
-    let _ = app.emit("dictation_state", dictation_payload(event.clone()));
-    if let Some(overlay) = app.get_webview_window("overlay") {
-        let _ = overlay.show();
-    }
-    if event.state == harbor_speech::DictationState::Error {
-        Err(event.copy.to_string())
-    } else {
-        Ok(())
-    }
+pub async fn dictation_begin() -> Result<(), String> {
+    Err("unimplemented: dictation_begin".into())
 }
 
 #[tauri::command]
-pub async fn dictation_end(app: AppHandle) -> Result<(), String> {
-    let event = harbor_speech::end();
-    let _ = app.emit("dictation_state", dictation_payload(event));
-    if let Some(overlay) = app.get_webview_window("overlay") {
-        let _ = overlay.hide();
-    }
-    Ok(())
+pub async fn dictation_end() -> Result<(), String> {
+    Err("unimplemented: dictation_end".into())
 }
 
 #[tauri::command]
 pub async fn dictation_devices() -> Result<Vec<Value>, String> {
-    Ok(Vec::new())
+    Ok(harbor_speech::list_devices()
+        .into_iter()
+        .map(|device| {
+            json!({
+                "id": device.id,
+                "label": device.label,
+                "selected": device.selected
+            })
+        })
+        .collect())
 }
 
 #[tauri::command]
@@ -552,22 +713,20 @@ pub async fn dictation_prepare_model(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn updater_check() -> Result<UpdateStatus, String> {
-    match harbor_updater::verify_release("", harbor_updater::public_key()) {
-        Ok(()) => Ok(UpdateStatus {
-            available: true,
-            version: Some(env!("CARGO_PKG_VERSION").into()),
-        }),
-        Err(_) => Ok(UpdateStatus {
-            available: false,
-            version: None,
-        }),
-    }
+    let check = tauri::async_runtime::spawn_blocking(|| {
+        harbor_updater::check_latest(fetch_url, env!("CARGO_PKG_VERSION"))
+    })
+    .await
+    .unwrap_or_else(|_| harbor_updater::UpdateCheck::unavailable());
+    Ok(UpdateStatus {
+        available: check.available,
+        version: check.version,
+    })
 }
 
 #[tauri::command]
 pub async fn updater_install() -> Result<(), String> {
-    harbor_updater::verify_release("", harbor_updater::public_key())
-        .map_err(|error| error.to_string())
+    Err(harbor_updater::refuse_install().to_string())
 }
 
 #[tauri::command]
@@ -588,13 +747,17 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         engines_recheck,
         workspace_list,
         workspace_add,
+        workspace_pick_folder,
         workspace_remove,
         workspace_pin,
         workspace_save_layout,
         workspace_tidy,
+        workspace_ensure_tab,
+        workspace_configure_tab,
         layout_restore,
         pane_create,
         pane_close,
+        pane_set_engine,
         crate::pty_host::pty_spawn,
         crate::pty_host::pty_write_b64,
         crate::pty_host::pty_resize,
@@ -606,6 +769,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         fs_list,
         thread_list,
         thread_create,
+        thread_history,
         thread_rename,
         thread_delete,
         thread_pin,
@@ -621,12 +785,14 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         agent_draft_with_ai,
         agent_chat_list,
         agent_chat_create,
+        agent_chat_history,
         agent_chat_send,
         agent_chat_cancel,
         agent_chat_set_config,
         memory_list,
         memory_upsert,
         memory_delete,
+        places_list,
         places_grant,
         places_revoke,
         session_search,
@@ -635,9 +801,12 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         acp_permission_resolve,
         plugin_list,
         plugin_connect,
+        plugin_configure,
         plugin_disconnect,
         plugin_set_agent_grant,
         plugin_resolve_approval,
+        plugin_approvals_list,
+        plugin_grants_list,
         dictation_begin,
         dictation_end,
         dictation_devices,

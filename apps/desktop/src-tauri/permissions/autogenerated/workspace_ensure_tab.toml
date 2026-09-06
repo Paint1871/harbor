@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-workspace-ensure-tab"
+description = "Enables the workspace_ensure_tab command without any pre-configured scope."
+commands.allow = ["workspace_ensure_tab"]
+
+[[permission]]
+identifier = "deny-workspace-ensure-tab"
+description = "Denies the workspace_ensure_tab command without any pre-configured scope."
+commands.deny = ["workspace_ensure_tab"]

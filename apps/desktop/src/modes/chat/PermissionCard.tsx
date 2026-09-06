@@ -7,6 +7,33 @@ export interface PermissionRequest {
   path?: string;
   command?: string;
   options: { optionId: string; kind: string; name: string }[];
+  sessionRef?: string;
+}
+
+export function parsePermissionEvent(payload: unknown): PermissionRequest | null {
+  if (!payload || typeof payload !== "object") return null;
+  const data = payload as Record<string, unknown>;
+  if (typeof data.id !== "string" || !data.id || typeof data.title !== "string") return null;
+  const options = Array.isArray(data.options)
+    ? data.options.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const option = item as Record<string, unknown>;
+        if (typeof option.optionId !== "string" || typeof option.kind !== "string") return [];
+        return [{
+          optionId: option.optionId,
+          kind: option.kind,
+          name: typeof option.name === "string" ? option.name : "",
+        }];
+      })
+    : [];
+  return {
+    id: data.id,
+    title: data.title,
+    path: typeof data.path === "string" ? data.path : undefined,
+    command: typeof data.command === "string" ? data.command : undefined,
+    options,
+    sessionRef: typeof data.sessionRef === "string" ? data.sessionRef : undefined,
+  };
 }
 
 const COPY: Record<string, string> = {

@@ -8,8 +8,9 @@ use crate::{
     error::Error,
     settings,
     types::{
-        AgentChat, AgentRecord, CreateAgent, DetectedEngine, FileDiff, FsEntry, Memory, PaneLayout,
-        PaneState, PluginRow, SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace,
+        AgentChat, AgentRecord, ChatMessage, CreateAgent, DetectedEngine, FileDiff, FsEntry,
+        Memory, PaneLayout, PaneState, Place, PluginApproval, PluginGrant, PluginRow, SearchHit,
+        ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup, WorkspaceTab,
     },
 };
 
@@ -37,6 +38,21 @@ pub async fn workspace_add(pool: &SqlitePool, folder: String) -> Result<Workspac
     crate::workspaces::add(pool, folder).await
 }
 
+pub async fn workspace_ensure_tab(
+    pool: &SqlitePool,
+    workspace_id: String,
+) -> Result<WorkspaceTab, Error> {
+    crate::layout::ensure_default_tab(pool, &workspace_id).await
+}
+
+pub async fn workspace_configure_tab(
+    pool: &SqlitePool,
+    workspace_id: String,
+    setup: WorkspaceSetup,
+) -> Result<WorkspaceTab, Error> {
+    crate::layout::configure_workspace_tab(pool, &workspace_id, &setup).await
+}
+
 pub async fn workspace_remove(pool: &SqlitePool, id: String) -> Result<(), Error> {
     crate::workspaces::remove(pool, &id).await
 }
@@ -46,39 +62,50 @@ pub async fn workspace_pin(pool: &SqlitePool, id: String, pinned: bool) -> Resul
 }
 
 pub async fn workspace_save_layout(
-    _pool: &SqlitePool,
-    _tab_id: String,
-    _layout: PaneLayout,
+    pool: &SqlitePool,
+    tab_id: String,
+    layout: PaneLayout,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("workspace_save_layout"))
+    crate::layout::save(pool, &tab_id, &layout).await
 }
 
-pub async fn workspace_tidy(_pool: &SqlitePool, _tab_id: String) -> Result<PaneLayout, Error> {
-    Err(Error::unimplemented("workspace_tidy"))
+pub async fn workspace_tidy(pool: &SqlitePool, tab_id: String) -> Result<PaneLayout, Error> {
+    crate::layout::tidy(pool, &tab_id).await
 }
 
-pub async fn layout_restore(_pool: &SqlitePool) -> Result<(), Error> {
-    Err(Error::unimplemented("layout_restore"))
+pub async fn layout_restore(pool: &SqlitePool) -> Result<Vec<WorkspaceTab>, Error> {
+    crate::layout::restore(pool).await
 }
 
 pub async fn pane_create(
-    _pool: &SqlitePool,
-    _tab_id: String,
-    _kind: String,
-    _state: PaneState,
+    pool: &SqlitePool,
+    tab_id: String,
+    kind: String,
+    state: PaneState,
 ) -> Result<String, Error> {
-    Err(Error::unimplemented("pane_create"))
+    crate::layout::pane_create(pool, &tab_id, &kind, &state).await
 }
 
-pub async fn pane_close(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("pane_close"))
+pub async fn pane_close(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::layout::pane_close(pool, &id).await
+}
+
+pub async fn pane_set_engine(
+    pool: &SqlitePool,
+    id: String,
+    engine_id: String,
+) -> Result<(), Error> {
+    crate::layout::set_engine(pool, &id, &engine_id).await
 }
 
 pub async fn pty_spawn(
     _pool: &SqlitePool,
     _pane_id: String,
-    _cwd: String,
+    _workspace_id: String,
+    _cols: u16,
+    _rows: u16,
     _shell: Option<String>,
+    _engine_id: Option<String>,
 ) -> Result<(), Error> {
     Err(Error::unimplemented("pty_spawn"))
 }
@@ -163,17 +190,18 @@ pub async fn thread_send(
     crate::threads::send(pool, &id, &parts).await
 }
 
+/// Host cancels the ACP turn; core is a successful no-op so IPC fallback works.
 pub async fn thread_cancel(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_cancel"))
+    Ok(())
 }
 
 pub async fn thread_set_config(
-    _pool: &SqlitePool,
-    _id: String,
-    _option_id: String,
-    _value: Value,
+    pool: &SqlitePool,
+    id: String,
+    option_id: String,
+    value: Value,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_set_config"))
+    crate::threads::set_config(pool, &id, &option_id, value).await
 }
 
 pub async fn thread_grant_root(pool: &SqlitePool, id: String, path: String) -> Result<(), Error> {
@@ -181,11 +209,11 @@ pub async fn thread_grant_root(pool: &SqlitePool, id: String, path: String) -> R
 }
 
 pub async fn thread_attach_files(
-    _pool: &SqlitePool,
-    _id: String,
-    _paths: Vec<String>,
+    pool: &SqlitePool,
+    id: String,
+    paths: Vec<String>,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("thread_attach_files"))
+    crate::threads::attach_files(pool, &id, &paths).await
 }
 
 pub async fn agent_list(pool: &SqlitePool) -> Result<Vec<AgentRecord>, Error> {
@@ -204,124 +232,114 @@ pub async fn agent_delete(pool: &SqlitePool, id: String) -> Result<(), Error> {
     crate::agents::delete(pool, &id).await
 }
 
-pub async fn agent_draft_with_ai(_pool: &SqlitePool, _hint: String) -> Result<CreateAgent, Error> {
-    Err(Error::unimplemented("agent_draft_with_ai"))
+pub async fn agent_draft_with_ai(pool: &SqlitePool, hint: String) -> Result<CreateAgent, Error> {
+    crate::agents::draft_with_ai(pool, hint).await
 }
 
-pub async fn agent_chat_list(
-    _pool: &SqlitePool,
-    _agent_id: String,
-) -> Result<Vec<AgentChat>, Error> {
-    Err(Error::unimplemented("agent_chat_list"))
+pub async fn agent_chat_list(pool: &SqlitePool, agent_id: String) -> Result<Vec<AgentChat>, Error> {
+    crate::chats::list(pool, &agent_id).await
 }
 
-pub async fn agent_chat_create(_pool: &SqlitePool, _agent_id: String) -> Result<AgentChat, Error> {
-    Err(Error::unimplemented("agent_chat_create"))
+pub async fn agent_chat_create(pool: &SqlitePool, agent_id: String) -> Result<AgentChat, Error> {
+    crate::chats::create(pool, &agent_id).await
+}
+
+pub async fn agent_chat_history(
+    pool: &SqlitePool,
+    chat_id: String,
+) -> Result<Vec<ChatMessage>, Error> {
+    crate::chats::history(pool, &chat_id).await
 }
 
 pub async fn agent_chat_send(
-    _pool: &SqlitePool,
-    _chat_id: String,
-    _parts: Vec<crate::types::ContentPart>,
+    pool: &SqlitePool,
+    chat_id: String,
+    parts: Vec<crate::types::ContentPart>,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("agent_chat_send"))
+    crate::chats::send(pool, &chat_id, &parts).await
 }
 
-pub async fn agent_chat_cancel(_pool: &SqlitePool, _chat_id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("agent_chat_cancel"))
+pub async fn agent_chat_cancel(pool: &SqlitePool, chat_id: String) -> Result<(), Error> {
+    crate::chats::cancel(pool, &chat_id).await
 }
 
 pub async fn agent_chat_set_config(
-    _pool: &SqlitePool,
-    _chat_id: String,
-    _option_id: String,
-    _value: Value,
+    pool: &SqlitePool,
+    chat_id: String,
+    option_id: String,
+    value: Value,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("agent_chat_set_config"))
+    crate::chats::set_config(pool, &chat_id, &option_id, value).await
 }
 
-pub async fn memory_list(_pool: &SqlitePool, _agent_id: String) -> Result<Vec<Memory>, Error> {
-    Err(Error::unimplemented("memory_list"))
+pub async fn memory_list(pool: &SqlitePool, agent_id: String) -> Result<Vec<Memory>, Error> {
+    crate::memory::list(pool, &agent_id).await
 }
 
 pub async fn memory_upsert(
-    _pool: &SqlitePool,
-    _agent_id: String,
-    _body: String,
+    pool: &SqlitePool,
+    agent_id: String,
+    body: String,
 ) -> Result<Memory, Error> {
-    Err(Error::unimplemented("memory_upsert"))
+    crate::memory::upsert(pool, &agent_id, &body).await
 }
 
-pub async fn memory_delete(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("memory_delete"))
+pub async fn memory_delete(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::memory::delete(pool, &id).await
 }
 
-pub async fn places_grant(
-    _pool: &SqlitePool,
-    _agent_id: String,
-    _path: String,
-) -> Result<(), Error> {
-    Err(Error::unimplemented("places_grant"))
+pub async fn places_list(pool: &SqlitePool, agent_id: String) -> Result<Vec<Place>, Error> {
+    crate::places::list(pool, &agent_id).await
 }
 
-pub async fn places_revoke(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("places_revoke"))
+pub async fn places_grant(pool: &SqlitePool, agent_id: String, path: String) -> Result<(), Error> {
+    crate::places::grant(pool, &agent_id, &path).await
+}
+
+pub async fn places_revoke(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::places::revoke(pool, &id).await
 }
 
 pub async fn session_search(
-    _pool: &SqlitePool,
-    _agent_id: String,
-    _query: String,
+    pool: &SqlitePool,
+    agent_id: String,
+    query: String,
 ) -> Result<Vec<SearchHit>, Error> {
-    Err(Error::unimplemented("session_search"))
+    crate::search::session_search(pool, &agent_id, &query).await
 }
 
 pub async fn mail_send(
-    _pool: &SqlitePool,
-    _from_agent_id: String,
-    _to_agent_id: String,
-    _body: String,
+    pool: &SqlitePool,
+    from_agent_id: String,
+    to_agent_id: String,
+    body: String,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("mail_send"))
+    crate::mail::send(pool, &from_agent_id, &to_agent_id, &body).await
 }
 
 pub async fn face_preview(
-    _pool: &SqlitePool,
-    _agent_id: String,
-    _face_index: i32,
+    pool: &SqlitePool,
+    agent_id: String,
+    face_index: i32,
 ) -> Result<String, Error> {
-    Err(Error::unimplemented("face_preview"))
+    crate::agents::face_preview(pool, &agent_id, face_index).await
 }
 
 pub async fn acp_permission_resolve(
-    _pool: &SqlitePool,
-    _id: String,
-    _option_id: Option<String>,
-    _cancelled: bool,
+    pool: &SqlitePool,
+    id: String,
+    option_id: Option<String>,
+    cancelled: bool,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("acp_permission_resolve"))
+    crate::acp::permission_resolve(pool, &id, option_id.as_deref(), cancelled).await
 }
 
 pub async fn plugin_list(pool: &SqlitePool) -> Result<Vec<PluginRow>, Error> {
-    let stored: Option<(String, Option<String>)> =
-        sqlx::query_as("SELECT status, display_name FROM plugins WHERE id = 'github'")
-            .fetch_optional(pool)
-            .await?;
-    let status = stored
-        .as_ref()
-        .map(|(status, _)| status.clone())
-        .unwrap_or_else(|| "available".into());
-    Ok(vec![PluginRow {
-        id: "github".into(),
-        display_name: stored
-            .and_then(|(_, name)| name)
-            .unwrap_or_else(|| "GitHub".into()),
-        status,
-    }])
+    crate::plugins::list(pool).await
 }
 
-pub async fn plugin_connect(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("plugin_connect"))
+pub async fn plugin_connect(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::plugins::connect(pool, &id).await
 }
 
 pub async fn plugin_mark_connected(
@@ -330,54 +348,43 @@ pub async fn plugin_mark_connected(
     display_name: &str,
     account_label: Option<&str>,
 ) -> Result<(), Error> {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .unwrap_or_default();
-    sqlx::query(
-        "INSERT INTO plugins (id, display_name, status, account_label, connected_at)
-         VALUES (?1, ?2, 'connected', ?3, ?4)
-         ON CONFLICT(id) DO UPDATE SET
-            status = 'connected',
-            account_label = excluded.account_label,
-            connected_at = excluded.connected_at",
-    )
-    .bind(id)
-    .bind(display_name)
-    .bind(account_label)
-    .bind(ts)
-    .execute(pool)
-    .await?;
-    Ok(())
+    crate::plugins::mark_connected(pool, id, display_name, account_label).await
 }
 
 pub async fn plugin_mark_disconnected(pool: &SqlitePool, id: &str) -> Result<(), Error> {
-    sqlx::query("UPDATE plugins SET status = 'available', account_label = NULL, connected_at = NULL WHERE id = ?1")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    crate::plugins::mark_disconnected(pool, id).await
 }
 
-pub async fn plugin_disconnect(_pool: &SqlitePool, _id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("plugin_disconnect"))
+pub async fn plugin_disconnect(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::plugins::disconnect(pool, &id).await
 }
 
 pub async fn plugin_set_agent_grant(
-    _pool: &SqlitePool,
-    _agent_id: String,
-    _plugin_id: String,
-    _enabled: bool,
+    pool: &SqlitePool,
+    agent_id: String,
+    plugin_id: String,
+    enabled: bool,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("plugin_set_agent_grant"))
+    crate::plugins::set_agent_grant(pool, &agent_id, &plugin_id, enabled).await
 }
 
 pub async fn plugin_resolve_approval(
-    _pool: &SqlitePool,
-    _id: String,
-    _allow: bool,
+    pool: &SqlitePool,
+    id: String,
+    allow: bool,
 ) -> Result<(), Error> {
-    Err(Error::unimplemented("plugin_resolve_approval"))
+    crate::plugins::resolve_approval(pool, &id, allow).await
+}
+
+pub async fn plugin_approvals_list(pool: &SqlitePool) -> Result<Vec<PluginApproval>, Error> {
+    crate::plugins::list_approvals(pool).await
+}
+
+pub async fn plugin_grants_list(
+    pool: &SqlitePool,
+    agent_id: String,
+) -> Result<Vec<PluginGrant>, Error> {
+    crate::plugins::list_grants(pool, &agent_id).await
 }
 
 pub async fn dictation_begin() -> Result<(), Error> {

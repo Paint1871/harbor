@@ -54,13 +54,23 @@ fn poll_existing(client_id: &str, start: &DeviceStart) -> Result<String, String>
     }
 }
 
+async fn github_client_id(pool: &SqlitePool) -> Result<String, String> {
+    let setting = harbor_core::settings::get(pool, github::CLIENT_ID_SETTING)
+        .await
+        .ok()
+        .flatten();
+    github::resolve_client_id(setting.as_ref().and_then(|value| value.as_str()))
+        .ok_or_else(github::missing_client_id_error)
+}
+
 pub async fn connect(app: AppHandle, pool: SqlitePool, id: String) -> Result<(), String> {
     if id != "github" {
-        return Err(format!("{id} is not a Harbor 0.1.0 plugin"));
+        if harbor_core::plugins::supports_manual_token(&id) {
+            return Err("This connection uses a local credential. Use its setup form.".into());
+        }
+        return Err(format!("unsupported Harbor connection: {id}"));
     }
-    let client_id = github::configured_client_id().ok_or_else(|| {
-        "Set HARBOR_GITHUB_CLIENT_ID to your GitHub App client id (Device Flow enabled). Harbor never ships a client secret.".to_string()
-    })?;
+    let client_id = github_client_id(&pool).await?;
     let start = tauri::async_runtime::spawn_blocking({
         let client_id = client_id.clone();
         move || start_device(&client_id)
@@ -91,6 +101,10 @@ pub async fn connect(app: AppHandle, pool: SqlitePool, id: String) -> Result<(),
                     Some("GitHub"),
                 )
                 .await;
+                let _ = app.emit(
+                    "plugin_device",
+                    json!({ "connected": true, "id": "github" }),
+                );
             }
             Ok(Err(error)) => {
                 let _ = app.emit("plugin_device", json!({ "error": error }));
@@ -103,9 +117,71 @@ pub async fn connect(app: AppHandle, pool: SqlitePool, id: String) -> Result<(),
     Ok(())
 }
 
+/// Store a user-supplied integration credential in the OS keyring. The value
+/// never touches SQLite, the renderer logs, or an engine environment.
+pub async fn configure(
+    pool: &SqlitePool,
+    id: String,
+    credential: String,
+    account_label: Option<String>,
+) -> Result<(), String> {
+    let definition = harbor_core::plugins::definition(&id)
+        .ok_or_else(|| format!("unsupported Harbor connection: {id}"))?;
+    if definition.auth_kind != "token" {
+        return Err("This connection uses its browser sign-in flow.".into());
+    }
+    let credential = credential.trim().to_string();
+    if credential.is_empty() {
+        return Err("Enter a credential before saving the connection.".into());
+    }
+    if credential.len() > 4096 {
+        return Err("That credential is too long to store.".into());
+    }
+    let account_label = account_label
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(120)
+        .collect::<String>();
+    let keyring_path = keyring_dir();
+    let keyring_id = id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        harbor_plugins::keyring::store(&keyring_path, &keyring_id, &credential)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+
+    harbor_core::commands::plugin_mark_connected(
+        pool,
+        &id,
+        definition.display_name,
+        (!account_label.is_empty()).then_some(account_label.as_str()),
+    )
+    .await
+    .map_err(|error| error.to_string())
+}
+
 pub async fn disconnect(pool: &SqlitePool, id: String) -> Result<(), String> {
     harbor_plugins::keyring::delete(&keyring_dir(), &id).map_err(|error| error.to_string())?;
     harbor_core::commands::plugin_mark_disconnected(pool, &id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+pub async fn set_agent_grant(
+    pool: &SqlitePool,
+    agent_id: String,
+    plugin_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    harbor_core::commands::plugin_set_agent_grant(pool, agent_id, plugin_id, enabled)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+pub async fn resolve_approval(pool: &SqlitePool, id: String, allow: bool) -> Result<(), String> {
+    harbor_core::commands::plugin_resolve_approval(pool, id, allow)
         .await
         .map_err(|error| error.to_string())
 }

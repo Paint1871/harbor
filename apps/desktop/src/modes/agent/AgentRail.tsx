@@ -19,13 +19,17 @@ export function AgentRail({ agents, selectedId, onSelect, onNew }: AgentRailProp
     <div className="harbor-rail-section">
       <div className="harbor-rail-heading">
         <h2>Agents</h2>
-        <Button size="icon" variant="ghost" aria-label="New Agent" onClick={onNew}>
-          +
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label="Add to Agents"
+          title="Add to Agents"
+          onClick={() => { setDestination("mode"); onNew(); }}
+        >
+          <span aria-hidden="true">+</span>
+          <span className="harbor-sr-only">New Agent</span>
         </Button>
       </div>
-      <Button variant="primary" onClick={onNew}>
-        New Agent
-      </Button>
       <div className="harbor-roster" aria-label="Agent roster">
         {pinned.length > 0 ? (
           <div className="harbor-pin-band">

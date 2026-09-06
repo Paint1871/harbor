@@ -25,3 +25,22 @@ This verifies the shared primitives, not the native desktop window or release.
 
 Native WebKit rendering, the title bar, and desktop first-paint checks follow
 with PR-03/04. This preview does not claim desktop chrome visual sign-off.
+
+# Visual language overhaul (2026-09-06)
+
+Elevated `@harbor/ui` from generic dark chrome to an editorial, near-black
+host. §5.2 token names and values are unchanged. Complementary tokens cover
+hairline, shadows, field/well/overlay, focus glow, title/label tracking, and
+pill/field radii. Light uses paper (white field, warm well) rather than gray
+fill. `applyTheme` now writes the canvas color onto `html` so Light can
+replace the first-paint inline black; HTML still starts `data-theme="black"`.
+
+Primitives: inverted primary, quiet ghost, inset segmented pill, raised
+two-line rail rows without chunky borders, 16px composer with think-violet
+focus ring and a quiet footer. Class names and composer behavior (Enter /
+Shift+Enter / IME / disabled) are unchanged. Reduce Motion still zeros
+`--harbor-motion-duration` and kills animation. Forced-colors rules remain.
+
+Verified: `pnpm --filter @harbor/ui check` — strict `tsc --noEmit` and Vite
+preview build, both clean. Desktop chrome should consume the new complementary
+tokens; this note does not sign off native window paint.

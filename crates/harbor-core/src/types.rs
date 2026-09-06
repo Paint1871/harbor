@@ -29,18 +29,39 @@ pub struct Workspace {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceSetup {
+    pub additional_terminals: u8,
+    #[serde(default)]
+    pub browser_preview: bool,
+    #[serde(default)]
+    pub thread_pane: bool,
+    #[serde(default)]
+    pub terminal_engine_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ChatMessage {
+    pub id: String,
+    pub role: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 pub struct DetectedEngine {
     pub id: String,
     pub display_name: String,
     pub path: String,
     pub status: String,
     pub supports_chat: bool,
+    pub supports_terminal: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PaneLayout {
     Leaf {
+        #[serde(rename = "paneId", alias = "pane_id")]
         pane_id: String,
     },
     Split {
@@ -115,6 +136,13 @@ pub struct Memory {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Place {
+    pub id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct SearchHit {
     pub chat_id: String,
     pub prose: String,
@@ -127,6 +155,46 @@ pub struct PluginRow {
     pub id: String,
     pub display_name: String,
     pub status: String,
+    pub account_label: Option<String>,
+    pub description: String,
+    pub category: String,
+    pub auth_kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginGrant {
+    pub plugin_id: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginApproval {
+    pub id: String,
+    pub plugin_id: String,
+    pub agent_id: Option<String>,
+    pub action: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoredPane {
+    pub id: String,
+    pub kind: String,
+    pub paused: bool,
+    #[serde(default)]
+    pub engine_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceTab {
+    pub id: String,
+    pub workspace_id: String,
+    pub layout: PaneLayout,
+    pub panes: Vec<RestoredPane>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -161,4 +229,6 @@ pub struct PaneState {
     pub kind: String,
     pub cwd: Option<String>,
     pub paused: Option<bool>,
+    #[serde(default)]
+    pub engine_id: Option<String>,
 }
