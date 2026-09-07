@@ -37,16 +37,14 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
 
   return (
     <div className="harbor-agent">
-      {railOpen ? (
-        <AppRail>
+      <AppRail open={railOpen}>
           <AgentRail
             agents={agents}
             selectedId={agent?.id ?? null}
             onSelect={setSelected}
             onNew={() => setCreating(true)}
           />
-        </AppRail>
-      ) : null}
+      </AppRail>
       <div className="harbor-stage-panel">
         {agent ? (
           <AgentPage

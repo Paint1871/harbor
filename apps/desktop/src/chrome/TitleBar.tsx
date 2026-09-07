@@ -2,7 +2,6 @@ import { Logo } from "@harbor/ui/Logo";
 import { hostPlatform } from "../platform";
 import { BellButton } from "./BellButton";
 import { ModeSwitch, type Mode } from "./ModeSwitch";
-import { OrbSeat } from "./OrbSeat";
 import { SidebarToggle } from "./SidebarToggle";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import { closeWindow, minimizeWindow, toggleMaximizeWindow } from "./window";
@@ -14,7 +13,6 @@ export interface TitleBarProps {
   onToggleRail: () => void;
   onTidy: () => void;
   onBellClick: () => void;
-  onOpenVoiceSettings: () => void;
 }
 
 export function TitleBar({
@@ -24,7 +22,6 @@ export function TitleBar({
   onToggleRail,
   onTidy,
   onBellClick,
-  onOpenVoiceSettings,
 }: TitleBarProps) {
   const platform = hostPlatform();
 
@@ -35,6 +32,7 @@ export function TitleBar({
           <Logo size={16} />
           <span className="harbor-wordmark-label">Harbor</span>
         </span>
+        <SidebarToggle open={railOpen} onToggle={onToggleRail} />
       </div>
       <div className="harbor-titlebar-center">
         <ModeSwitch value={mode} onValueChange={onModeChange} onValueClick={(next) => {
@@ -43,10 +41,8 @@ export function TitleBar({
       </div>
       <div className="harbor-titlebar-flex" data-tauri-drag-region />
       <div className="harbor-titlebar-end">
-        <WorkspaceMenu onTidy={onTidy} />
-        <OrbSeat onOpenVoiceSettings={onOpenVoiceSettings} />
+        {mode === "code" ? <WorkspaceMenu onTidy={onTidy} /> : null}
         <BellButton onClick={onBellClick} />
-        <SidebarToggle open={railOpen} onToggle={onToggleRail} />
         {platform === "windows" ? (
           <div className="harbor-window-controls">
             <button type="button" aria-label="Minimize" onClick={() => void minimizeWindow()}>

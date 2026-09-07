@@ -104,10 +104,12 @@ describe("shipped Harbor chrome and mode trees", () => {
     expect(shell).not.toContain("PRO");
     expect(shell).not.toContain("Upgrade");
     expect(shell).not.toContain("Notch");
-    // K30 title-bar order and the 0.1.0 mute orb (DoD 8).
-    expect(shell).toContain("harbor-orb-seat");
-    expect(shell).toContain('aria-label="Voice"');
-    expect(shell).toContain("Workspace");
+    // The mute orb was removed: it only ever said voice was unavailable.
+    expect(shell).not.toContain("harbor-orb-seat");
+    expect(shell).not.toContain('aria-label="Voice"');
+    // The sidebar toggle sits on the side it controls, before the mode switch.
+    const titlebar = shell.slice(shell.indexOf("harbor-titlebar-start"), shell.indexOf("harbor-titlebar-end"));
+    expect(titlebar).toContain("Hide sidebar");
 
     const agentTree = wrap(
       createElement(

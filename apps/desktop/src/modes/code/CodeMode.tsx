@@ -586,8 +586,7 @@ export function CodeMode({
 
   return (
     <div className="harbor-code-shell">
-      {railOpen ? (
-        <AppRail>
+      <AppRail open={railOpen}>
           <div className="harbor-rail-section">
             <div className="harbor-rail-heading">
               <h2>Workspaces</h2>
@@ -699,8 +698,7 @@ export function CodeMode({
               );
             }) : <p className="harbor-rail-empty">Add a folder to start coding.</p>}
           </div>
-        </AppRail>
-      ) : null}
+      </AppRail>
       <div className="harbor-stage-panel harbor-code">
         <div className="harbor-code-panes" ref={panesRootRef} style={{ gridTemplateColumns: "1fr" }}>
           {renderLayout(layout, (next) => {

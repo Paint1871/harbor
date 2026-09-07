@@ -165,7 +165,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
 
   const canCreate = !creating && !checking && !!engine && !!workspace;
   return <div className="harbor-chat">
-    {railOpen ? <AppRail><div className="harbor-rail-section">
+    <AppRail open={railOpen}><div className="harbor-rail-section">
       <div className="harbor-rail-heading"><h2>Chats</h2><span className="harbor-chip">Local</span></div>
       <Button variant="primary" disabled={!!workspace && !canCreate} onClick={() => void newThread()}>{creating ? "Creating…" : "New thread"}</Button>
       <FolderRail workspaces={workspaces} otherCount={other.length} selectedId={workspaceId}
@@ -174,7 +174,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
           onSelect={(thread) => { setDestination("mode"); setActive(thread); }} onPin={(id, pinned) => void pin(id, pinned)} />
           : <p className="harbor-rail-hint">{workspaceId && !threads ? "Loading threads…" : "Your conversations will appear here."}</p>}
       </FolderRail>
-    </div></AppRail> : null}
+    </div></AppRail>
     <div className="harbor-stage-panel harbor-chat-main">
       {error ? <div className="harbor-status-banner" role="alert"><span>{error}</span><Button variant="ghost" onClick={() => { void reload(); void checkEngines(); }}>Try again</Button></div> : null}
       {active ? <>
