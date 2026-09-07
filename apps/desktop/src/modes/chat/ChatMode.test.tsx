@@ -230,3 +230,29 @@ it("asks the engine for its models when the picker opens, and sets the one picke
   }));
   await screen.findByText("Forge AI/Kimi K3");
 });
+
+it("frees the composer as soon as the message is in the transcript", async () => {
+  let release: () => void = () => {};
+  const turn = new Promise<void>((resolve) => { release = resolve; });
+  const base = invoke.getMockImplementation()!;
+  invoke.mockImplementation((command: string, args: unknown) => command === "thread_send" ? turn : base(command, args));
+
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  const composer = await screen.findByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+  await waitFor(() => expect(composer.hasAttribute("disabled")).toBe(false));
+  fireEvent.change(composer, { target: { value: "Take your time" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  // The turn is still running; the box is already the builder's again.
+  await waitFor(() => expect(composer.value).toBe(""));
+  expect(screen.getByText("Take your time", { selector: ".harbor-bubble-user" })).toBeTruthy();
+  release();
+});
+
+it("tells the host which conversation is on screen", async () => {
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("session_watch", { sessionRef: null }));
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("session_watch", { sessionRef: thread.id }));
+});

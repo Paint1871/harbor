@@ -11,7 +11,7 @@ use harbor_acp::{PermissionHook, permission_outcome};
 use harbor_core::SqlitePool;
 use harbor_core::types::{ContentPart, DetectedEngine};
 use serde_json::{Value, json};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::security::{ExecutableAllowlist, ExecutableKind};
 
@@ -518,7 +518,11 @@ async fn run_turn(
             }
         }),
     );
-    // The turn is over. Say so, and say why it ended if the engine gave up.
+    // The turn is over. Say so, and say why it ended if the engine gave up —
+    // unless the builder watched it happen.
+    let watched = app
+        .try_state::<crate::ipc::Watching>()
+        .is_some_and(|watching| crate::ipc::is_being_watched(app, &watching, session_ref));
     let stop = result
         .get("stopReason")
         .and_then(Value::as_str)
@@ -545,15 +549,17 @@ async fn run_turn(
             format!("The turn stopped: {other}."),
         ),
     };
-    crate::ipc::notify(
-        app,
-        pool,
-        kind,
-        title,
-        &body,
-        harbor_core::notifications::Target::session(chat_kind, session_ref),
-    )
-    .await;
+    if !watched {
+        crate::ipc::notify(
+            app,
+            pool,
+            kind,
+            title,
+            &body,
+            harbor_core::notifications::Target::session(chat_kind, session_ref),
+        )
+        .await;
+    }
     if persist_kind == SessionKind::Agent {
         let _ = harbor_core::chats::set_status(pool, session_ref, "idle").await;
     }

@@ -10,7 +10,7 @@ use harbor_core::types::{
 };
 use serde_json::{Value, json};
 use std::path::Path;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_fs::FsExt;
 
@@ -681,6 +681,33 @@ pub async fn notify(
     }
 }
 
+/// The conversation the builder currently has open, if any.
+#[derive(Default)]
+pub struct Watching(pub std::sync::Mutex<Option<String>>);
+
+#[tauri::command]
+pub fn session_watch(watching: State<'_, Watching>, session_ref: Option<String>) {
+    if let Ok(mut current) = watching.0.lock() {
+        *current = session_ref;
+    }
+}
+
+/// An end-of-turn row is for work you were not there to see. Reading the reply
+/// as it lands is already the notification, so skip the row in that one case:
+/// this conversation is open and the window has focus.
+pub fn is_being_watched(app: &AppHandle, watching: &Watching, session_ref: &str) -> bool {
+    let open = watching
+        .0
+        .lock()
+        .ok()
+        .and_then(|current| current.clone())
+        .is_some_and(|current| current == session_ref);
+    open && app
+        .get_webview_window("main")
+        .and_then(|window| window.is_focused().ok())
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub async fn notifications_unread_count(pool: State<'_, SqlitePool>) -> Result<i64, String> {
     harbor_core::commands::notifications_unread_count(&pool)
@@ -924,6 +951,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         default_profile_name,
         engine_icons,
         notifications_list,
+        session_watch,
         notifications_unread_count,
         notifications_mark_read,
         face_preview,

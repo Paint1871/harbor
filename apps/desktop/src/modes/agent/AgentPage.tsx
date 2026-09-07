@@ -35,6 +35,13 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
     .map((item) => ({ id: item.id, label: item.name }));
 
   useEffect(() => {
+    const watched = chrome?.mode === "agent" && chrome?.destination === "mode";
+    const sessionRef = watched ? chat.activeId : null;
+    void invoke("session_watch", { sessionRef }).catch(() => undefined);
+    return () => { void invoke("session_watch", { sessionRef: null }).catch(() => undefined); };
+  }, [chat.activeId, chrome?.destination, chrome?.mode]);
+
+  useEffect(() => {
     void invoke<AgentRecord[]>("agent_list")
       .then(setTeammates)
       .catch(() => setTeammates([]));
@@ -212,8 +219,9 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                       .catch((reason) => setMailError(`Mail could not be sent. ${String(reason)}`));
                     return;
                   }
+                  setDraft("");
                   void chat.send(value).then((success) => {
-                    if (success) setDraft((current) => (current === value ? "" : current));
+                    if (!success) setDraft((current) => current || value);
                   });
                 }}
                 textareaProps={{

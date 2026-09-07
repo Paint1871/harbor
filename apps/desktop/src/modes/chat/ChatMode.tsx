@@ -71,6 +71,14 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     void checkEngines();
   }, [checkEngines, mode, reload]);
 
+  // Tell the host which conversation is on screen, so a reply the builder is
+  // watching land does not also arrive as an inbox row.
+  useEffect(() => {
+    const sessionRef = mode === "chat" ? active?.id ?? null : null;
+    void invoke("session_watch", { sessionRef }).catch(() => undefined);
+    return () => { void invoke("session_watch", { sessionRef: null }).catch(() => undefined); };
+  }, [active?.id, mode]);
+
   useEffect(() => {
     if (!workspaceId) return;
     let disposed = false;
@@ -229,8 +237,11 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
         <Composer value={drafts[active.id] ?? ""} onValueChange={(value) => setDrafts((current) => ({ ...current, [active.id]: value }))}
           disabled={acp.loading && !acp.sending} onSend={(value) => {
             const id = active.id;
+            // The message is already in the transcript; holding it in the box
+            // for the length of the turn only looks like it failed to send.
+            setDrafts((current) => ({ ...current, [id]: "" }));
             void acp.send(value).then((success) => {
-              if (success) setDrafts((current) => current[id] === value ? { ...current, [id]: "" } : current);
+              if (!success) setDrafts((current) => current[id] ? current : { ...current, [id]: value });
             });
           }} textareaProps={{
             onKeyDown: (event) => {
