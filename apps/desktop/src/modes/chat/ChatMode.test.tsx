@@ -46,6 +46,16 @@ beforeEach(() => {
     if (command === "thread_send") { stored = [{ id: "saved", role: "user", text: "Keep my message" }]; return Promise.reject(new Error("engine offline")); }
     if (command === "thread_set_config") return Promise.resolve();
     if (command === "thread_set_engine") return Promise.resolve();
+    if (command === "thread_config_options") return Promise.resolve([{
+      id: "model",
+      name: "Model",
+      category: "model",
+      currentValue: "opencode/big-pickle",
+      values: [
+        { value: "opencode/big-pickle", name: "OpenCode Zen/Big Pickle" },
+        { value: "forge/kimi-k3", name: "Forge AI/Kimi K3" },
+      ],
+    }]);
     if (command === "thread_attach_files") return Promise.resolve();
     if (command === "thread_cancel") return Promise.resolve();
     if (command === "acp_permission_resolve") return Promise.resolve();
@@ -198,4 +208,25 @@ it("reports the conversation size without claiming a context window", async () =
   const meter = await screen.findByText("~2.0k tokens · 2 messages");
   expect(meter.getAttribute("title")).toMatch(/four characters per token/);
   expect(screen.queryByText(/%/)).toBeNull();
+});
+
+it("asks the engine for its models when the picker opens, and sets the one picked", async () => {
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  await screen.findByRole("textbox", { name: "Message" });
+  expect(invoke).not.toHaveBeenCalledWith("thread_config_options", expect.anything());
+
+  fireEvent.click(screen.getByRole("button", { name: /OpenCode/ }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_config_options", { id: thread.id }));
+
+  const current = await screen.findByRole("menuitemradio", { name: /OpenCode Zen\/Big Pickle/ });
+  expect(current.getAttribute("aria-checked")).toBe("true");
+  fireEvent.click(screen.getByRole("menuitemradio", { name: /Forge AI\/Kimi K3/ }));
+
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_set_config", {
+    id: thread.id,
+    optionId: "model",
+    value: "forge/kimi-k3",
+  }));
+  await screen.findByText("Forge AI/Kimi K3");
 });

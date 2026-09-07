@@ -32,9 +32,10 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
   const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [engineId, setEngineId] = useState("");
   const [checking, setChecking] = useState(false);
-  const [configChoice, setConfigChoice] = useState<Record<string, string>>({});
+  const [configChoice, setConfigChoice] = useState<Record<string, Record<string, string>>>({});
   const [attached, setAttached] = useState<Record<string, string[]>>({});
   const [fileMentions, setFileMentions] = useState<FsEntry[]>([]);
+  const [optionsBusy, setOptionsBusy] = useState(false);
   const createLock = useRef(false);
   const acp = useAcpThread(active?.id ?? null);
   const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -243,12 +244,18 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
               engines={ready}
               engineId={active.engineId}
               options={acp.configOptions}
-              choice={configChoice[active.id] ?? acp.configOptions[0]?.id ?? null}
+              choices={configChoice[active.id] ?? {}}
+              busy={optionsBusy}
               disabled={acp.sending}
+              onOpen={() => {
+                if (acp.configOptions.length) return;
+                setOptionsBusy(true);
+                void acp.loadConfigOptions().finally(() => setOptionsBusy(false));
+              }}
               onEngineChange={(id) => void setThreadEngine(active.id, id)}
-              onOptionChange={(optionId) => {
-                setConfigChoice((current) => ({ ...current, [active.id]: optionId }));
-                void invoke("thread_set_config", { id: active.id, optionId, value: optionId }).catch((reason) => {
+              onOptionChange={(optionId, value) => {
+                setConfigChoice((current) => ({ ...current, [active.id]: { ...current[active.id], [optionId]: value } }));
+                void invoke("thread_set_config", { id: active.id, optionId, value }).catch((reason) => {
                   setError(`Could not update engine options. ${String(reason)}`);
                 });
               }}

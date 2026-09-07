@@ -4,7 +4,7 @@ use std::process::ChildStdin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use harbor_acp::session::{AcpHostSession, ResumeKind};
+use harbor_acp::session::{AcpHostSession, ConfigOption, ResumeKind};
 use harbor_acp::spawn::SpawnSpec;
 use harbor_acp::transport::write_message;
 use harbor_acp::{PermissionHook, permission_outcome};
@@ -460,7 +460,7 @@ async fn run_turn(
             notes,
             session.session_id.clone(),
             session.resume_kind,
-            session.caps.config_options.clone(),
+            session.config_options.clone(),
         ))
     })
     .await
@@ -601,6 +601,77 @@ pub async fn prompt_agent(
         .map_err(|error| error.to_string())?;
     let parts = harbor_core::briefing::attach(&briefing, parts);
     run_turn(app, pool, allow, registry, chat_id, ctx, &parts).await
+}
+
+/// Connect (or reuse) the session just to read what the agent offers, so the
+/// picker can list real models before the first message is ever sent.
+async fn config_options(
+    app: &AppHandle,
+    pool: &SqlitePool,
+    allow: &ExecutableAllowlist,
+    registry: &AcpRegistry,
+    session_ref: &str,
+    ctx: TurnContext,
+) -> Result<Vec<ConfigOption>, String> {
+    let (command, args) = acp_command(&ctx.engine_id)?;
+    let granted = allow
+        .grant(&command, ExecutableKind::Engine)
+        .and_then(|path| allow.authorize(&path, ExecutableKind::Engine))
+        .map_err(|error| error.to_string())?;
+    let registry = registry.clone();
+    let session_key = session_ref.to_string();
+    let hook = make_permission_hook(
+        app.clone(),
+        pool.clone(),
+        registry.clone(),
+        session_key.clone(),
+        ctx.kind,
+    );
+    let persist_pool = pool.clone();
+    let persist_kind = ctx.kind;
+    let persist_ref = session_key.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let live = get_or_connect(&registry, &session_key, &ctx, &granted, args, hook)?;
+        let acp_id = live
+            .acp_id
+            .lock()
+            .map_err(|_| "acp session".to_string())?
+            .clone();
+        if let Some(session_id) = acp_id.as_deref() {
+            let _ = block_on(persist_acp_session(
+                &persist_pool,
+                &persist_ref,
+                persist_kind,
+                session_id,
+            ));
+        }
+        let session = live.session.lock().map_err(|_| "acp session".to_string())?;
+        Ok::<_, String>(session.config_options.clone())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+pub async fn thread_config_options(
+    app: &AppHandle,
+    pool: &SqlitePool,
+    allow: &ExecutableAllowlist,
+    registry: &AcpRegistry,
+    thread_id: &str,
+) -> Result<Vec<ConfigOption>, String> {
+    let ctx = thread_turn_context(pool, thread_id).await?;
+    config_options(app, pool, allow, registry, thread_id, ctx).await
+}
+
+pub async fn agent_config_options(
+    app: &AppHandle,
+    pool: &SqlitePool,
+    allow: &ExecutableAllowlist,
+    registry: &AcpRegistry,
+    chat_id: &str,
+) -> Result<Vec<ConfigOption>, String> {
+    let ctx = agent_turn_context(pool, chat_id).await?;
+    config_options(app, pool, allow, registry, chat_id, ctx).await
 }
 
 pub async fn cancel(registry: &AcpRegistry, session_ref: &str) -> Result<(), String> {

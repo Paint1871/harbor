@@ -2,8 +2,8 @@ use harbor_acp::{
     PermissionKind, map_permission_kind,
     permissions::permission_outcome,
     session::{
-        InitializeCaps, ResumeKind, method_for, parse_initialize_caps, resume_or_new,
-        session_params, should_drop_session_update,
+        InitializeCaps, ResumeKind, method_for, parse_config_options, parse_initialize_caps,
+        resume_or_new, session_params, should_drop_session_update,
     },
     spawn::{EnvVariable, McpServer, SpawnSpec},
 };
@@ -110,10 +110,30 @@ fn config_options_and_additional_directories_are_opt_in() {
             "sessionCapabilities": { "additionalDirectories": {} },
             "loadSession": false
         },
-        "configOptions": [{ "id": "model", "category": "model" }, { "id": "mode", "category": "mode" }]
+        "configOptions": [
+            {
+                "id": "model",
+                "name": "Model",
+                "category": "model",
+                "currentValue": "opencode/big-pickle",
+                "options": [
+                    { "value": "opencode/big-pickle", "name": "OpenCode Zen/Big Pickle" },
+                    { "value": "forge/kimi-k3", "name": "Forge AI/Kimi K3" }
+                ]
+            },
+            { "id": "mode", "category": "mode" }
+        ]
     }));
     assert!(caps.additional_directories);
     assert_eq!(caps.config_options.len(), 2);
+    let model = &caps.config_options[0];
+    assert_eq!(model.name, "Model");
+    assert_eq!(model.current_value.as_deref(), Some("opencode/big-pickle"));
+    assert_eq!(model.values.len(), 2);
+    assert_eq!(model.values[1].name, "Forge AI/Kimi K3");
+    // A bare option keeps its id as its label rather than rendering as blank.
+    assert_eq!(caps.config_options[1].name, "mode");
+    assert!(caps.config_options[1].values.is_empty());
     let without = parse_initialize_caps(&json!({}));
     let params = session_params(
         ResumeKind::Fresh,
@@ -124,6 +144,24 @@ fn config_options_and_additional_directories_are_opt_in() {
     );
     let encoded = serde_json::to_value(&params).unwrap();
     assert!(encoded.get("additionalDirectories").is_none());
+}
+
+/// opencode answers `session/new`, not `initialize`, with its model list.
+#[test]
+fn config_options_are_read_from_the_session_result_too() {
+    let options = parse_config_options(&json!({
+        "sessionId": "ses_1",
+        "configOptions": [{
+            "id": "model",
+            "name": "Model",
+            "category": "model",
+            "currentValue": "opencode/big-pickle",
+            "options": [{ "value": "opencode/big-pickle", "name": "OpenCode Zen/Big Pickle" }]
+        }]
+    }));
+    assert_eq!(options.len(), 1);
+    assert_eq!(options[0].values[0].name, "OpenCode Zen/Big Pickle");
+    assert!(parse_config_options(&json!({ "sessionId": "ses_1" })).is_empty());
 }
 
 #[test]

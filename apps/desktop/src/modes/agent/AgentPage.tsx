@@ -24,7 +24,7 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
   const chrome = useOptionalChrome();
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<"chats" | "skills" | "settings">("chats");
-  const [configChoice, setConfigChoice] = useState<Record<string, string>>({});
+  const [configChoice, setConfigChoice] = useState<Record<string, Record<string, string>>>({});
   const [teammates, setTeammates] = useState<AgentRecord[]>([]);
   const [mailError, setMailError] = useState<string | null>(null);
   const chat = useAgentChat(agent.id);
@@ -55,8 +55,9 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
     // Agent view remains mounted behind them; refresh when the view returns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id, chrome?.destination]);
+  const [optionsBusy, setOptionsBusy] = useState(false);
   const engineLabel = agent.engineId.replace(/-/g, " ");
-  const selectedOption = (chat.activeId ? configChoice[chat.activeId] : undefined) ?? chat.configOptions[0]?.id ?? null;
+  const selectedOptions = (chat.activeId ? configChoice[chat.activeId] : undefined) ?? {};
   const workingCount = Math.max(
     chat.chats.filter((item) => item.status === "running").length,
     chat.sending ? 1 : 0,
@@ -229,11 +230,17 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                       engines={[]}
                       engineId={engineLabel}
                       options={chat.configOptions}
-                      choice={selectedOption}
-                      onOptionChange={(id: string) => {
+                      choices={selectedOptions}
+                      busy={optionsBusy}
+                      onOpen={() => {
+                        if (chat.configOptions.length) return;
+                        setOptionsBusy(true);
+                        void chat.loadConfigOptions().finally(() => setOptionsBusy(false));
+                      }}
+                      onOptionChange={(optionId: string, value: string) => {
                         const chatId = chat.activeId;
-                        if (chatId) setConfigChoice((current) => ({ ...current, [chatId]: id }));
-                        void chat.setConfig(id, id);
+                        if (chatId) setConfigChoice((current) => ({ ...current, [chatId]: { ...current[chatId], [optionId]: value } }));
+                        void chat.setConfig(optionId, value);
                       }}
                     />
                     <span className="harbor-muted">Enter to send · Shift + Enter for a new line</span>

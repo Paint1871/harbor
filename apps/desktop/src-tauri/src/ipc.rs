@@ -372,6 +372,19 @@ pub async fn thread_set_config(
     crate::acp_host::set_live_config(&registry, &id, option_id, value).await
 }
 
+/// What this thread's engine offers right now. Connects if it is not running:
+/// the agent only lists its models once a session exists.
+#[tauri::command]
+pub async fn thread_config_options(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    allow: State<'_, ExecutableAllowlist>,
+    registry: State<'_, AcpRegistry>,
+    id: String,
+) -> Result<Vec<harbor_acp::session::ConfigOption>, String> {
+    crate::acp_host::thread_config_options(&app, &pool, &allow, &registry, &id).await
+}
+
 /// The live session speaks the old engine's protocol state, so it goes first.
 #[tauri::command]
 pub async fn thread_set_engine(
@@ -527,6 +540,17 @@ pub async fn agent_chat_cancel(
     harbor_core::commands::agent_chat_cancel(&pool, chat_id)
         .await
         .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn agent_chat_config_options(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    allow: State<'_, ExecutableAllowlist>,
+    registry: State<'_, AcpRegistry>,
+    chat_id: String,
+) -> Result<Vec<harbor_acp::session::ConfigOption>, String> {
+    crate::acp_host::agent_config_options(&app, &pool, &allow, &registry, &chat_id).await
 }
 
 #[tauri::command]
@@ -874,6 +898,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         thread_cancel,
         thread_set_config,
         thread_set_engine,
+        thread_config_options,
         thread_grant_root,
         thread_attach_files,
         agent_list,
@@ -887,6 +912,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         agent_chat_send,
         agent_chat_cancel,
         agent_chat_set_config,
+        agent_chat_config_options,
         memory_list,
         memory_upsert,
         memory_delete,

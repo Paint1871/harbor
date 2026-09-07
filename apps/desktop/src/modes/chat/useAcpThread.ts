@@ -4,27 +4,62 @@ import { listen } from "@tauri-apps/api/event";
 import type { ChatMessage, ContentPart } from "@harbor/schema/commands";
 import { parsePermissionEvent, type PermissionRequest } from "./PermissionCard";
 
+export interface AcpConfigValue {
+  value: string;
+  name: string;
+  description?: string | null;
+}
+
+/** One knob the engine exposes — "Model", "Session Mode" — and the values it takes. */
 export interface AcpConfigOption {
   id: string;
+  name: string;
   category: string;
+  currentValue: string | null;
+  values: AcpConfigValue[];
+}
+
+function readString(source: object, key: string): string | null {
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readValues(source: object): AcpConfigValue[] {
+  const raw = (source as { values?: unknown }).values;
+  if (!Array.isArray(raw)) return [];
+  const values: AcpConfigValue[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const value = readString(item, "value");
+    if (!value) continue;
+    values.push({ value, name: readString(item, "name") ?? value, description: readString(item, "description") });
+  }
+  return values;
+}
+
+export function readConfigOptions(raw: unknown): AcpConfigOption[] {
+  if (!Array.isArray(raw)) return [];
+  const options: AcpConfigOption[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const id = readString(item, "id");
+    if (!id) continue;
+    options.push({
+      id,
+      name: readString(item, "name") ?? id,
+      category: readString(item, "category") ?? "model",
+      currentValue: readString(item, "currentValue"),
+      values: readValues(item),
+    });
+  }
+  return options;
 }
 
 export function parseConfigOptions(payload: unknown): AcpConfigOption[] | null {
   if (!payload || typeof payload !== "object") return null;
   const raw = (payload as { configOptions?: unknown }).configOptions;
   if (!Array.isArray(raw)) return null;
-  const options: AcpConfigOption[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const id = (item as { id?: unknown }).id;
-    if (typeof id !== "string" || !id.trim()) continue;
-    const category = (item as { category?: unknown }).category;
-    options.push({
-      id,
-      category: typeof category === "string" && category.trim() ? category : "model",
-    });
-  }
-  return options;
+  return readConfigOptions(raw);
 }
 
 export function useAcpThread(threadId: string | null) {
@@ -80,6 +115,18 @@ export function useAcpThread(threadId: string | null) {
     }).catch(() => undefined);
     return () => { disposed = true; for (const unlisten of stops) unlisten(); };
   }, [reload, threadId]);
+
+  /** Opening the picker is the moment to ask; connecting an engine is not free. */
+  const loadConfigOptions = useCallback(async () => {
+    if (!threadId) return;
+    const id = threadId;
+    try {
+      const listed = await invoke<unknown>("thread_config_options", { id });
+      setOptions((current) => ({ ...current, [id]: readConfigOptions(listed) }));
+    } catch (error) {
+      setErrors((current) => ({ ...current, [id]: `Could not read this engine's options. ${String(error)}` }));
+    }
+  }, [threadId]);
 
   const send = useCallback(async (text: string) => {
     if (!threadId || !text.trim() || pending.current.has(threadId)) return false;
@@ -147,6 +194,7 @@ export function useAcpThread(threadId: string | null) {
     loading: !!threadId && (loading[threadId] ?? !(threadId in history)),
     sending: !!threadId && !!sending[threadId],
     configOptions: threadId ? options[threadId] ?? [] : [],
+    loadConfigOptions,
     permissions: threadId ? permissions[threadId] ?? [] : [],
     turn,
     send,

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AgentChat, ChatMessage, ContentPart } from "@harbor/schema/commands";
 import { parsePermissionEvent, type PermissionRequest } from "../chat/PermissionCard";
-import { parseConfigOptions, type AcpConfigOption } from "../chat/useAcpThread";
+import { parseConfigOptions, readConfigOptions, type AcpConfigOption } from "../chat/useAcpThread";
 
 type AcpUpdate = {
   sessionRef: string;
@@ -231,6 +231,20 @@ export function useAgentChat(agentId: string) {
     }
   }, [activeId]);
 
+  const loadConfigOptions = useCallback(async () => {
+    const chatId = activeId;
+    if (!chatId) return;
+    try {
+      const listed = await invoke<unknown>("agent_chat_config_options", { chatId });
+      setOptions((current) => ({ ...current, [chatId]: readConfigOptions(listed) }));
+    } catch (error) {
+      setErrors((current) => ({
+        ...current,
+        [chatId]: `Could not read this engine's options. ${String(error)}`,
+      }));
+    }
+  }, [activeId]);
+
   const setConfig = useCallback(async (optionId: string, value: unknown) => {
     const chatId = activeId;
     if (!chatId) return;
@@ -286,6 +300,7 @@ export function useAgentChat(agentId: string) {
     send,
     cancel,
     setConfig,
+    loadConfigOptions,
     resolvePermission,
   };
 }

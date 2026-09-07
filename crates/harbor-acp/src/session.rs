@@ -17,10 +17,82 @@ pub struct InitializeCaps {
     pub config_options: Vec<ConfigOption>,
 }
 
+/// One knob an agent exposes — "Model", "Session Mode" — with the values it
+/// accepts. Agents send these in the session result; a few send them from
+/// `initialize`, so both are read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigOption {
     pub id: String,
+    pub name: String,
     pub category: String,
+    pub current_value: Option<String>,
+    pub values: Vec<ConfigValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigValue {
+    pub value: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+pub fn parse_config_options(result: &Value) -> Vec<ConfigOption> {
+    result
+        .get("configOptions")
+        .and_then(Value::as_array)
+        .map(|options| {
+            options
+                .iter()
+                .filter_map(|option| {
+                    let id = option.get("id")?.as_str()?.to_string();
+                    let category = option
+                        .get("category")
+                        .and_then(Value::as_str)
+                        .unwrap_or("model")
+                        .to_string();
+                    Some(ConfigOption {
+                        name: option
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or(&id)
+                            .to_string(),
+                        id,
+                        category,
+                        current_value: option
+                            .get("currentValue")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                        values: option
+                            .get("options")
+                            .and_then(Value::as_array)
+                            .map(|values| {
+                                values
+                                    .iter()
+                                    .filter_map(|value| {
+                                        let id = value.get("value")?.as_str()?.to_string();
+                                        Some(ConfigValue {
+                                            name: value
+                                                .get("name")
+                                                .and_then(Value::as_str)
+                                                .unwrap_or(&id)
+                                                .to_string(),
+                                            value: id,
+                                            description: value
+                                                .get("description")
+                                                .and_then(Value::as_str)
+                                                .map(str::to_string),
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,11 +173,6 @@ pub fn parse_initialize_caps(result: &Value) -> InitializeCaps {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let options = result
-        .get("configOptions")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
     InitializeCaps {
         resume: session.get("resume").is_some(),
         load_session: agent.get("loadSession").and_then(Value::as_bool) == Some(true),
@@ -114,19 +181,7 @@ pub fn parse_initialize_caps(result: &Value) -> InitializeCaps {
             .iter()
             .filter_map(|value| value.get("id").and_then(Value::as_str).map(str::to_string))
             .collect(),
-        config_options: options
-            .iter()
-            .filter_map(|value| {
-                Some(ConfigOption {
-                    id: value.get("id")?.as_str()?.to_string(),
-                    category: value
-                        .get("category")
-                        .and_then(Value::as_str)
-                        .unwrap_or("model")
-                        .to_string(),
-                })
-            })
-            .collect(),
+        config_options: parse_config_options(result),
     }
 }
 
@@ -137,6 +192,9 @@ pub struct AcpHostSession {
     pub cwd: String,
     pub caps: InitializeCaps,
     pub resume_kind: ResumeKind,
+    /// What the agent last told us it accepts. Refreshed on every answer that
+    /// carries `configOptions`, because setting one can change the others.
+    pub config_options: Vec<ConfigOption>,
 }
 
 impl AcpHostSession {
@@ -160,6 +218,7 @@ impl AcpHostSession {
             session_id: None,
             engine_id: spec.engine_id,
             cwd: spec.cwd.clone(),
+            config_options: caps.config_options.clone(),
             caps,
             resume_kind: ResumeKind::Fresh,
         })
@@ -186,6 +245,10 @@ impl AcpHostSession {
                         == Some("replay"),
                 )
             });
+        }
+        let options = parse_config_options(&result);
+        if !options.is_empty() {
+            self.config_options = options;
         }
         self.session_id = result
             .get("sessionId")
@@ -221,14 +284,19 @@ impl AcpHostSession {
     }
 
     pub fn set_config_option(&mut self, id: &str, value: Value) -> Result<Value, AcpError> {
-        self.conn.request(
+        let result = self.conn.request(
             "session/set_config_option",
             json!({
                 "sessionId": self.session_id,
                 "configId": id,
                 "value": value
             }),
-        )
+        )?;
+        let options = parse_config_options(&result);
+        if !options.is_empty() {
+            self.config_options = options;
+        }
+        Ok(result)
     }
 
     pub fn notifications(&self) -> &[Value] {
