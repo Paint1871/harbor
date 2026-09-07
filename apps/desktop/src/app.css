@@ -1383,7 +1383,7 @@ button, input, textarea, select {
 }
 .harbor-workspace-slider-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
@@ -1437,7 +1437,7 @@ button, input, textarea, select {
 }
 .harbor-workspace-terminal-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin: 14px 0 6px;
