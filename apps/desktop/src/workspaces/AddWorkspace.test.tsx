@@ -108,7 +108,7 @@ it("keeps a different CLI choice for each terminal when asked", async () => {
   render(<AddWorkspace onAdded={onAdded} onClose={vi.fn()} />);
   await screen.findByText("1 installed CLI detected on this Mac.");
 
-  fireEvent.click(screen.getByRole("checkbox", { name: /Per terminal/ }));
+  fireEvent.click(screen.getByRole("radio", { name: "Per terminal" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Terminal 1 CLI" }), {
     target: { value: "shell" },
   });

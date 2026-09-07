@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
+import { Segmented } from "@harbor/ui/Segmented";
 import type { DetectedEngine, Workspace, WorkspaceSetup } from "@harbor/schema/commands";
 import { settingsGet, settingsSet } from "../settings";
 
@@ -268,17 +269,19 @@ export function AddWorkspace({
               <strong>Terminal launch</strong>
               <small>Which installed CLI these terminals open with.</small>
             </span>
-            <span className="harbor-workspace-terminal-actions">
+            <div className="harbor-workspace-terminal-actions">
               {totalTerminals > 1 ? (
-                <label className="harbor-workspace-per-terminal">
-                  <input
-                    type="checkbox"
-                    checked={perTerminal}
-                    disabled={busy}
-                    onChange={(event) => setPerTerminal(event.target.checked)}
-                  />
-                  <span>Per terminal</span>
-                </label>
+                <Segmented
+                  className="harbor-workspace-scope"
+                  label="CLI choice"
+                  value={perTerminal ? "per" : "all"}
+                  options={[
+                    { value: "all", label: "One CLI" },
+                    { value: "per", label: "Per terminal" },
+                  ]}
+                  disabled={busy}
+                  onValueChange={(value) => setPerTerminal(value === "per")}
+                />
               ) : null}
               <button
                 type="button"
@@ -288,7 +291,7 @@ export function AddWorkspace({
               >
                 {detectionState === "checking" ? "Checking…" : "Check again"}
               </button>
-            </span>
+            </div>
           </div>
           <div className="harbor-workspace-terminals" data-mode={perTerminal ? "per" : "all"} aria-live="polite">
             {!perTerminal ? (
