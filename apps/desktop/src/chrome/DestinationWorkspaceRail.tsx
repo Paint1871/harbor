@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
-import { RailRow } from "@harbor/ui/RailRow";
+import { WorkspaceRailRow, workspaceName } from "../workspaces/WorkspaceRailRow";
+import { DisclosureIcon, PaneIcon, type PaneIconKind } from "./icons";
+import { EngineMark } from "./EngineMark";
 import type { RestoredPane, Workspace, WorkspaceTab } from "@harbor/schema/commands";
 import { AddWorkspace } from "../workspaces/AddWorkspace";
 import { useChrome } from "./chrome-context";
-
-function workspaceName(workspace: Workspace): string {
-  if (workspace.title) return workspace.title;
-  return workspace.folder.split(/[\\/]/).filter(Boolean).pop() ?? "Workspace";
-}
 
 function paneName(pane: RestoredPane, index: number): string {
   if (pane.kind === "browser") return "localhost:3000";
@@ -32,12 +29,12 @@ function paneName(pane: RestoredPane, index: number): string {
   return index === 0 ? "Claude Code" : index === 1 ? "zsh 104×31" : "Terminal";
 }
 
-function paneIcon(pane: RestoredPane, index: number): string {
-  if (pane.kind === "browser") return "◎";
-  if (pane.kind === "thread") return "✣";
-  if (pane.kind === "files") return "⌁";
-  if (pane.engineId && pane.engineId !== "shell") return "✳";
-  return index === 0 ? "✳" : "›_";
+function paneIconKind(pane: RestoredPane, index: number): PaneIconKind {
+  if (pane.kind === "browser") return "browser";
+  if (pane.kind === "thread") return "thread";
+  if (pane.kind === "files") return "files";
+  if (pane.engineId && pane.engineId !== "shell") return "agent";
+  return index === 0 ? "agent" : "terminal";
 }
 
 function orderedPanes(panes: RestoredPane[]): RestoredPane[] {
@@ -92,16 +89,18 @@ export function DestinationWorkspaceRail() {
             const firstPane = tab ? orderedPanes(tab.panes)[0] : undefined;
             return (
               <div className="harbor-destination-workspace" key={workspace.id}>
-                <RailRow
-                  label={workspaceName(workspace)}
-                  leading={<span aria-hidden="true">⌄</span>}
+                <WorkspaceRailRow
+                  workspace={workspace}
+                  leading={<DisclosureIcon open={expanded} />}
                   selected={expanded}
-                  title={workspace.folder}
-                  onClick={() => {
+                  onSelect={() => {
                     setExpandedWorkspaceId(workspace.id);
                     if (firstPane && onCodePaneSelect) onCodePaneSelect(workspace.id, firstPane.id);
                     else onModeChange("code");
                   }}
+                  onRenamed={(updated) =>
+                    setWorkspaces((rows) => rows.map((row) => (row.id === updated.id ? updated : row)))
+                  }
                 />
                 {expanded && tab?.panes.length ? (
                   <ul className="harbor-destination-pane-rows" aria-label={`${workspaceName(workspace)} panes`}>
@@ -114,7 +113,7 @@ export function DestinationWorkspaceRail() {
                             if (onCodePaneSelect) onCodePaneSelect(workspace.id, pane.id);
                             else onModeChange("code");
                           }}>
-                            <span className={`harbor-pane-row-icon harbor-pane-row-icon-${pane.kind}`} aria-hidden="true">{paneIcon(pane, terminalIndex < 0 ? index : terminalIndex)}</span>
+                            <span className="harbor-pane-row-icon">{pane.kind === "terminal" ? <EngineMark engineId={pane.engineId} label={paneName(pane, terminalIndex < 0 ? index : terminalIndex)} size={13} /> : <PaneIcon kind={paneIconKind(pane, terminalIndex < 0 ? index : terminalIndex)} />}</span>
                             {paneName(pane, terminalIndex < 0 ? index : terminalIndex)}
                           </button>
                         </li>

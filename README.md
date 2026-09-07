@@ -1,79 +1,145 @@
 # Harbor
 
-an open desktop host for coding agents
+**an open desktop host for coding agents**
 
-Harbor is a free, Apache-2.0 desktop host for coding CLIs already installed on
-your PATH. It is local-first, requires no account, and has no paywall. Engines
-are not bundled: they use your existing vendor accounts and bill you directly.
-Harbor never proxies their API keys.
+Harbor is a free, Apache-2.0 desktop application that hosts the coding CLIs you
+already have installed. It is local-first, needs no account, and has no paywall,
+credit meter, or plan tier.
 
-## Development status
+Harbor is an open-source alternative to the closed, subscription-gated desktop
+hosts in this category. Those products put a monthly fee and a credit balance in
+front of an application whose core job is launching third-party CLIs from your
+`PATH` — CLIs that already bill through your own vendor accounts. Harbor takes
+the same idea and gives it away: the source is public, the data is a SQLite file
+on your disk, and your engine credentials never pass through anyone's server.
 
-PR-01 established the Rust and pnpm/Turborepo workspaces and CI checks. PR-02
-adds `@harbor/ui`: Black/Light tokens, theme and motion handling, and six UI
-primitives. PR-03 adds the native Harbor window (1280×768, `#0B0B0C` before
-first paint), a hidden overlay stub, least-privilege capabilities, a host-owned
-executable allowlist, and a panic hook that writes `logs/crash.log`. PR-04 adds
-the title-bar chrome: mode switch, mute orb, rail, and footer. PR-05 adds
-local SQLite (`harbor.sqlite`), settings get/set, and the full 0.1.0 IPC
-command list (unused commands return unimplemented, with no auth gate). PR-06
-adds Welcome and **Start local**. Later PRs add Chat, Code (PTY/files), Agents,
-plugins, dictation overlay, and the signed-update gate (placeholder minisign
-key). Version 0.1.0 is a development target, not a published release.
+Harbor does not replace Claude Code, Codex, Cursor, or OpenCode. It **hosts**
+them. Engines are never bundled and Harbor never proxies their API keys.
 
-Run the isolated component preview with `pnpm --filter @harbor/ui dev`. See
-[the UI package](packages/ui/README.md) for component contracts and verification.
+## Three modes in one window
 
-The planned app has three modes: named teammates in Agent, real PTY terminals
-and files in Code, and folder-scoped ACP v1 threads with diffs in Chat. The
-primary welcome action will be **Start local**.
+| Mode | What it holds |
+| --- | --- |
+| **Agent** | Named teammates with a brief, memory, granted places, generated faces, and their own chats |
+| **Code** | Real PTY terminals over your folders, a CodeMirror file pane, a browser pane, and a thread pane |
+| **Chat** | Folder-scoped threads over ACP v1, with permission cards and a changes panel |
 
-The specified stack is Tauri 2, Rust, React 19, TypeScript, Vite, SQLite/sqlx,
-xterm.js, and CodeMirror 6. Minimum OS targets are macOS 14, Windows 10 x64,
-and Ubuntu 22.04. The first public release targets signed, notarized macOS;
-Windows preview depends on the Windows PTY CI gate. Linux packages follow later.
+## What is actually built
 
-## Bootstrap checks
+Every mode above runs against real local state. Terminals are real PTYs. Chat
+and Agent conversations go over ACP v1 to a CLI on your `PATH`. Workspaces,
+threads, agents, memory, layout, and notifications live in a local SQLite
+database. The GitHub plugin uses Device Flow with no client secret in the
+binary, and tokens go to the OS keyring rather than into any engine's
+environment.
 
-Install stable Rust with rustfmt and Clippy, Node.js 22.11 or newer, pnpm 10.9.0,
-Git, and ripgrep. The Rust toolchain file selects the required components.
+**Harbor 0.1.0 is a development target, not a published release.** Being honest
+about the gaps:
 
-From this repository root:
+- Dictation `begin`/`end` are unimplemented and no speech engine ships yet.
+- The updater cannot authorize an install: `minisign.pub` is a placeholder, so
+  the update check always reports "not available" and install refuses.
+- Several Settings rows are explanatory copy rather than wired controls.
+- On Linux the window uses an overlay title bar instead of native decorations.
+- No signed or notarized build has been produced, on any platform.
+
+`docs-src/verify-pass.md` is the standing audit and lists open items in full.
+
+## What Harbor will not add
+
+- No account gate, paywall, credit meter, or upgrade screen. The welcome action
+  is `Start local`.
+- No bundled engines and no proxying of vendor API keys.
+- No silent cloud fallback for dictation. On-device is the default; a cloud
+  endpoint requires a URL you enter yourself.
+- Plugin tokens never enter an engine's environment.
+
+## Requirements
+
+Stable Rust with rustfmt and Clippy, Node.js 22.11 or newer, pnpm 10.9.0, Git,
+and ripgrep. The `rust-toolchain.toml` file selects the required components.
+
+Minimum operating systems are macOS 14, Windows 10 x64, and Ubuntu 22.04.
+
+On Debian or Ubuntu, Tauri needs GTK and WebKitGTK development packages before
+anything will compile:
+
+```sh
+sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+  libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev libxdo-dev \
+  libssl-dev build-essential pkg-config
+```
+
+## Building and running
+
+From the repository root:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm check
 ```
 
-Individual checks:
+To run the desktop application in development:
 
 ```sh
-bash scripts/deny-brand.sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-pnpm check:workspace
+pnpm --filter @harbor/desktop tauri dev
 ```
 
-Turborepo runs the desktop package's Cargo check and the UI package's TypeScript
-check and Vite preview build. Caching is disabled for that
-task because Rust sources and the lockfile span package boundaries; Cargo still
-handles incremental compilation. No remote cache account is required.
+To work on the design system in isolation:
+
+```sh
+pnpm --filter @harbor/ui dev
+```
+
+## Checks
+
+`pnpm check` runs everything CI runs, in the same order:
+
+| Command | What it guards |
+| --- | --- |
+| `pnpm check:brand` | Clean-room guard over tracked and untracked files |
+| `pnpm check:workspace` | TypeScript and Vite builds for every package |
+| `pnpm check:test` | Renderer test suite |
+| `pnpm check:rust` | `cargo fmt`, Clippy with `-D warnings`, and the Rust tests |
+
+Three GitHub Actions workflows run on every push and pull request: **CI** (the
+four checks above), **ACP handshake** (a live handshake against OpenCode), and
+**Windows PTY** (the PowerShell PTY gates, which decide whether a Windows
+preview build is allowed at all).
 
 ## Layout
 
 ```text
-apps/desktop/            Desktop package and native host bootstrap
-crates/harbor-core/      Shared local application core
-packages/ui/            Design tokens, primitives, and development preview
-scripts/                Repository checks
-.github/workflows/      Continuous integration
+apps/desktop/            Desktop package, native host, and renderer
+crates/harbor-core/      Local application core: data model and commands
+crates/harbor-acp/       ACP v1 client and session policy
+crates/harbor-pty/       PTY spawning behind an executable allowlist
+crates/harbor-plugins/   Outbound MCP proxy, keyring, GitHub Device Flow
+packages/ui/             Design tokens, primitives, and a component preview
+packages/schema/         The IPC contract shared by host and renderer
+scripts/                 Repository checks
 ```
 
-The engine catalog, IPC schema, and additional Rust crates will be added
-in their designated PRs. The implementation specification is supplied separately
-as `../DESIGN.md` in this workspace; read its PR Plan before contributing.
+## Security model
 
-See [AGENTS.md](AGENTS.md) for contribution instructions,
-[CLEANROOM.md](CLEANROOM.md) for provenance rules, and
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
-The [Apache-2.0 license](LICENSE) covers Harbor's source.
+Process creation stays in Rust behind an executable allowlist; the renderer has
+no shell command of its own. File access is restricted to host-granted roots.
+The renderer capability list is least-privilege and each IPC command is
+individually allowed. Session restore brings back layout only — never processes
+or scrollback — and restored terminals stay paused until you resume them.
+
+## Contributing
+
+Read [AGENTS.md](AGENTS.md) for contribution instructions and
+[CLEANROOM.md](CLEANROOM.md) for provenance rules, which every contribution must
+certify. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) covers community expectations.
+
+Run `pnpm check` before submitting, and commit both lockfiles when dependencies
+change. Add tests that exercise real behaviour; a scaffold check is not
+acceptance evidence for a feature.
+
+## License
+
+[Apache-2.0](LICENSE). Harbor's logo, agent faces, orb, and engine marks are
+original artwork. Engine marks are Harbor's own drawings and are deliberately
+not the vendors' trademarks.

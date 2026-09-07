@@ -3,6 +3,9 @@
   "tasks": {
     "check": {
       "cache": false
+    },
+    "test": {
+      "cache": false
     }
   }
 }

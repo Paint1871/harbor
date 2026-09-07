@@ -75,6 +75,8 @@ export function AddWorkspace({
   const [browserPreview, setBrowserPreview] = useState(DEFAULT_SETUP.browserPreview);
   const [threadPane, setThreadPane] = useState(DEFAULT_SETUP.threadPane);
   const [terminalEngineIds, setTerminalEngineIds] = useState(DEFAULT_SETUP.terminalEngineIds);
+  // One CLI for the whole workspace is the common case; per-terminal is opt-in.
+  const [perTerminal, setPerTerminal] = useState(false);
   const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [detectionState, setDetectionState] = useState<"checking" | "ready" | "error">("checking");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -123,6 +125,8 @@ export function AddWorkspace({
 
   const totalTerminals = additionalTerminals + 1;
   const availableEngines = readyEngines(engines);
+  const defaultEngineId = terminalEngineIds[0] || preferredEngineId(engines);
+  const defaultEngine = availableEngines.find((engine) => engine.id === defaultEngineId);
 
   useEffect(() => {
     if (detectionState !== "ready" || !settingsLoaded) return;
@@ -238,7 +242,7 @@ export function AddWorkspace({
           <div className="harbor-workspace-terminal-heading">
             <span>
               <strong>Terminal launch</strong>
-              <small>Choose which installed CLI each terminal should open.</small>
+              <small>Which installed CLI these terminals open with.</small>
             </span>
             <button
               type="button"
@@ -250,7 +254,37 @@ export function AddWorkspace({
             </button>
           </div>
           <div className="harbor-workspace-terminals" aria-live="polite">
-            {Array.from({ length: totalTerminals }, (_, index) => {
+            {!perTerminal ? (
+              <label className="harbor-workspace-terminal">
+                <span className="harbor-workspace-terminal-label">
+                  <strong>All terminals</strong>
+                  <small>{totalTerminals === 1 ? "1 terminal" : `${totalTerminals} terminals`}</small>
+                </span>
+                <span className="harbor-workspace-terminal-control">
+                  <select
+                    aria-label="Terminal CLI"
+                    disabled={busy}
+                    value={defaultEngineId}
+                    onChange={(event) => {
+                      setupTouched.current = true;
+                      const next = event.target.value;
+                      setTerminalEngineIds(Array.from({ length: totalTerminals }, () => next));
+                    }}
+                  >
+                    <option value={SHELL_ENGINE_ID}>Shell only</option>
+                    {availableEngines.map((engine) => (
+                      <option value={engine.id} key={engine.id}>{engine.displayName}</option>
+                    ))}
+                  </select>
+                  <small>
+                    {defaultEngine
+                      ? `${executableName(defaultEngine.path)} detected`
+                      : "Uses your login shell"}
+                  </small>
+                </span>
+              </label>
+            ) : (
+              Array.from({ length: totalTerminals }, (_, index) => {
               const selectedId = terminalEngineIds[index] || SHELL_ENGINE_ID;
               const selectedEngine = availableEngines.find((engine) => engine.id === selectedId);
               const missingSelection = selectedId !== SHELL_ENGINE_ID && !selectedEngine;
@@ -292,7 +326,19 @@ export function AddWorkspace({
                   </span>
                 </label>
               );
-            })}
+              })
+            )}
+            {totalTerminals > 1 ? (
+              <label className="harbor-workspace-per-terminal">
+                <input
+                  type="checkbox"
+                  checked={perTerminal}
+                  disabled={busy}
+                  onChange={(event) => setPerTerminal(event.target.checked)}
+                />
+                <span>Give each terminal its own CLI</span>
+              </label>
+            ) : null}
           </div>
           {detectionState === "error" ? (
             <p className="harbor-workspace-detection-note">Could not inspect local CLIs. Harbor will still open regular shells.</p>

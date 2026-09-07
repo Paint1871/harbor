@@ -2,7 +2,9 @@ import { Logo } from "@harbor/ui/Logo";
 import { hostPlatform } from "../platform";
 import { BellButton } from "./BellButton";
 import { ModeSwitch, type Mode } from "./ModeSwitch";
+import { OrbSeat } from "./OrbSeat";
 import { SidebarToggle } from "./SidebarToggle";
+import { WorkspaceMenu } from "./WorkspaceMenu";
 import { closeWindow, minimizeWindow, toggleMaximizeWindow } from "./window";
 
 export interface TitleBarProps {
@@ -12,6 +14,7 @@ export interface TitleBarProps {
   onToggleRail: () => void;
   onTidy: () => void;
   onBellClick: () => void;
+  onOpenVoiceSettings: () => void;
 }
 
 export function TitleBar({
@@ -21,6 +24,7 @@ export function TitleBar({
   onToggleRail,
   onTidy,
   onBellClick,
+  onOpenVoiceSettings,
 }: TitleBarProps) {
   const platform = hostPlatform();
 
@@ -31,7 +35,6 @@ export function TitleBar({
           <Logo size={16} />
           <span className="harbor-wordmark-label">Harbor</span>
         </span>
-        <SidebarToggle open={railOpen} onToggle={onToggleRail} />
       </div>
       <div className="harbor-titlebar-center">
         <ModeSwitch value={mode} onValueChange={onModeChange} onValueClick={(next) => {
@@ -40,15 +43,10 @@ export function TitleBar({
       </div>
       <div className="harbor-titlebar-flex" data-tauri-drag-region />
       <div className="harbor-titlebar-end">
-        {mode === "code" ? (
-          <button type="button" className="harbor-titlebar-tidy" onClick={onTidy} aria-label="Tidy code panes">
-            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z" fill="none" stroke="currentColor" strokeWidth="1.15" />
-            </svg>
-            <span>Tidy</span>
-          </button>
-        ) : null}
+        <WorkspaceMenu onTidy={onTidy} />
+        <OrbSeat onOpenVoiceSettings={onOpenVoiceSettings} />
         <BellButton onClick={onBellClick} />
+        <SidebarToggle open={railOpen} onToggle={onToggleRail} />
         {platform === "windows" ? (
           <div className="harbor-window-controls">
             <button type="button" aria-label="Minimize" onClick={() => void minimizeWindow()}>

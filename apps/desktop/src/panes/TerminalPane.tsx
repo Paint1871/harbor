@@ -6,6 +6,7 @@ import { Button } from "@harbor/ui/Button";
 import type { DetectedEngine } from "@harbor/schema/commands";
 import { PaneHeader } from "./PaneHeader";
 import "@xterm/xterm/css/xterm.css";
+import { EngineMark } from "../chrome/EngineMark";
 
 interface TerminalPaneProps {
   paneId?: string;
@@ -261,11 +262,7 @@ export function TerminalPane({
       <PaneHeader
         title={label}
         live={status === "running" && focused}
-        leading={(engineId && engineId !== "shell") || label === "Claude Code"
-          ? <span className="harbor-pane-app-mark" data-kind="agent" aria-hidden="true">✳</span>
-          : label.startsWith("zsh") || label === "Shell"
-            ? <span className="harbor-pane-app-mark" data-kind="shell" aria-hidden="true">›_</span>
-            : null}
+        leading={<EngineMark engineId={engineId} label={label} />}
         expanded={expanded}
         onExpand={onExpand}
         extra={

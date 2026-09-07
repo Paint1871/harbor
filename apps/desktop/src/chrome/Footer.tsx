@@ -10,19 +10,14 @@ export function Footer() {
   const initial = profileName.trim().charAt(0).toUpperCase() || "L";
   return (
     <footer className="harbor-footer">
-      <div className="harbor-footer-stats" aria-label="Workspace status">
-        <div><span>Notch</span><strong>Off</strong></div>
-        <div><span>Credits</span><strong>9,684</strong></div>
-      </div>
-
       <div className="harbor-footer-account">
         <div className="harbor-profile">
           <span className="harbor-profile-mark" aria-hidden="true">
             {initial}
           </span>
           <span className="harbor-profile-copy">
-            <span className="harbor-profile-name">{profileName || "Builder"}</span>
-            <span className="harbor-profile-plan">PRO</span>
+            <span className="harbor-profile-name">{profileName.trim() || "Local"}</span>
+            <span className="harbor-profile-plan">Free · local</span>
           </span>
         </div>
         <div className="harbor-footer-account-actions">

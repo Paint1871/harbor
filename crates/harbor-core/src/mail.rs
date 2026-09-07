@@ -88,6 +88,37 @@ pub async fn send(
     Ok(())
 }
 
+/// Newest first. The Inbox shows only what the local database actually holds.
+pub async fn notifications(pool: &SqlitePool) -> Result<Vec<crate::types::Notification>, Error> {
+    let rows: Vec<(String, String, String, String, Option<i64>, i64)> = sqlx::query_as(
+        "SELECT id, kind, title, body, read_at, created_at
+         FROM notifications ORDER BY created_at DESC, id DESC LIMIT 50",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, kind, title, body, read_at, created_at)| crate::types::Notification {
+                id,
+                kind,
+                title,
+                body,
+                read: read_at.is_some(),
+                created_at,
+            },
+        )
+        .collect())
+}
+
+pub async fn mark_notifications_read(pool: &SqlitePool) -> Result<(), Error> {
+    sqlx::query("UPDATE notifications SET read_at = ?1 WHERE read_at IS NULL")
+        .bind(now())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +168,32 @@ mod tests {
         assert_eq!(paused.to_string(), "Messaging is paused for this agent");
         assert!(send(&pool, &from, "missing", "x").await.is_err());
         assert!(send(&pool, &from, &to, "  ").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn notifications_list_is_newest_first_and_marks_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        assert!(notifications(&pool).await.unwrap().is_empty());
+
+        let from = agent(&pool, "From").await;
+        let to = agent(&pool, "To").await;
+        send(&pool, &from, &to, "first").await.unwrap();
+        send(&pool, &from, &to, "second").await.unwrap();
+
+        let rows = notifications(&pool).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].body, "second");
+        assert_eq!(rows[0].kind, "mail");
+        assert!(rows.iter().all(|row| !row.read));
+
+        mark_notifications_read(&pool).await.unwrap();
+        assert!(
+            notifications(&pool)
+                .await
+                .unwrap()
+                .iter()
+                .all(|row| row.read)
+        );
     }
 }

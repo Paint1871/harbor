@@ -3,8 +3,9 @@ use crate::security::ExecutableAllowlist;
 use harbor_core::SqlitePool;
 use harbor_core::types::{
     AgentChat, AgentRecord, ChatMessage, ContentPart, CreateAgent, DetectedEngine, FileDiff,
-    FsEntry, Memory, PaneLayout, PaneState, Place, PluginApproval, PluginGrant, PluginRow,
-    SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup, WorkspaceTab,
+    FsEntry, Memory, Notification, PaneLayout, PaneState, Place, PluginApproval, PluginGrant,
+    PluginRow, SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup,
+    WorkspaceTab,
 };
 use serde_json::{Value, json};
 use std::path::Path;
@@ -143,6 +144,17 @@ pub async fn workspace_pin(
     pinned: bool,
 ) -> Result<(), String> {
     harbor_core::commands::workspace_pin(&pool, id, pinned)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn workspace_rename(
+    pool: State<'_, SqlitePool>,
+    id: String,
+    title: String,
+) -> Result<Workspace, String> {
+    harbor_core::commands::workspace_rename(&pool, id, title)
         .await
         .map_err(map_err)
 }
@@ -583,6 +595,25 @@ pub async fn mail_send(
 }
 
 #[tauri::command]
+pub fn default_profile_name() -> String {
+    harbor_core::commands::default_profile_name()
+}
+
+#[tauri::command]
+pub async fn notifications_list(pool: State<'_, SqlitePool>) -> Result<Vec<Notification>, String> {
+    harbor_core::commands::notifications_list(&pool)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn notifications_mark_read(pool: State<'_, SqlitePool>) -> Result<(), String> {
+    harbor_core::commands::notifications_mark_read(&pool)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
 pub async fn face_preview(
     pool: State<'_, SqlitePool>,
     agent_id: String,
@@ -750,6 +781,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         workspace_pick_folder,
         workspace_remove,
         workspace_pin,
+        workspace_rename,
         workspace_save_layout,
         workspace_tidy,
         workspace_ensure_tab,
@@ -797,6 +829,9 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         places_revoke,
         session_search,
         mail_send,
+        default_profile_name,
+        notifications_list,
+        notifications_mark_read,
         face_preview,
         acp_permission_resolve,
         plugin_list,

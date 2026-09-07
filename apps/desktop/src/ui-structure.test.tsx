@@ -51,7 +51,7 @@ const repo = resolve(here, "../../..");
 const chromeStub: ChromeValue = {
   mode: "agent",
   theme: "black",
-  profileName: "Builder",
+  profileName: "Ada",
   destination: "mode",
   setDestination: () => undefined,
   onModeChange: () => undefined,
@@ -85,7 +85,7 @@ describe("shipped Harbor chrome and mode trees", () => {
         createElement(DesktopShell, {
           theme: "black",
           onThemeChange: () => undefined,
-          profileName: "Builder",
+          profileName: "Ada",
         }),
       ),
     );
@@ -99,7 +99,15 @@ describe("shipped Harbor chrome and mode trees", () => {
     expect(shell).toContain("Plugins");
     expect(shell).toContain("Skills");
     expect(shell).toContain("Harbor");
-    expect(shell).toContain("Credits");
+    // Harbor has no credit meter and no plan tier (GOAL.md hard rules).
+    expect(shell).not.toContain("Credits");
+    expect(shell).not.toContain("PRO");
+    expect(shell).not.toContain("Upgrade");
+    expect(shell).not.toContain("Notch");
+    // K30 title-bar order and the 0.1.0 mute orb (DoD 8).
+    expect(shell).toContain("harbor-orb-seat");
+    expect(shell).toContain('aria-label="Voice"');
+    expect(shell).toContain("Workspace");
 
     const agentTree = wrap(
       createElement(
@@ -152,5 +160,29 @@ describe("shipped Harbor chrome and mode trees", () => {
     expect(tokens).toContain("--harbor-rail-w: 260px");
     expect(tokens).toContain("--harbor-titlebar-h: 44px");
     expect(composer).toContain('placeholder="Ask anything..."');
+  });
+
+  it("sizes the stage panels by the flex line, not by a full-height rule", () => {
+    const css = readFileSync(resolve(repo, "apps/desktop/src/app.css"), "utf8");
+    // .harbor-stage-panel carries an 8px margin. Any panel that also sets
+    // height:100% resolves against the whole parent and hangs its bottom edge
+    // (border included) below the window. Code mode shipped that bug once.
+    const panelRules = css
+      .split("\n")
+      .filter((line) => /^\.harbor-(code|chat-main|agent-main)\b[^{]*\{.*\}$/.test(line.trim()));
+    expect(panelRules.length).toBeGreaterThan(0);
+    for (const rule of panelRules) {
+      expect(rule).not.toMatch(/height:\s*100%/);
+    }
+    // The pane grid needs padding on all four sides so the last pane keeps its border.
+    expect(css).toContain(".harbor-code > .harbor-code-panes {\n  min-height: 0;\n  padding: 12px 14px;");
+
+    // The Panes heading was clipped to screen-reader-only once, which left its
+    // add button floating in the rail with nothing naming it.
+    const heading = css.slice(css.indexOf(".harbor-code-shell .harbor-pane-list-heading > span {"));
+    expect(heading.slice(0, heading.indexOf("}"))).not.toMatch(/clip:|width:\s*1px/);
+
+    // Rail icons are SVG on one grid; glyph metrics used to need !important.
+    expect(css).not.toMatch(/\.harbor-pane-row-icon[^{]*\{[^}]*!important/);
   });
 });

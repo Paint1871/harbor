@@ -48,7 +48,7 @@ mod tests {
         commands::settings_set(&pool, "onboarded_local", json!(true))
             .await
             .unwrap();
-        commands::settings_set(&pool, "local_profile_name", json!("Builder"))
+        commands::settings_set(&pool, "local_profile_name", json!("Ada"))
             .await
             .unwrap();
         assert_eq!(
@@ -61,7 +61,7 @@ mod tests {
             commands::settings_get(&pool, "local_profile_name")
                 .await
                 .unwrap(),
-            json!("Builder")
+            json!("Ada")
         );
 
         let tables: Vec<String> =

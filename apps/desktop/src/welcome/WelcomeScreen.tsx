@@ -1,4 +1,5 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
 import { Logo } from "@harbor/ui/Logo";
 import { useTheme } from "@harbor/ui/ThemeProvider";
@@ -25,13 +26,26 @@ function RisingLine({ text, offset }: { text: string; offset: number }) {
 export function WelcomeScreen({ onStartLocal }: WelcomeScreenProps) {
   const { reducedMotion } = useTheme();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [name, setName] = useState("Builder");
+  const [name, setName] = useState("Local");
   const [busy, setBusy] = useState(false);
+
+  // The OS account is a suggestion; nothing is stored until Start local.
+  useEffect(() => {
+    let cancelled = false;
+    void invoke<string>("default_profile_name")
+      .then((suggested) => {
+        if (!cancelled && suggested.trim()) setName(suggested.trim());
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function start(profileName: string) {
     setBusy(true);
     try {
-      await onStartLocal(profileName.trim() || "Builder");
+      await onStartLocal(profileName.trim() || "Local");
     } finally {
       setBusy(false);
     }
@@ -56,7 +70,7 @@ export function WelcomeScreen({ onStartLocal }: WelcomeScreenProps) {
         <RisingLine text={TAGLINE[1]} offset={TAGLINE[0].length + 4} />
       </p>
       <div className="harbor-welcome-actions">
-        <Button variant="primary" disabled={busy} onClick={() => void start("Builder")}>
+        <Button variant="primary" disabled={busy} onClick={() => void start(name)}>
           Start local
         </Button>
         <Button disabled={busy} onClick={() => setProfileOpen(true)}>

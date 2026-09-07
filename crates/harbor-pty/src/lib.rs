@@ -229,18 +229,34 @@ pub fn recv_deadline(rx: &Receiver<Vec<u8>>, needle: &str, timeout: Duration) ->
 mod tests {
     use super::*;
 
+    // `Path::is_absolute` is platform-specific: on Windows `/bin/zsh` has no
+    // drive prefix and is therefore relative, so the fixtures must be native.
+    #[cfg(unix)]
+    const GRANTED: &str = "/bin/zsh";
+    #[cfg(unix)]
+    const UNLISTED: &str = "/bin/bash";
+    #[cfg(unix)]
+    const WORKDIR: &str = "/tmp";
+    #[cfg(windows)]
+    const GRANTED: &str = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+    #[cfg(windows)]
+    const UNLISTED: &str = r"C:\Windows\System32\cmd.exe";
+    #[cfg(windows)]
+    const WORKDIR: &str = r"C:\Windows\Temp";
+
     #[test]
     fn refuses_relative_and_unlisted_programs() {
-        let allow = vec![PathBuf::from("/bin/zsh")];
+        let allow = vec![PathBuf::from(GRANTED)];
+        let cwd = Path::new(WORKDIR);
         assert_eq!(
-            prepare_spawn(Path::new("zsh"), Path::new("/tmp"), &allow).unwrap_err(),
+            prepare_spawn(Path::new("zsh"), cwd, &allow).unwrap_err(),
             PtyError::Relative
         );
         assert_eq!(
-            prepare_spawn(Path::new("/bin/bash"), Path::new("/tmp"), &allow).unwrap_err(),
+            prepare_spawn(Path::new(UNLISTED), cwd, &allow).unwrap_err(),
             PtyError::Denied
         );
-        assert!(prepare_spawn(Path::new("/bin/zsh"), Path::new("/tmp"), &allow).is_ok());
+        assert!(prepare_spawn(Path::new(GRANTED), cwd, &allow).is_ok());
     }
 
     #[test]

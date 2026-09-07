@@ -158,8 +158,18 @@ export interface ContentPart {
   path?: string | null;
 }
 
+export interface Notification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: number;
+}
+
 export interface HarborCommands {
   settings_get: (key: string) => Promise<unknown>;
+  default_profile_name: () => Promise<string>;
   settings_set: (key: string, value: unknown) => Promise<void>;
 
   engines_detect: () => Promise<DetectedEngine[]>;
@@ -170,6 +180,7 @@ export interface HarborCommands {
   workspace_add: (folder: string) => Promise<Workspace>;
   workspace_remove: (id: string) => Promise<void>;
   workspace_pin: (id: string, pinned: boolean) => Promise<void>;
+  workspace_rename: (id: string, title: string) => Promise<Workspace>;
   workspace_save_layout: (tabId: string, layout: PaneLayout) => Promise<void>;
   workspace_tidy: (tabId: string) => Promise<PaneLayout>;
   workspace_ensure_tab: (workspaceId: string) => Promise<WorkspaceTab>;
@@ -228,6 +239,8 @@ export interface HarborCommands {
   places_revoke: (id: string) => Promise<void>;
   session_search: (agentId: string, query: string) => Promise<SearchHit[]>;
   mail_send: (fromAgentId: string, toAgentId: string, body: string) => Promise<void>;
+  notifications_list: () => Promise<Notification[]>;
+  notifications_mark_read: () => Promise<void>;
   face_preview: (agentId: string, faceIndex: number) => Promise<{ pngB64: string }>;
 
   acp_permission_resolve: (id: string, optionId: string | null, cancelled: boolean) => Promise<void>;

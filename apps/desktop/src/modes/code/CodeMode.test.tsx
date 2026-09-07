@@ -61,6 +61,12 @@ beforeEach(() => {
     if (command === "workspace_list") return Promise.resolve([workspace]);
     if (command === "workspace_ensure_tab") return Promise.resolve(tab);
     if (command === "pane_create") return Promise.resolve("files-2");
+    if (command === "engines_detect") {
+      return Promise.resolve([
+        { id: "claude-code", displayName: "Claude Code", status: "ready", path: "/usr/local/bin/claude", supportsTerminal: true, supportsChat: true },
+        { id: "codex", displayName: "Codex", status: "ready", path: "/usr/local/bin/codex", supportsTerminal: true, supportsChat: true },
+      ]);
+    }
     if (command === "workspace_save_layout") return Promise.resolve();
     if (command === "settings_set") return Promise.resolve();
     return Promise.resolve([]);
@@ -114,4 +120,29 @@ it("lets a terminal pane choose a different CLI from its actions menu", async ()
   fireEvent.click(screen.getByRole("button", { name: "More Claude Code" }));
   fireEvent.change(screen.getByRole("combobox", { name: "CLI for Claude Code" }), { target: { value: "shell" } });
   await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("pane_set_engine", { id: "term-1", engineId: "shell" }));
+});
+
+it("starts a new terminal on the CLI the builder picks, not the one already open", async () => {
+  // Engine detection only runs inside the native host.
+  vi.stubGlobal("__TAURI_INTERNALS__", {});
+  render(
+    <ChromeProvider value={chrome}>
+      <CodeMode />
+    </ChromeProvider>,
+  );
+  await screen.findByText("Terminal paused");
+  await screen.findByRole("button", { name: "Add code pane" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Add code pane" }));
+  // Every installed CLI is offered directly, so Codex takes one click.
+  fireEvent.click(await screen.findByRole("menuitem", { name: /Codex/ }));
+
+  await waitFor(() =>
+    expect(mocks.invoke).toHaveBeenCalledWith("pane_create", {
+      tabId: "tab-1",
+      kind: "terminal",
+      state: { kind: "terminal", cwd: "/tmp/project", paused: false, engineId: "codex" },
+    }),
+  );
+  vi.unstubAllGlobals();
 });

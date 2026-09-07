@@ -3,7 +3,9 @@
   "identifier": "main",
   "description": "Local main window only. Files are restricted to host-granted roots. Process creation stays in Rust behind ExecutableAllowlist; no renderer shell commands are enabled.",
   "local": true,
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
@@ -20,6 +22,7 @@
     "allow-workspace-pick-folder",
     "allow-workspace-remove",
     "allow-workspace-pin",
+    "allow-workspace-rename",
     "allow-thread-list",
     "allow-thread-create",
     "allow-thread-history",
@@ -78,6 +81,9 @@
     "allow-plugin-grants-list",
     "allow-session-search",
     "allow-mail-send",
+    "allow-default-profile-name",
+    "allow-notifications-list",
+    "allow-notifications-mark-read",
     "allow-dictation-begin",
     "allow-dictation-end",
     "allow-dictation-devices",
@@ -86,12 +92,19 @@
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
     "fs:allow-read-dir",
-    { "identifier": "fs:scope", "allow": [] },
+    {
+      "identifier": "fs:scope",
+      "allow": []
+    },
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "https://github.com/**" },
-        { "url": "https://api.github.com/**" }
+        {
+          "url": "https://github.com/**"
+        },
+        {
+          "url": "https://api.github.com/**"
+        }
       ]
     },
     "clipboard-manager:allow-read-text",

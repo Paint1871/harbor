@@ -92,26 +92,85 @@ export function dropLeaf(layout: PaneLayout, paneId: string): PaneLayout | null 
   }
 }
 
-export function splitLeaf(layout: PaneLayout, paneId: string, newPaneId: string): PaneLayout {
+/**
+ * Split `paneId` in two. `dir` follows the pane's own shape at the call site:
+ * splitting a tall pane into columns (or a wide one into rows) is what made new
+ * panes look wedged in.
+ */
+export function splitLeaf(
+  layout: PaneLayout,
+  paneId: string,
+  newPaneId: string,
+  dir: "h" | "v" = "h",
+): PaneLayout {
   switch (layout.type) {
     case "leaf":
       if (layout.paneId !== paneId) return layout;
       return {
         type: "split",
-        dir: "h",
+        dir,
         ratio: 0.5,
         a: layout,
         b: { type: "leaf", paneId: newPaneId },
       };
     case "split":
       if (containsPane(layout.a, paneId)) {
-        return { ...layout, a: splitLeaf(layout.a, paneId, newPaneId) };
+        return { ...layout, a: splitLeaf(layout.a, paneId, newPaneId, dir) };
       }
       if (containsPane(layout.b, paneId)) {
-        return { ...layout, b: splitLeaf(layout.b, paneId, newPaneId) };
+        return { ...layout, b: splitLeaf(layout.b, paneId, newPaneId, dir) };
       }
       return layout;
     case "tabs":
       return layout;
+  }
+}
+
+/**
+ * Which way a new pane should divide `paneId`.
+ *
+ * Walks the tree to work out the pane's own box, then splits its long axis. A
+ * fixed direction is what wedged new panes into slivers: splitting an already
+ * narrow column into two narrower columns.
+ */
+export function preferredSplitDir(
+  layout: PaneLayout,
+  paneId: string,
+  width: number,
+  height: number,
+): "h" | "v" {
+  const box = leafBox(layout, paneId, width, height);
+  if (!box) return width >= height ? "h" : "v";
+  return box.width >= box.height ? "h" : "v";
+}
+
+function leafBox(
+  node: PaneLayout,
+  paneId: string,
+  width: number,
+  height: number,
+): { width: number; height: number } | null {
+  switch (node.type) {
+    case "leaf":
+      return node.paneId === paneId ? { width, height } : null;
+    case "tabs":
+      // Tabs stack in place, so every child fills the same box.
+      return node.kids.includes(paneId) ? { width, height } : null;
+    case "split": {
+      const horizontal = node.dir !== "v";
+      const ratio = Math.min(0.95, Math.max(0.05, node.ratio));
+      if (horizontal) {
+        const first = width * ratio;
+        return (
+          leafBox(node.a, paneId, first, height)
+          ?? leafBox(node.b, paneId, width - first, height)
+        );
+      }
+      const first = height * ratio;
+      return (
+        leafBox(node.a, paneId, width, first)
+        ?? leafBox(node.b, paneId, width, height - first)
+      );
+    }
   }
 }

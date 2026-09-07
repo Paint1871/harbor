@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ThemeProvider } from "@harbor/ui/ThemeProvider";
 import type { Theme } from "@harbor/ui/theme";
 import { DesktopShell } from "./chrome/DesktopShell";
@@ -26,7 +27,15 @@ export function App() {
       settingsGet("last_mode"),
     ]).then(([onboardedValue, name, appearance, reduceMotionValue, startupValue, lastModeValue]) => {
       setOnboarded(onboardedValue === true);
-      if (typeof name === "string" && name.trim()) setProfileName(name);
+      if (typeof name === "string" && name.trim()) {
+        setProfileName(name);
+      } else {
+        void invoke<string>("default_profile_name")
+          .then((suggested) => {
+            if (suggested.trim()) setProfileName(suggested.trim());
+          })
+          .catch(() => undefined);
+      }
       if (appearance === "black" || appearance === "light") setTheme(appearance);
       if (reduceMotionValue === true) setReduceMotion(true);
       const startup: StartupMode = startupValue === "welcome" || startupValue === "agent" || startupValue === "last" ? startupValue : "last";

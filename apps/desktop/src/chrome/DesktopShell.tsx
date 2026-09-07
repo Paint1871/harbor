@@ -89,6 +89,10 @@ export function DesktopShell({
           onToggleRail={() => setRailOpen((open) => !open)}
           onTidy={() => tidyHandler.current()}
           onBellClick={() => setInboxOpen((open) => !open)}
+          onOpenVoiceSettings={() => {
+            setSettingsPage("voice");
+            setSettingsOpen(true);
+          }}
         />
         <Inbox open={inboxOpen} />
         {settingsOpen ? (

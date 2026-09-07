@@ -9,10 +9,16 @@ use crate::{
     settings,
     types::{
         AgentChat, AgentRecord, ChatMessage, CreateAgent, DetectedEngine, FileDiff, FsEntry,
-        Memory, PaneLayout, PaneState, Place, PluginApproval, PluginGrant, PluginRow, SearchHit,
-        ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup, WorkspaceTab,
+        Memory, Notification, PaneLayout, PaneState, Place, PluginApproval, PluginGrant, PluginRow,
+        SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup,
+        WorkspaceTab,
     },
 };
+
+/// Suggested only. Nothing writes it until the builder confirms Start local.
+pub fn default_profile_name() -> String {
+    settings::os_account_name()
+}
 
 pub async fn settings_get(pool: &SqlitePool, key: &str) -> Result<Value, Error> {
     Ok(settings::get(pool, key).await?.unwrap_or(Value::Null))
@@ -59,6 +65,14 @@ pub async fn workspace_remove(pool: &SqlitePool, id: String) -> Result<(), Error
 
 pub async fn workspace_pin(pool: &SqlitePool, id: String, pinned: bool) -> Result<(), Error> {
     crate::workspaces::pin(pool, &id, pinned).await
+}
+
+pub async fn workspace_rename(
+    pool: &SqlitePool,
+    id: String,
+    title: String,
+) -> Result<Workspace, Error> {
+    crate::workspaces::rename(pool, &id, &title).await
 }
 
 pub async fn workspace_save_layout(
@@ -315,6 +329,14 @@ pub async fn mail_send(
     body: String,
 ) -> Result<(), Error> {
     crate::mail::send(pool, &from_agent_id, &to_agent_id, &body).await
+}
+
+pub async fn notifications_list(pool: &SqlitePool) -> Result<Vec<Notification>, Error> {
+    crate::mail::notifications(pool).await
+}
+
+pub async fn notifications_mark_read(pool: &SqlitePool) -> Result<(), Error> {
+    crate::mail::mark_notifications_read(pool).await
 }
 
 pub async fn face_preview(

@@ -76,11 +76,39 @@ it("sends the launch profile and remembers it for the next workspace", async () 
   });
 });
 
-it("keeps a different CLI choice for each terminal", async () => {
+it("applies one CLI to every terminal without asking per terminal", async () => {
   const onAdded = vi.fn();
   render(<AddWorkspace onAdded={onAdded} onClose={vi.fn()} />);
   await screen.findByText("1 installed CLI detected on this Mac.");
 
+  // No per-terminal control until the builder asks for one.
+  expect(screen.queryByRole("combobox", { name: "Terminal 1 CLI" })).toBeNull();
+  fireEvent.change(screen.getByRole("combobox", { name: "Terminal CLI" }), {
+    target: { value: "shell" },
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: "Or enter a full folder path" }), {
+    target: { value: workspace.folder },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
+
+  await waitFor(() => expect(onAdded).toHaveBeenCalledWith(workspace));
+  expect(mocks.invoke).toHaveBeenCalledWith("workspace_configure_tab", {
+    workspaceId: workspace.id,
+    setup: {
+      additionalTerminals: 1,
+      browserPreview: true,
+      threadPane: true,
+      terminalEngineIds: ["shell", "shell"],
+    },
+  });
+});
+
+it("keeps a different CLI choice for each terminal when asked", async () => {
+  const onAdded = vi.fn();
+  render(<AddWorkspace onAdded={onAdded} onClose={vi.fn()} />);
+  await screen.findByText("1 installed CLI detected on this Mac.");
+
+  fireEvent.click(screen.getByRole("checkbox", { name: /own CLI/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "Terminal 1 CLI" }), {
     target: { value: "shell" },
   });

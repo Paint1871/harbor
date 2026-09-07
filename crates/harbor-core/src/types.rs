@@ -232,3 +232,14 @@ pub struct PaneState {
     #[serde(default)]
     pub engine_id: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Notification {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub body: String,
+    pub read: bool,
+    pub created_at: i64,
+}

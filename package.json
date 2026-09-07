@@ -10,11 +10,12 @@
     "pnpm": "10.9.0"
   },
   "scripts": {
-    "check": "pnpm check:brand && pnpm check:workspace && pnpm check:rust",
+    "check": "pnpm check:brand && pnpm check:workspace && pnpm check:test && pnpm check:rust",
     "check:brand": "bash scripts/deny-brand.sh",
     "check:rust": "cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
     "check:workspace": "turbo run check",
-    "fmt": "cargo fmt --all"
+    "fmt": "cargo fmt --all",
+    "check:test": "turbo run test"
   },
   "devDependencies": {
     "turbo": "2.10.12"

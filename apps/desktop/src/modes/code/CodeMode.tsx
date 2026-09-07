@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
-import { RailRow } from "@harbor/ui/RailRow";
 import type { DetectedEngine, PaneLayout, PaneState, RestoredPane, Workspace, WorkspaceTab } from "@harbor/schema/commands";
-import { dropLeaf, leafPaneIds, restoredLayoutPaused, splitLeaf } from "../../layout/restore";
+import { dropLeaf, leafPaneIds, preferredSplitDir, restoredLayoutPaused, splitLeaf } from "../../layout/restore";
 import { tidy } from "../../layout/tidy";
 import { TerminalPane } from "../../panes/TerminalPane";
 import { FilesPane } from "../../panes/files/FilesPane";
 import { BrowserPane, createBrowserPaneState, type BrowserPaneState } from "../../panes/BrowserPane";
 import { createThreadPaneState, ThreadPane, type ThreadPaneState } from "../../panes/ThreadPane";
 import { AppRail } from "../../chrome/AppRail";
+import { PaneIcon, type PaneIconKind } from "../../chrome/icons";
+import { EngineMark } from "../../chrome/EngineMark";
 import { useChrome } from "../../chrome/chrome-context";
 import { settingsSet } from "../../settings";
 import { AddWorkspace } from "../../workspaces/AddWorkspace";
+import { WorkspaceRailRow } from "../../workspaces/WorkspaceRailRow";
 
 const DEFAULT_LAYOUT: PaneLayout = {
   type: "split",
@@ -99,6 +101,8 @@ function SplitPanes({
       {renderSide(layout.a, (a) => onChange({ ...layout, a }))}
       <button
         type="button"
+        className="harbor-pane-divider"
+        data-dir={horizontal ? "h" : "v"}
         aria-label="Resize panes"
         onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
           const parent = event.currentTarget.parentElement;
@@ -153,6 +157,7 @@ export function CodeMode({
   const activeWorkspaceIdRef = useRef<string | null>(null);
   const workspaceRequestRef = useRef(0);
   const layoutRef = useRef(layout);
+  const panesRootRef = useRef<HTMLDivElement>(null);
   const layoutActionRef = useRef(0);
   const layoutWritesRef = useRef<Promise<void>>(Promise.resolve());
   const engineChangeRef = useRef<Record<string, number>>({});
@@ -388,19 +393,31 @@ export function CodeMode({
     if (focused === paneId) setFocused(leafPaneIds(next)[0] ?? null);
   }
 
-  async function createPane(kind: CodePaneKind, paneId = focused ?? leaves[0]) {
+  /** Split along the pane's long axis so the two halves stay usable. */
+  function splitDirectionFor(paneId: string): "h" | "v" {
+    const grid = panesRootRef.current?.getBoundingClientRect();
+    return preferredSplitDir(layoutRef.current, paneId, grid?.width ?? 1, grid?.height ?? 1);
+  }
+
+  async function createPane(
+    kind: CodePaneKind,
+    paneId = focused ?? leaves[0],
+    engineId?: string,
+  ) {
     if (!tabId || !workspace || !paneId) return;
     const action = ++layoutActionRef.current;
     setLayoutError(null);
     const state: PaneState = { kind, cwd: workspace.folder, paused: false };
     if (kind === "terminal") {
-      state.engineId = panes.find((pane) => pane.id === paneId && pane.kind === "terminal")?.engineId
+      state.engineId = engineId
+        ?? panes.find((pane) => pane.id === paneId && pane.kind === "terminal")?.engineId
         ?? panes.find((pane) => pane.kind === "terminal")?.engineId
         ?? "shell";
     }
+    const dir = splitDirectionFor(paneId);
     try {
       const created = await invoke<string>("pane_create", { tabId, kind, state });
-      const next = splitLeaf(layoutRef.current, paneId, created);
+      const next = splitLeaf(layoutRef.current, paneId, created, dir);
       if (layoutActionRef.current !== action || !leafPaneIds(next).includes(created)) {
         await invoke("pane_close", { id: created }).catch(() => undefined);
         return;
@@ -547,15 +564,23 @@ export function CodeMode({
     return renderPane(node.paneId);
   }
 
+  /** Every installed terminal CLI is one click away, plus a plain shell. */
+  const terminalStarters = [
+    ...detectedEngines
+      .filter((engine) => engine.supportsTerminal !== false && engine.status !== "cli-missing" && Boolean(engine.path))
+      .map((engine) => ({ engineId: engine.id, label: engine.displayName })),
+    { engineId: "shell", label: "Shell" },
+  ];
   const paneLabel = (kind: CodePaneKind) => ({ terminal: "Terminal", files: "Files", browser: "localhost:3000", thread: "Thread" })[kind];
   const paneRowLabel = (paneId: string) => {
     const kind = paneKind(paneId, panes);
     return kind === "terminal" ? terminalPaneLabel(paneId) : paneLabel(kind);
   };
-  const paneRowIcon = (paneId: string) => {
+  const paneRowIconKind = (paneId: string): PaneIconKind => {
     const kind = paneKind(paneId, panes);
-    if (kind === "terminal") return terminalPaneLabel(paneId) === "Claude Code" ? "✳" : "›_";
-    return kind === "files" ? "⌁" : kind === "browser" ? "◎" : "✣";
+    if (kind !== "terminal") return kind;
+    // A terminal running an engine reads as an agent seat, a bare shell does not.
+    return terminalPaneLabel(paneId) === "Claude Code" ? "agent" : "terminal";
   };
 
   return (
@@ -570,17 +595,18 @@ export function CodeMode({
               </Button>
             </div>
             {workspaces.length ? workspaces.map((row) => (
-              <RailRow
+              <WorkspaceRailRow
                 key={row.id}
                 className="harbor-code-workspace-row"
-                label={row.title ?? row.folder}
+                workspace={row}
                 description={row.folder}
-                title={row.folder}
-                leading={<span className="harbor-code-workspace-chevron" aria-hidden="true">⌄</span>}
                 selected={row.id === workspace?.id}
-                onClick={() => {
+                onSelect={() => {
                   setDestination("mode");
                   void openWorkspace(row);
+                }}
+                onRenamed={(updated) => {
+                  setWorkspaces((rows) => rows.map((item) => (item.id === updated.id ? updated : item)));
                 }}
               />
             )) : <p className="harbor-rail-empty">Add a folder to start coding.</p>}
@@ -600,7 +626,23 @@ export function CodeMode({
                 </button>
                 {paneAddOpen ? (
                   <div className="harbor-pane-menu" role="menu">
-                    {(["terminal", "files", "browser", "thread"] as CodePaneKind[]).map((kind) => (
+                    <p className="harbor-pane-menu-heading">Terminal</p>
+                    {terminalStarters.map((starter) => (
+                      <button
+                        key={starter.engineId}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setPaneAddOpen(false);
+                          void createPane("terminal", undefined, starter.engineId);
+                        }}
+                      >
+                        <EngineMark engineId={starter.engineId} label={starter.label} size={13} />
+                        <span>{starter.label}</span>
+                      </button>
+                    ))}
+                    <p className="harbor-pane-menu-heading">Pane</p>
+                    {(["files", "browser", "thread"] as CodePaneKind[]).map((kind) => (
                       <button
                         key={kind}
                         type="button"
@@ -610,7 +652,8 @@ export function CodeMode({
                           void createPane(kind);
                         }}
                       >
-                        {paneLabel(kind)}
+                        <PaneIcon kind={kind} />
+                        <span>{paneLabel(kind)}</span>
                       </button>
                     ))}
                   </div>
@@ -627,8 +670,16 @@ export function CodeMode({
                     data-selected={focused === id}
                     onClick={() => setFocused(id)}
                   >
-                    <span className={`harbor-pane-row-icon harbor-pane-row-icon-${paneKind(id, panes)}`} aria-hidden="true">
-                      {paneRowIcon(id)}
+                    <span className="harbor-pane-row-icon">
+                      {paneKind(id, panes) === "terminal" ? (
+                        <EngineMark
+                          engineId={panes.find((pane) => pane.id === id)?.engineId}
+                          label={terminalPaneLabel(id)}
+                          size={13}
+                        />
+                      ) : (
+                        <PaneIcon kind={paneRowIconKind(id)} />
+                      )}
                     </span>
                     {paneRowLabel(id)}
                   </button>
@@ -639,7 +690,7 @@ export function CodeMode({
         </AppRail>
       ) : null}
       <div className="harbor-stage-panel harbor-code">
-        <div className="harbor-code-panes" style={{ gridTemplateColumns: "1fr" }}>
+        <div className="harbor-code-panes" ref={panesRootRef} style={{ gridTemplateColumns: "1fr" }}>
           {renderLayout(layout, (next) => {
             ++layoutActionRef.current;
             setLayoutError(null);

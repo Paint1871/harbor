@@ -61,6 +61,45 @@ pub async fn add(pool: &SqlitePool, folder: String) -> Result<Workspace, Error> 
     })
 }
 
+/// A display name for the rail. Blank resets to the folder's own name, so a
+/// builder can always get the default back without re-adding the folder.
+pub async fn rename(pool: &SqlitePool, id: &str, title: &str) -> Result<Workspace, Error> {
+    let folder: Option<(String,)> = sqlx::query_as("SELECT folder FROM workspaces WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    let (folder,) = folder.ok_or_else(|| Error::Message("workspace not found".into()))?;
+
+    let trimmed = title.trim();
+    let title = if trimmed.is_empty() {
+        std::path::Path::new(&folder)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Workspace")
+            .to_string()
+    } else {
+        if trimmed.chars().count() > 60 {
+            return Err(Error::Message("Use 60 characters or fewer.".into()));
+        }
+        trimmed.to_string()
+    };
+
+    let (id, folder, title, pinned) = sqlx::query_as::<_, (String, String, Option<String>, i64)>(
+        "UPDATE workspaces SET title = ?1 WHERE id = ?2
+         RETURNING id, folder, title, pinned",
+    )
+    .bind(&title)
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+    Ok(Workspace {
+        id,
+        folder,
+        title,
+        pinned: pinned != 0,
+    })
+}
+
 pub async fn remove(pool: &SqlitePool, id: &str) -> Result<(), Error> {
     sqlx::query("DELETE FROM workspaces WHERE id = ?1")
         .bind(id)
@@ -112,5 +151,34 @@ mod tests {
             .await
             .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn rename_trims_resets_on_blank_and_rejects_long_titles() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = crate::db::open(&dir.path().join("state/db.sqlite"))
+            .await
+            .unwrap();
+        let folder = dir.path().join("Free Project");
+        std::fs::create_dir_all(&folder).unwrap();
+        let added = add(&pool, folder.to_string_lossy().into_owned())
+            .await
+            .unwrap();
+        assert_eq!(added.title.as_deref(), Some("Free Project"));
+
+        let renamed = rename(&pool, &added.id, "  Launch work  ").await.unwrap();
+        assert_eq!(renamed.title.as_deref(), Some("Launch work"));
+        assert_eq!(renamed.id, added.id);
+        assert_eq!(
+            list(&pool).await.unwrap()[0].title.as_deref(),
+            Some("Launch work")
+        );
+
+        // Blank restores the folder's own name rather than leaving an empty rail row.
+        let reset = rename(&pool, &added.id, "   ").await.unwrap();
+        assert_eq!(reset.title.as_deref(), Some("Free Project"));
+
+        assert!(rename(&pool, &added.id, &"x".repeat(61)).await.is_err());
+        assert!(rename(&pool, "missing", "Nope").await.is_err());
     }
 }
