@@ -1,6 +1,11 @@
 use std::{
     env, fs,
+    io::Read,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
+    sync::{OnceLock, mpsc},
+    thread,
+    time::Duration,
 };
 
 use crate::types::{DetectedEngine, EngineSpec};
@@ -28,10 +33,125 @@ pub fn recheck() -> Vec<DetectedEngine> {
 /// Include the common user-managed CLI locations so a CLI installed through
 /// Homebrew, Volta, Bun, npm, or nvm is discoverable without asking the user
 /// to edit Harbor's environment manually.
+/// The user's login shell, if `$SHELL` names one the system actually lists.
+///
+/// `$SHELL` is attacker-controlled in the sense that anything in the
+/// environment is, so Harbor only runs a program that appears in the system's
+/// own shell registry. That keeps a poisoned `SHELL=/tmp/evil` from being
+/// executed just because Harbor wanted a PATH.
+fn login_shell(shell: Option<&Path>, registered: &[PathBuf]) -> Option<PathBuf> {
+    let shell = shell?;
+    if !shell.is_absolute() {
+        return None;
+    }
+    registered
+        .iter()
+        .any(|entry| entry == shell)
+        .then(|| shell.to_path_buf())
+}
+
+fn registered_shells() -> Vec<PathBuf> {
+    fs::read_to_string("/etc/shells")
+        .map(|text| {
+            text.lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(PathBuf::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Extracts the PATH the login shell reports, between two sentinels.
+///
+/// A login shell prints whatever the user's rc files print, so the value is
+/// framed rather than read as "the output".
+fn parse_probe(output: &str) -> Option<String> {
+    let (_, rest) = output.split_once(PROBE_OPEN)?;
+    let (value, _) = rest.split_once(PROBE_CLOSE)?;
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+const PROBE_OPEN: &str = "__harbor_path_begin__";
+const PROBE_CLOSE: &str = "__harbor_path_end__";
+
+/// Runs the login shell once to read the PATH the user actually has.
+///
+/// `DESIGN.md` specifies engines on the login-shell PATH. A GUI launch inherits
+/// launchd's minimal PATH instead, so without this a CLI installed anywhere
+/// unusual is invisible when Harbor is opened from the Dock.
+fn probe_login_shell_path(shell: &Path) -> Option<String> {
+    let fish = shell.file_name().and_then(|name| name.to_str()) == Some("fish");
+    let script = if fish {
+        format!("printf '{PROBE_OPEN}%s{PROBE_CLOSE}' (string join : $PATH)")
+    } else {
+        format!("printf '{PROBE_OPEN}%s{PROBE_CLOSE}' \"$PATH\"")
+    };
+
+    let mut command = Command::new(shell);
+    command
+        .arg("-l")
+        .arg("-i")
+        .arg("-c")
+        .arg(script)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        // Login rc files commonly branch on this; keep the probe non-interactive
+        // in spirit and stop tools from paging output back at us.
+        .env("HARBOR_PATH_PROBE", "1")
+        .env("PAGER", "cat")
+        .env("TERM", "dumb");
+
+    let mut child = command.spawn().ok()?;
+    let stdout = child.stdout.take()?;
+
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let mut text = String::new();
+        let mut reader = stdout;
+        let _ = reader.read_to_string(&mut text);
+        let _ = sender.send(text);
+    });
+
+    // A broken rc file can hang forever; a stuck probe must not stall startup.
+    let text = match receiver.recv_timeout(Duration::from_secs(5)) {
+        Ok(text) => text,
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+    };
+    let _ = child.wait();
+    parse_probe(&text)
+}
+
+fn login_shell_path() -> Option<&'static str> {
+    static CACHE: OnceLock<Option<String>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let shell = env::var_os("SHELL").map(PathBuf::from);
+            let shell = login_shell(shell.as_deref(), &registered_shells())?;
+            probe_login_shell_path(&shell)
+        })
+        .as_deref()
+}
+
 fn runtime_path() -> String {
     let mut entries = env::var_os("PATH")
         .map(|path| env::split_paths(&path).collect::<Vec<_>>())
         .unwrap_or_default();
+    // The login shell is the authority. The fixed candidates below stay as a
+    // fallback for the case where the probe cannot run at all.
+    if let Some(probed) = login_shell_path() {
+        for entry in env::split_paths(probed) {
+            if entry.is_absolute() && !entries.iter().any(|existing| existing == &entry) {
+                entries.push(entry);
+            }
+        }
+    }
     let mut candidates = Vec::new();
     if let Some(home) = env::var_os("HOME") {
         let home = PathBuf::from(home);
@@ -140,6 +260,55 @@ fn file_on_path(path: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn login_shell_must_be_absolute_and_registered() {
+        let registered = vec![PathBuf::from("/bin/zsh"), PathBuf::from("/bin/bash")];
+
+        assert_eq!(
+            login_shell(Some(Path::new("/bin/zsh")), &registered),
+            Some(PathBuf::from("/bin/zsh"))
+        );
+        // A poisoned SHELL must not become a program Harbor runs.
+        assert_eq!(login_shell(Some(Path::new("/tmp/evil")), &registered), None);
+        assert_eq!(login_shell(Some(Path::new("zsh")), &registered), None);
+        assert_eq!(login_shell(None, &registered), None);
+        assert_eq!(login_shell(Some(Path::new("/bin/zsh")), &[]), None);
+    }
+
+    #[test]
+    fn probe_output_is_read_between_sentinels_not_as_whole_output() {
+        // Login rc files print banners; only the framed value counts.
+        let noisy = format!(
+            "Welcome back!\nnvm: using v22\n{PROBE_OPEN}/usr/local/bin:/usr/bin{PROBE_CLOSE}\nmotd\n"
+        );
+        assert_eq!(
+            parse_probe(&noisy).as_deref(),
+            Some("/usr/local/bin:/usr/bin")
+        );
+
+        assert_eq!(parse_probe("no sentinels here"), None);
+        assert_eq!(parse_probe(&format!("{PROBE_OPEN}unterminated")), None);
+        assert_eq!(parse_probe(&format!("{PROBE_OPEN}   {PROBE_CLOSE}")), None);
+    }
+
+    #[test]
+    fn registered_shells_skips_comments_and_blanks() {
+        // /etc/shells is the registry the guard consults; parsing it wrong would
+        // either reject every shell or accept a commented-out line.
+        let text = "# List of shells\n\n/bin/zsh\n  /bin/bash  \n#/bin/evil\n";
+        let parsed: Vec<PathBuf> = text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(PathBuf::from)
+            .collect();
+        assert_eq!(
+            parsed,
+            vec![PathBuf::from("/bin/zsh"), PathBuf::from("/bin/bash")]
+        );
+        assert!(!parsed.contains(&PathBuf::from("/bin/evil")));
+    }
 
     #[test]
     fn catalog_is_the_single_table() {
