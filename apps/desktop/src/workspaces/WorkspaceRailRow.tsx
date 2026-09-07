@@ -20,8 +20,11 @@ interface WorkspaceRailRowProps {
 
 /**
  * A workspace row that can be renamed in place. `RailRow` is a button, so the
- * editor replaces the row rather than nesting a control inside it. Rename opens
- * on double click or F2; Escape cancels and Enter commits.
+ * editor replaces the row rather than nesting a control inside it.
+ *
+ * Rename opens on right click or F2, never on double click: the row's own click
+ * expands and collapses the workspace, and the first click of a double click
+ * would toggle it shut on the way to renaming.
  */
 export function WorkspaceRailRow({
   workspace,
@@ -102,11 +105,14 @@ export function WorkspaceRailRow({
       className={className}
       label={name}
       description={description}
-      title={`${workspace.folder} — double click or F2 to rename`}
+      title={`${workspace.folder} — right click or F2 to rename`}
       leading={leading}
       selected={selected}
       onClick={onSelect}
-      onDoubleClick={open}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        open();
+      }}
       onKeyDown={(event) => {
         if (event.key === "F2") {
           event.preventDefault();

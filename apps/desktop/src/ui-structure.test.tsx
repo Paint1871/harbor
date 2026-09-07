@@ -177,10 +177,11 @@ describe("shipped Harbor chrome and mode trees", () => {
     // The pane grid needs padding on all four sides so the last pane keeps its border.
     expect(css).toContain(".harbor-code > .harbor-code-panes {\n  min-height: 0;\n  padding: 12px 14px;");
 
-    // The Panes heading was clipped to screen-reader-only once, which left its
-    // add button floating in the rail with nothing naming it.
-    const heading = css.slice(css.indexOf(".harbor-code-shell .harbor-pane-list-heading > span {"));
-    expect(heading.slice(0, heading.indexOf("}"))).not.toMatch(/clip:|width:\s*1px/);
+    // Panes are nested under their workspace now, so the add control is a row
+    // with a label. It used to be a lone + with a screen-reader-only heading.
+    expect(css).not.toContain(".harbor-pane-list-heading");
+    const addRow = css.slice(css.indexOf(".harbor-code-pane-add-row {"));
+    expect(addRow.slice(0, addRow.indexOf("}"))).not.toMatch(/clip:|width:\s*1px/);
 
     // Rail icons are SVG on one grid; glyph metrics used to need !important.
     expect(css).not.toMatch(/\.harbor-pane-row-icon[^{]*\{[^}]*!important/);

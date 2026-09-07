@@ -9,7 +9,7 @@ import { FilesPane } from "../../panes/files/FilesPane";
 import { BrowserPane, createBrowserPaneState, type BrowserPaneState } from "../../panes/BrowserPane";
 import { createThreadPaneState, ThreadPane, type ThreadPaneState } from "../../panes/ThreadPane";
 import { AppRail } from "../../chrome/AppRail";
-import { PaneIcon, type PaneIconKind } from "../../chrome/icons";
+import { DisclosureIcon, PaneIcon, type PaneIconKind } from "../../chrome/icons";
 import { EngineMark } from "../../chrome/EngineMark";
 import { useChrome } from "../../chrome/chrome-context";
 import { settingsSet } from "../../settings";
@@ -150,6 +150,7 @@ export function CodeMode({
   const [tabId, setTabId] = useState<string | null>(null);
   const [expandedPaneId, setExpandedPaneId] = useState<string | null>(null);
   const [paneAddOpen, setPaneAddOpen] = useState(false);
+  const [collapsedWorkspaces, setCollapsedWorkspaces] = useState<Record<string, boolean>>({});
   const [detectedEngines, setDetectedEngines] = useState<DetectedEngine[]>([]);
   const tabIdRef = useRef<string | null>(null);
   const workspacesRef = useRef(workspaces);
@@ -162,7 +163,7 @@ export function CodeMode({
   const layoutWritesRef = useRef<Promise<void>>(Promise.resolve());
   const engineChangeRef = useRef<Record<string, number>>({});
   const userSelectedWorkspaceRef = useRef(false);
-  const paneAddRef = useRef<HTMLDivElement>(null);
+  const paneAddRef = useRef<HTMLLIElement>(null);
   tabIdRef.current = tabId;
   workspacesRef.current = workspaces;
   panesRef.current = panes;
@@ -594,98 +595,109 @@ export function CodeMode({
                 <span aria-hidden="true">+</span>
               </Button>
             </div>
-            {workspaces.length ? workspaces.map((row) => (
-              <WorkspaceRailRow
-                key={row.id}
-                className="harbor-code-workspace-row"
-                workspace={row}
-                description={row.folder}
-                selected={row.id === workspace?.id}
-                onSelect={() => {
-                  setDestination("mode");
-                  void openWorkspace(row);
-                }}
-                onRenamed={(updated) => {
-                  setWorkspaces((rows) => rows.map((item) => (item.id === updated.id ? updated : item)));
-                }}
-              />
-            )) : <p className="harbor-rail-empty">Add a folder to start coding.</p>}
-            <div className="harbor-pane-list-heading">
-              <span>Panes</span>
-              <div className="harbor-pane-add" ref={paneAddRef}>
-                <button
-                  type="button"
-                  aria-label="Add code pane"
-                  title="Add code pane"
-                  aria-haspopup="menu"
-                  aria-expanded={paneAddOpen}
-                  disabled={!tabId}
-                  onClick={() => setPaneAddOpen((open) => !open)}
-                >
-                  +
-                </button>
-                {paneAddOpen ? (
-                  <div className="harbor-pane-menu" role="menu">
-                    <p className="harbor-pane-menu-heading">Terminal</p>
-                    {terminalStarters.map((starter) => (
-                      <button
-                        key={starter.engineId}
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setPaneAddOpen(false);
-                          void createPane("terminal", undefined, starter.engineId);
-                        }}
-                      >
-                        <EngineMark engineId={starter.engineId} label={starter.label} size={13} />
-                        <span>{starter.label}</span>
-                      </button>
-                    ))}
-                    <p className="harbor-pane-menu-heading">Pane</p>
-                    {(["files", "browser", "thread"] as CodePaneKind[]).map((kind) => (
-                      <button
-                        key={kind}
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setPaneAddOpen(false);
-                          void createPane(kind);
-                        }}
-                      >
-                        <PaneIcon kind={kind} />
-                        <span>{paneLabel(kind)}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <ul className="harbor-pane-rows" aria-label="Panes">
-              {leaves.map((id, index) => (
-                <li key={id}>
-                  <button
-                    type="button"
-                    className="harbor-code-pane-row"
-                    aria-label={`${paneRowLabel(id)} pane ${index + 1}`}
-                    data-selected={focused === id}
-                    onClick={() => setFocused(id)}
-                  >
-                    <span className="harbor-pane-row-icon">
-                      {paneKind(id, panes) === "terminal" ? (
-                        <EngineMark
-                          engineId={panes.find((pane) => pane.id === id)?.engineId}
-                          label={terminalPaneLabel(id)}
-                          size={13}
-                        />
-                      ) : (
-                        <PaneIcon kind={paneRowIconKind(id)} />
-                      )}
-                    </span>
-                    {paneRowLabel(id)}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {workspaces.length ? workspaces.map((row) => {
+              const active = row.id === workspace?.id;
+              const open = active && !collapsedWorkspaces[row.id];
+              return (
+                <div className="harbor-code-workspace" key={row.id}>
+                  <WorkspaceRailRow
+                    className="harbor-code-workspace-row"
+                    workspace={row}
+                    description={row.folder}
+                    leading={<DisclosureIcon open={open} />}
+                    selected={active}
+                    onSelect={() => {
+                      setDestination("mode");
+                      // Opening a folder is also what reveals its panes.
+                      if (active) {
+                        setCollapsedWorkspaces((current) => ({ ...current, [row.id]: !current[row.id] }));
+                      } else {
+                        setCollapsedWorkspaces((current) => ({ ...current, [row.id]: false }));
+                        void openWorkspace(row);
+                      }
+                    }}
+                    onRenamed={(updated) => {
+                      setWorkspaces((rows) => rows.map((item) => (item.id === updated.id ? updated : item)));
+                    }}
+                  />
+                  {open ? (
+                    <ul className="harbor-code-pane-rows" aria-label={`${row.title ?? row.folder} panes`}>
+                      {leaves.map((id, index) => (
+                        <li key={id}>
+                          <button
+                            type="button"
+                            className="harbor-code-pane-row"
+                            aria-label={`${paneRowLabel(id)} pane ${index + 1}`}
+                            data-selected={focused === id}
+                            onClick={() => setFocused(id)}
+                          >
+                            <span className="harbor-pane-row-icon">
+                              {paneKind(id, panes) === "terminal" ? (
+                                <EngineMark
+                                  engineId={panes.find((pane) => pane.id === id)?.engineId}
+                                  label={terminalPaneLabel(id)}
+                                  size={13}
+                                />
+                              ) : (
+                                <PaneIcon kind={paneRowIconKind(id)} />
+                              )}
+                            </span>
+                            {paneRowLabel(id)}
+                          </button>
+                        </li>
+                      ))}
+                      <li className="harbor-code-pane-add" ref={paneAddRef}>
+                        <button
+                          type="button"
+                          className="harbor-code-pane-row harbor-code-pane-add-row"
+                          aria-haspopup="menu"
+                          aria-expanded={paneAddOpen}
+                          disabled={!tabId}
+                          onClick={() => setPaneAddOpen((value) => !value)}
+                        >
+                          <span className="harbor-pane-row-icon" aria-hidden="true">+</span>
+                          New pane
+                        </button>
+                        {paneAddOpen ? (
+                          <div className="harbor-pane-menu" role="menu">
+                            <p className="harbor-pane-menu-heading">Terminal</p>
+                            {terminalStarters.map((starter) => (
+                              <button
+                                key={starter.engineId}
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setPaneAddOpen(false);
+                                  void createPane("terminal", undefined, starter.engineId);
+                                }}
+                              >
+                                <EngineMark engineId={starter.engineId} label={starter.label} size={13} />
+                                <span>{starter.label}</span>
+                              </button>
+                            ))}
+                            <p className="harbor-pane-menu-heading">Pane</p>
+                            {(["files", "browser", "thread"] as CodePaneKind[]).map((kind) => (
+                              <button
+                                key={kind}
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setPaneAddOpen(false);
+                                  void createPane(kind);
+                                }}
+                              >
+                                <PaneIcon kind={kind} />
+                                <span>{paneLabel(kind)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </li>
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            }) : <p className="harbor-rail-empty">Add a folder to start coding.</p>}
           </div>
         </AppRail>
       ) : null}

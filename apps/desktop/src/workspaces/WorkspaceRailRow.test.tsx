@@ -29,12 +29,12 @@ describe("WorkspaceRailRow", () => {
   afterEach(() => cleanup());
   beforeEach(() => mocks.invoke.mockReset());
 
-  it("renames on double click and reports the stored workspace", async () => {
+  it("renames on right click and reports the stored workspace", async () => {
     const renamed = { ...workspace, title: "Launch work" };
     mocks.invoke.mockResolvedValue(renamed);
     const { onRenamed } = renderRow();
 
-    fireEvent.doubleClick(screen.getByRole("button", { name: /Free Project/ }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Free Project/ }));
     const input = screen.getByLabelText("Rename Free Project");
     fireEvent.change(input, { target: { value: "Launch work" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -66,7 +66,7 @@ describe("WorkspaceRailRow", () => {
         : Promise.resolve([]),
     );
     renderRow();
-    fireEvent.doubleClick(screen.getByRole("button", { name: /Free Project/ }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Free Project/ }));
     const input = screen.getByLabelText("Rename Free Project");
     fireEvent.change(input, { target: { value: "x".repeat(61) } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -79,5 +79,13 @@ describe("WorkspaceRailRow", () => {
     const { onSelect } = renderRow();
     fireEvent.click(screen.getByRole("button", { name: /Free Project/ }));
     expect(onSelect).toHaveBeenCalled();
+  });
+
+  it("does not open the editor on a double click, which the row uses to expand", () => {
+    const { onSelect } = renderRow();
+    const row = screen.getByRole("button", { name: /Free Project/ });
+    fireEvent.doubleClick(row);
+    expect(screen.queryByLabelText("Rename Free Project")).toBeNull();
+    expect(onSelect).not.toHaveBeenCalledWith(expect.anything());
   });
 });

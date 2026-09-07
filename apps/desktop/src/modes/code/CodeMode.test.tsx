@@ -131,9 +131,9 @@ it("starts a new terminal on the CLI the builder picks, not the one already open
     </ChromeProvider>,
   );
   await screen.findByText("Terminal paused");
-  await screen.findByRole("button", { name: "Add code pane" });
+  await screen.findByRole("button", { name: "New pane" });
 
-  fireEvent.click(screen.getByRole("button", { name: "Add code pane" }));
+  fireEvent.click(screen.getByRole("button", { name: "New pane" }));
   // Every installed CLI is offered directly, so Codex takes one click.
   fireEvent.click(await screen.findByRole("menuitem", { name: /Codex/ }));
 
@@ -145,4 +145,25 @@ it("starts a new terminal on the CLI the builder picks, not the one already open
     }),
   );
   vi.unstubAllGlobals();
+});
+
+it("nests a workspace's panes under it and collapses them on a second click", async () => {
+  render(
+    <ChromeProvider value={chrome}>
+      <CodeMode />
+    </ChromeProvider>,
+  );
+  // Panes are visible without a click: an opened folder shows what is in it.
+  const pane = await screen.findByRole("button", { name: "Claude Code pane 1" });
+  expect(pane).toBeTruthy();
+  expect(screen.getByRole("button", { name: "New pane" })).toBeTruthy();
+
+  const workspaceRow = screen.getByRole("button", { name: /Project/ });
+  fireEvent.click(workspaceRow);
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Claude Code pane 1" })).toBeNull());
+  // The workspace itself stays listed, only its contents fold away.
+  expect(screen.getByRole("button", { name: /Project/ })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: /Project/ }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Claude Code pane 1" })).toBeTruthy());
 });
