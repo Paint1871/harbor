@@ -57,6 +57,12 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
   }, [agent.id, chrome?.destination]);
   const engineLabel = agent.engineId.replace(/-/g, " ");
   const selectedOption = (chat.activeId ? configChoice[chat.activeId] : undefined) ?? chat.configOptions[0]?.id ?? null;
+  const workingCount = Math.max(
+    chat.chats.filter((item) => item.status === "running").length,
+    chat.sending ? 1 : 0,
+    agent.trailing?.kind === "running" ? agent.trailing.n : 0,
+  );
+  const needsYou = chat.permissions.length > 0 || agent.trailing?.kind === "needs_you" || chat.chats.some((item) => item.status === "needs_you");
 
   return (
     <div className="harbor-agent-page">
@@ -67,7 +73,10 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
           <p>Powered by {engineLabel}</p>
         </div>
         <div className="harbor-agent-header-actions">
-          <span className="harbor-agent-status"><span className="harbor-live-dot" data-on="false" />0 working</span>
+          <span className="harbor-agent-status">
+            <span className="harbor-live-dot" data-on={needsYou || workingCount > 0} />
+            {needsYou ? "Needs you" : `${workingCount} working`}
+          </span>
           <div className="harbor-agent-tabs" role="tablist" aria-label="Agent sections">
             <button type="button" role="tab" aria-selected={tab === "chats"} onClick={() => setTab("chats")}>
               Chats

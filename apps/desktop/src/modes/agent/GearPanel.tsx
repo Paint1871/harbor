@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@harbor/ui/Button";
-import type { AgentChat, AgentRecord, Memory, Place, PluginGrant, PluginRow, SearchHit } from "@harbor/schema/commands";
+import type { AgentChat, AgentRecord, DetectedEngine, Memory, Place, PluginGrant, PluginRow, SearchHit } from "@harbor/schema/commands";
 import { FacePicker } from "./FacePicker";
 
 interface GearPanelProps {
@@ -36,6 +36,12 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
   const [fact, setFact] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
   const [faceIndex, setFaceIndex] = useState(agent.faceIndex);
+  const [name, setName] = useState(agent.name);
+  const [brief, setBrief] = useState(agent.brief);
+  const [engineId, setEngineId] = useState(agent.engineId);
+  const [messaging, setMessaging] = useState(agent.messaging !== false);
+  const [homePath, setHomePath] = useState(agent.homePath ?? "");
+  const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -45,6 +51,11 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
 
   useEffect(() => {
     setFaceIndex(agent.faceIndex);
+    setName(agent.name);
+    setBrief(agent.brief);
+    setEngineId(agent.engineId);
+    setMessaging(agent.messaging !== false);
+    setHomePath(agent.homePath ?? "");
     setError(null);
     setQuery("");
     setHits([]);
@@ -60,7 +71,10 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     void invoke<PluginGrant[]>("plugin_grants_list", { agentId: agent.id })
       .then((grants) => setPluginGrants(Object.fromEntries(grants.map((grant) => [grant.pluginId, grant.enabled]))))
       .catch(() => setPluginGrants({}));
-  }, [agent.id, agent.faceIndex]);
+    void invoke<DetectedEngine[]>("engines_detect")
+      .then(setEngines)
+      .catch(() => setEngines([]));
+  }, [agent.id, agent.faceIndex, agent.name, agent.brief, agent.engineId, agent.messaging, agent.homePath]);
 
   async function addMemory() {
     const body = fact.trim();
@@ -85,6 +99,40 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
       setMemories((current) => current.filter((item) => item.id !== id));
     } catch {
       setError("That fact could not be removed. Please try again.");
+    }
+  }
+
+  async function saveIdentity() {
+    const nextName = name.trim();
+    if (!nextName || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await invoke("agent_update", {
+        input: { id: agent.id, name: nextName, brief, engineId, messaging },
+      });
+      onAgentChange?.({ ...agent, name: nextName, brief, engineId, messaging, homePath, faceIndex });
+    } catch {
+      setError("Those settings could not be saved. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setHome() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const path = await invoke<string | null>("workspace_pick_folder");
+      if (!path) return;
+      await invoke("agent_update", { input: { id: agent.id, homePath: path } });
+      setHomePath(path);
+      onAgentChange?.({ ...agent, homePath: path, name, brief, engineId, messaging, faceIndex });
+    } catch (reason) {
+      setError(`The home folder could not be set. ${String(reason)}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -217,7 +265,12 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
           <div><span className="harbor-eyebrow">ACCESS</span><h3>Places</h3></div>
           <span className="harbor-chip">{places.length}</span>
         </div>
-        <p className="harbor-muted">Folders this agent may read. Home is always included.</p>
+        <div className="harbor-gear-home">
+          <span className="harbor-eyebrow">HOME</span>
+          <p className="harbor-path">{homePath || "Not set — the engine starts in a temporary folder."}</p>
+          <Button disabled={busy} onClick={() => void setHome()}>Set home folder</Button>
+        </div>
+        <p className="harbor-muted">Extra folders this agent may read, in addition to home.</p>
         {places.length ? (
           <div className="harbor-gear-list">
             {places.map((row) => (
@@ -255,9 +308,23 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
 
       <section className="harbor-gear-section">
         <div className="harbor-gear-section-heading"><div><span className="harbor-eyebrow">IDENTITY</span><h3>Settings</h3></div></div>
-        <div className="harbor-gear-engine"><span>Engine</span><strong>{agent.engineId}</strong></div>
+        <form className="harbor-gear-stack" onSubmit={(event) => { event.preventDefault(); void saveIdentity(); }}>
+          <label>Name<input value={name} maxLength={40} onChange={(event) => setName(event.target.value)} /></label>
+          <label>Brief<textarea value={brief} rows={3} onChange={(event) => setBrief(event.target.value)} /></label>
+          <label>Engine<select value={engineId} onChange={(event) => setEngineId(event.target.value)}>
+            {(engines.filter((engine) => engine.status === "ready" && engine.supportsChat).length
+              ? engines.filter((engine) => engine.status === "ready" && engine.supportsChat)
+              : [{ id: engineId, displayName: engineId, path: "", status: "ready", supportsChat: true, supportsTerminal: true }]
+            ).map((engine) => <option key={engine.id} value={engine.id}>{engine.displayName}</option>)}
+          </select></label>
+          <label className="harbor-check-row">
+            <input type="checkbox" checked={messaging} onChange={(event) => setMessaging(event.target.checked)} />
+            <span><strong>Allow mail from teammates</strong><small>Required before another agent can hand work to this one.</small></span>
+          </label>
+          <Button type="submit" disabled={busy || !name.trim()}>Save identity</Button>
+        </form>
         <label className="harbor-face-label">Choose a face</label>
-        <FacePicker name={agent.name} value={faceIndex} onChange={(index) => void chooseFace(index)} />
+        <FacePicker name={name || agent.name} value={faceIndex} onChange={(index) => void chooseFace(index)} />
       </section>
       {error ? <p className="harbor-inline-error" role="alert">{error}</p> : null}
     </aside>

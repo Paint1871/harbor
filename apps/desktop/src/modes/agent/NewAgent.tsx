@@ -6,7 +6,7 @@ import { FacePicker } from "./FacePicker";
 import { settingsGet } from "../../settings";
 
 interface NewAgentProps {
-  onCreate: (input: { name: string; brief: string; engineId: string; faceIndex: number }) => Promise<void>;
+  onCreate: (input: { name: string; brief: string; engineId: string; faceIndex: number; homePath?: string }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -16,6 +16,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
   const [brief, setBrief] = useState("");
   const [engineId, setEngineId] = useState("");
   const [faceIndex, setFaceIndex] = useState(0);
+  const [homePath, setHomePath] = useState("");
   const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -75,7 +76,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
         if (disabled || !selectedEngine) return;
         setSaving(true);
         setError(null);
-        void onCreate({ name: name.trim(), brief: brief.trim(), engineId: selectedEngine.id, faceIndex })
+        void onCreate({ name: name.trim(), brief: brief.trim(), engineId: selectedEngine.id, faceIndex, homePath: homePath || undefined })
           .catch(() => setError("Your agent could not be created. Your draft is saved here. Please try again."))
           .finally(() => setSaving(false));
       }}>
@@ -90,6 +91,17 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
             {!usable.length ? <option value="">{loading ? "Checking engines…" : "No chat engine ready"}</option> : null}
           </select></label>
           {!loading && !usable.length ? <div className="harbor-engine-help"><p>Install and sign in to an ACP-compatible engine such as OpenCode, then check again.</p><Button onClick={() => void detect()}>Check again</Button></div> : null}
+          <label>Home folder
+            <span className="harbor-home-picker">
+              <input readOnly value={homePath} placeholder="Optional — engine working directory" />
+              <Button type="button" onClick={() => {
+                void invoke<string | null>("workspace_pick_folder").then((path) => {
+                  if (path) setHomePath(path);
+                }).catch(() => setError("Could not choose a folder. Please try again."));
+              }}>Choose…</Button>
+            </span>
+          </label>
+          <p className="harbor-muted">Without a home folder the engine starts in a temporary directory. You can set this later in Settings.</p>
           <label>Choose a face</label>
           <FacePicker value={faceIndex} onChange={setFaceIndex} name={name || "Agent"} />
         </fieldset>

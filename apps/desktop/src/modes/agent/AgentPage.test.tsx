@@ -3,7 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentChat, AgentRecord, Memory, Place, SearchHit } from "@harbor/schema/commands";
 import { AgentPage } from "./AgentPage";
+import { AgentRail } from "./AgentRail";
 import { GearPanel } from "./GearPanel";
+import { ChromeProvider, type ChromeValue } from "../../chrome/chrome-context";
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, Set<(event: { payload: unknown }) => void>>();
@@ -154,6 +156,7 @@ it("creates a chat and sends text parts through invoke", async () => {
   );
   expect(screen.getByText("Ship the checklist", { selector: ".harbor-bubble-user" })).toBeTruthy();
   expect(await screen.findByText(/Waiting on engine/)).toBeTruthy();
+  expect(screen.getByText("1 working")).toBeTruthy();
 });
 
 it("resolves a permission card for the active chat", async () => {
@@ -254,4 +257,79 @@ it("lists teammates from @ and sends mail", async () => {
     }),
   );
   expect(screen.queryByRole("button", { name: agent.name })).toBeNull();
+});
+
+const chrome: ChromeValue = {
+  mode: "agent",
+  theme: "black",
+  profileName: "Ada",
+  destination: "mode",
+  setDestination: () => undefined,
+  onModeChange: () => undefined,
+  onThemeChange: () => undefined,
+  onSettings: () => undefined,
+  onTidy: () => undefined,
+  registerTidy: () => undefined,
+};
+
+it("shows the last line and Needs you on the roster", () => {
+  render(
+    <ChromeProvider value={chrome}>
+      <AgentRail
+        agents={[{ ...agent, lastLine: "Ship the checklist", trailing: { kind: "needs_you" } }]}
+        selectedId={agent.id}
+        onSelect={() => undefined}
+        onNew={() => undefined}
+        onPin={() => undefined}
+      />
+    </ChromeProvider>,
+  );
+  expect(screen.getByText("Ship the checklist")).toBeTruthy();
+  expect(screen.getByText("Needs you")).toBeTruthy();
+});
+
+it("pins a teammate from the roster", () => {
+  const onPin = vi.fn();
+  render(
+    <ChromeProvider value={chrome}>
+      <AgentRail
+        agents={[agent]}
+        selectedId={agent.id}
+        onSelect={() => undefined}
+        onNew={() => undefined}
+        onPin={onPin}
+      />
+    </ChromeProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Pin Release manager" }));
+  expect(onPin).toHaveBeenCalledWith("agent-1", true);
+});
+
+it("saves name, brief, and mail grant from gear", async () => {
+  render(<GearPanel agent={agent} onAgentChange={() => undefined} />);
+  fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "Launch partner" } });
+  fireEvent.change(screen.getByLabelText("Brief"), { target: { value: "Own the rollout" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: /Allow mail from teammates/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Save identity" }));
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("agent_update", {
+      input: {
+        id: "agent-1",
+        name: "Launch partner",
+        brief: "Own the rollout",
+        engineId: "opencode",
+        messaging: false,
+      },
+    }),
+  );
+});
+
+it("sets a home folder from gear", async () => {
+  render(<GearPanel agent={agent} onAgentChange={() => undefined} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Set home folder" }));
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("agent_update", {
+      input: { id: "agent-1", homePath: "/tmp/project" },
+    }),
+  );
 });

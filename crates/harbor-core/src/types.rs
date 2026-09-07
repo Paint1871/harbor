@@ -87,6 +87,20 @@ pub struct ThreadRecord {
     pub unread: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq, Default)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AgentTrailing {
+    Running {
+        n: i32,
+    },
+    NeedsYou,
+    LastSpoke {
+        at: i64,
+    },
+    #[default]
+    Idle,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRecord {
@@ -96,6 +110,14 @@ pub struct AgentRecord {
     pub engine_id: String,
     pub face_index: i32,
     pub pinned: bool,
+    #[serde(default)]
+    pub home_path: String,
+    #[serde(default)]
+    pub messaging: bool,
+    #[serde(default)]
+    pub last_line: Option<String>,
+    #[serde(default)]
+    pub trailing: AgentTrailing,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -117,6 +139,10 @@ pub struct UpdateAgent {
     pub engine_id: Option<String>,
     pub face_index: Option<i32>,
     pub pinned: Option<bool>,
+    #[serde(default)]
+    pub home_path: Option<String>,
+    #[serde(default)]
+    pub messaging: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

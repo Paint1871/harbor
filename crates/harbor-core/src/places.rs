@@ -12,15 +12,36 @@ fn now() -> i64 {
         .unwrap_or_default()
 }
 
-pub async fn grant(pool: &SqlitePool, agent_id: &str, path: &str) -> Result<(), Error> {
-    agents::require(pool, agent_id).await?;
+pub fn canonicalize_folder(path: &str) -> Result<String, Error> {
     let given = Path::new(path.trim());
     if !given.is_absolute() || !given.is_dir() {
         return Err(Error::Message(
             "Choose an existing folder with an absolute path.".into(),
         ));
     }
-    let folder = given.canonicalize()?.to_string_lossy().into_owned();
+    Ok(given.canonicalize()?.to_string_lossy().into_owned())
+}
+
+pub async fn granted_paths(pool: &SqlitePool) -> Result<Vec<String>, Error> {
+    let homes =
+        sqlx::query_as::<_, (String,)>("SELECT home_path FROM agents WHERE home_path != ''")
+            .fetch_all(pool)
+            .await?;
+    let extras = sqlx::query_as::<_, (String,)>("SELECT path FROM places")
+        .fetch_all(pool)
+        .await?;
+    let mut paths: Vec<String> = homes.into_iter().map(|(path,)| path).collect();
+    for (path,) in extras {
+        if !paths.iter().any(|existing| existing == &path) {
+            paths.push(path);
+        }
+    }
+    Ok(paths)
+}
+
+pub async fn grant(pool: &SqlitePool, agent_id: &str, path: &str) -> Result<(), Error> {
+    agents::require(pool, agent_id).await?;
+    let folder = canonicalize_folder(path)?;
     let existing: Option<(String,)> =
         sqlx::query_as("SELECT id FROM places WHERE agent_id = ?1 AND path = ?2")
             .bind(agent_id)
@@ -106,6 +127,11 @@ mod tests {
         let granted = list(&pool, &agent.id).await.unwrap();
         assert_eq!(granted.len(), 1);
         assert!(granted[0].path.ends_with("proj") || granted[0].path.contains("proj"));
+        let all = crate::places::granted_paths(&pool).await.unwrap();
+        assert!(
+            all.iter()
+                .any(|path| path.ends_with("proj") || path.contains("proj"))
+        );
         assert!(!granted[0].id.is_empty());
         assert_eq!(
             crate::commands::places_list(&pool, agent.id.clone())
@@ -130,5 +156,11 @@ mod tests {
         assert!(list(&pool, &agent.id).await.unwrap().is_empty());
         assert!(revoke(&pool, &granted[0].id).await.is_err());
         assert!(list(&pool, "missing").await.is_err());
+        assert!(
+            crate::places::granted_paths(&pool)
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 }

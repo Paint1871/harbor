@@ -185,7 +185,31 @@ describe("shipped Harbor chrome and mode trees", () => {
     const addRow = css.slice(css.indexOf(".harbor-code-pane-add-row {"));
     expect(addRow.slice(0, addRow.indexOf("}"))).not.toMatch(/clip:|width:\s*1px/);
 
+    // Destination pages sit alongside the still-mounted mode trees. Those
+    // trees must not intercept real pointer clicks on the destination rail.
+    expect(css).toContain(
+      '.harbor-stage[data-destination]:not([data-destination="mode"]) > .harbor-modes {\n'
+      + '  position: absolute;\n'
+      + '  inset: 0;\n'
+      + '  width: auto;\n'
+      + '  height: auto;\n'
+      + '  flex: none;\n'
+      + '  pointer-events: none;\n'
+      + '}\n'
+      + '.harbor-stage[data-destination]:not([data-destination="mode"]) > .harbor-modes > .harbor-mode {\n'
+      + '  pointer-events: none;\n',
+    );
+
     // Rail icons are SVG on one grid; glyph metrics used to need !important.
     expect(css).not.toMatch(/\.harbor-pane-row-icon[^{]*\{[^}]*!important/);
+  });
+
+  it("keeps the destination rail mounted for the shared sidebar animation", () => {
+    const shell = readFileSync(resolve(repo, "apps/desktop/src/chrome/DesktopShell.tsx"), "utf8");
+    const css = readFileSync(resolve(repo, "apps/desktop/src/app.css"), "utf8");
+    expect(shell).toContain('{destination !== "mode" ? (');
+    expect(shell).toContain('<AppRail className="harbor-destination-rail" open={railOpen}>');
+    expect(css).toContain(".harbor-destination-rail {\n  height: calc(100% - (var(--harbor-space-2) * 2));");
+    expect(css).toContain('.harbor-rail[data-open="false"] {');
   });
 });

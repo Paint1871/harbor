@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     error::Error,
-    types::{AgentRecord, CreateAgent, UpdateAgent},
+    types::{AgentRecord, AgentTrailing, CreateAgent, UpdateAgent},
 };
 
 fn now() -> i64 {
@@ -15,25 +15,99 @@ fn now() -> i64 {
         .unwrap_or_default()
 }
 
+type AgentRow = (
+    String,
+    String,
+    String,
+    String,
+    i64,
+    i64,
+    String,
+    i64,
+    Option<String>,
+    i64,
+    i64,
+    Option<i64>,
+);
+
 pub async fn list(pool: &SqlitePool) -> Result<Vec<AgentRecord>, Error> {
-    let rows = sqlx::query_as::<_, (String, String, String, String, i64, i64)>(
-        "SELECT id, name, brief, engine_id, face_index, pinned FROM agents ORDER BY pinned DESC, name",
+    let rows = sqlx::query_as::<_, AgentRow>(
+        "SELECT a.id, a.name, a.brief, a.engine_id, a.face_index, a.pinned, a.home_path, a.messaging,
+                (
+                    SELECT m.prose FROM messages m
+                    JOIN agent_chats c ON c.id = m.chat_id
+                    WHERE c.agent_id = a.id
+                      AND m.chat_kind = 'agent'
+                      AND m.role IN ('user', 'assistant', 'mail')
+                    ORDER BY m.created_at DESC, m.rowid DESC
+                    LIMIT 1
+                ),
+                (SELECT COUNT(*) FROM agent_chats WHERE agent_id = a.id AND status = 'running'),
+                (SELECT COUNT(*) FROM agent_chats WHERE agent_id = a.id AND status = 'needs_you'),
+                (SELECT MAX(updated_at) FROM agent_chats WHERE agent_id = a.id)
+         FROM agents a
+         ORDER BY a.pinned DESC, a.pin_order, a.name",
     )
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(
-            |(id, name, brief, engine_id, face_index, pinned)| AgentRecord {
-                id,
-                name,
-                brief,
-                engine_id,
-                face_index: face_index as i32,
-                pinned: pinned != 0,
-            },
-        )
-        .collect())
+    Ok(rows.into_iter().map(map_row).collect())
+}
+
+fn map_row(
+    (
+        id,
+        name,
+        brief,
+        engine_id,
+        face_index,
+        pinned,
+        home_path,
+        messaging,
+        last_line,
+        running,
+        needs_you,
+        last_spoke,
+    ): AgentRow,
+) -> AgentRecord {
+    AgentRecord {
+        id,
+        name,
+        brief,
+        engine_id,
+        face_index: face_index as i32,
+        pinned: pinned != 0,
+        home_path,
+        messaging: messaging != 0,
+        last_line: clip_last_line(last_line),
+        trailing: trailing_from(running, needs_you, last_spoke),
+    }
+}
+
+fn trailing_from(running: i64, needs_you: i64, last_spoke: Option<i64>) -> AgentTrailing {
+    if running > 0 {
+        AgentTrailing::Running {
+            n: running.min(i32::MAX as i64) as i32,
+        }
+    } else if needs_you > 0 {
+        AgentTrailing::NeedsYou
+    } else if let Some(at) = last_spoke {
+        AgentTrailing::LastSpoke { at }
+    } else {
+        AgentTrailing::Idle
+    }
+}
+
+fn clip_last_line(prose: Option<String>) -> Option<String> {
+    let collapsed = prose?.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return None;
+    }
+    let extra = collapsed.chars().count() > 80;
+    let mut clipped: String = collapsed.chars().take(80).collect();
+    if extra {
+        clipped.push('…');
+    }
+    Some(clipped)
 }
 
 pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord, Error> {
@@ -44,8 +118,8 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
     let id = Uuid::now_v7().to_string();
     let ts = now();
     sqlx::query(
-        "INSERT INTO agents (id, name, brief, engine_id, face_index, home_path, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+        "INSERT INTO agents (id, name, brief, engine_id, face_index, home_path, messaging, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7)",
     )
     .bind(&id)
     .bind(&name)
@@ -64,6 +138,10 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
         engine_id: input.engine_id,
         face_index: input.face_index,
         pinned: false,
+        home_path: String::new(),
+        messaging: true,
+        last_line: None,
+        trailing: AgentTrailing::Idle,
     })
 }
 
@@ -89,6 +167,12 @@ pub async fn update(pool: &SqlitePool, input: UpdateAgent) -> Result<(), Error> 
 
     let ts = now();
     let pinned = input.pinned.map(i64::from);
+    let messaging = input.messaging.map(i64::from);
+    let home_path = match input.home_path {
+        Some(path) if path.trim().is_empty() => Some(String::new()),
+        Some(path) => Some(crate::places::canonicalize_folder(&path)?),
+        None => None,
+    };
     sqlx::query(
         "UPDATE agents SET
             name = COALESCE(?1, name),
@@ -101,8 +185,10 @@ pub async fn update(pool: &SqlitePool, input: UpdateAgent) -> Result<(), Error> 
                 WHEN ?5 = 1 THEN COALESCE(pin_order, ?6)
                 ELSE NULL
             END,
+            home_path = COALESCE(?7, home_path),
+            messaging = COALESCE(?8, messaging),
             updated_at = ?6
-         WHERE id = ?7",
+         WHERE id = ?9",
     )
     .bind(name)
     .bind(input.brief)
@@ -110,6 +196,8 @@ pub async fn update(pool: &SqlitePool, input: UpdateAgent) -> Result<(), Error> 
     .bind(input.face_index)
     .bind(pinned)
     .bind(ts)
+    .bind(home_path)
+    .bind(messaging)
     .bind(&input.id)
     .execute(pool)
     .await
@@ -306,6 +394,8 @@ mod tests {
                 engine_id: Some("claude".into()),
                 face_index: Some(4),
                 pinned: Some(true),
+                home_path: None,
+                messaging: Some(false),
             },
         )
         .await
@@ -317,6 +407,8 @@ mod tests {
         assert_eq!(listed[0].engine_id, "claude");
         assert_eq!(listed[0].face_index, 4);
         assert!(listed[0].pinned);
+        assert!(!listed[0].messaging);
+        assert_eq!(listed[0].trailing, AgentTrailing::Idle);
 
         let err = update(
             &pool,
@@ -327,6 +419,8 @@ mod tests {
                 engine_id: None,
                 face_index: None,
                 pinned: None,
+                home_path: None,
+                messaging: None,
             },
         )
         .await
@@ -343,6 +437,8 @@ mod tests {
                 engine_id: None,
                 face_index: None,
                 pinned: None,
+                home_path: None,
+                messaging: None,
             },
         )
         .await
@@ -390,5 +486,59 @@ mod tests {
         assert_eq!(url, again);
         let other = face_preview(&pool, &agent.id, 1).await.unwrap();
         assert_ne!(url, other);
+    }
+
+    #[tokio::test]
+    async fn list_includes_last_line_trailing_and_home() {
+        let (_dir, pool) = pool().await;
+        let agent = create(&pool, sample("Ada Lovelace")).await.unwrap();
+        assert!(agent.messaging);
+        let home = _dir.path().join("home");
+        std::fs::create_dir(&home).unwrap();
+        update(
+            &pool,
+            UpdateAgent {
+                id: agent.id.clone(),
+                name: None,
+                brief: None,
+                engine_id: None,
+                face_index: None,
+                pinned: None,
+                home_path: Some(home.display().to_string()),
+                messaging: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let chat = crate::chats::create(&pool, &agent.id).await.unwrap();
+        crate::chats::send(
+            &pool,
+            &chat.id,
+            &[crate::types::ContentPart {
+                r#type: "text".into(),
+                text: Some("Ship the checklist today".into()),
+                path: None,
+            }],
+        )
+        .await
+        .unwrap();
+        crate::chats::set_status(&pool, &chat.id, "running")
+            .await
+            .unwrap();
+
+        let listed = list(&pool).await.unwrap();
+        assert_eq!(
+            listed[0].last_line.as_deref(),
+            Some("Ship the checklist today")
+        );
+        assert_eq!(listed[0].trailing, AgentTrailing::Running { n: 1 });
+        assert!(listed[0].home_path.ends_with("home"));
+
+        crate::chats::set_status(&pool, &chat.id, "needs_you")
+            .await
+            .unwrap();
+        let listed = list(&pool).await.unwrap();
+        assert_eq!(listed[0].trailing, AgentTrailing::NeedsYou);
     }
 }

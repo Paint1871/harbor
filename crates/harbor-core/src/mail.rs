@@ -4,6 +4,9 @@ use uuid::Uuid;
 
 use crate::{chats, error::Error};
 
+const MAIL_RATE_LIMIT: i64 = 8;
+const MAIL_RATE_WINDOW_SECS: i64 = 60;
+
 fn now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -36,12 +39,29 @@ pub async fn send(
     let (to_id, _to_name, to_messaging) =
         to.ok_or_else(|| Error::Message("recipient not found".into()))?;
 
-    let paused = crate::settings::get(pool, "messaging_paused")
-        .await?
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false);
-    if paused && to_messaging == 0 {
-        return Err(Error::Message("Messaging is paused for this agent".into()));
+    if mail_paused(pool).await? {
+        return Err(Error::Message("Messaging is paused".into()));
+    }
+    if to_messaging == 0 {
+        return Err(Error::Message(
+            "This teammate is not allowed to receive mail".into(),
+        ));
+    }
+    let window_start = now().saturating_sub(MAIL_RATE_WINDOW_SECS);
+    let (recent,): (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM messages
+         WHERE chat_kind = 'agent' AND role = 'mail'
+           AND json_extract(payload_json, '$.fromAgentId') = ?1
+           AND created_at >= ?2",
+    )
+    .bind(&from_id)
+    .bind(window_start)
+    .fetch_one(pool)
+    .await?;
+    if recent >= MAIL_RATE_LIMIT {
+        return Err(Error::Message(
+            "Mail is rate limited. Try again in a minute.".into(),
+        ));
     }
 
     let chat = chats::find_or_create_titled(pool, &to_id, "Mail").await?;
@@ -82,6 +102,19 @@ pub async fn send(
     )
     .await?;
     Ok(())
+}
+
+async fn mail_paused(pool: &SqlitePool) -> Result<bool, Error> {
+    for key in ["agent_mail_paused", "messaging_paused"] {
+        if crate::settings::get(pool, key)
+            .await?
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]
@@ -126,13 +159,42 @@ mod tests {
             .unwrap();
         assert_eq!(count, 2);
 
-        crate::settings::set(&pool, "messaging_paused", &json!(true))
+        crate::settings::set(&pool, "agent_mail_paused", &json!(true))
             .await
             .unwrap();
         let paused = send(&pool, &from, &to, "blocked").await.unwrap_err();
-        assert_eq!(paused.to_string(), "Messaging is paused for this agent");
+        assert_eq!(paused.to_string(), "Messaging is paused");
+        crate::settings::set(&pool, "agent_mail_paused", &json!(false))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE agents SET messaging = 0 WHERE id = ?1")
+            .bind(&to)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let denied = send(&pool, &from, &to, "still blocked").await.unwrap_err();
+        assert_eq!(
+            denied.to_string(),
+            "This teammate is not allowed to receive mail"
+        );
         assert!(send(&pool, &from, "missing", "x").await.is_err());
         assert!(send(&pool, &from, &to, "  ").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn rate_limits_a_sender() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let from = agent(&pool, "From").await;
+        let to = agent(&pool, "To").await;
+        for n in 0..MAIL_RATE_LIMIT {
+            send(&pool, &from, &to, &format!("note {n}")).await.unwrap();
+        }
+        let limited = send(&pool, &from, &to, "one more").await.unwrap_err();
+        assert_eq!(
+            limited.to_string(),
+            "Mail is rate limited. Try again in a minute."
+        );
     }
 
     #[tokio::test]

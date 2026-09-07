@@ -55,6 +55,7 @@ struct TurnContext {
     extra_roots: Vec<String>,
     acp_session: Option<String>,
     kind: SessionKind,
+    agent_id: Option<String>,
 }
 
 pub fn grant_engines(allow: &ExecutableAllowlist, engines: &[DetectedEngine]) {
@@ -150,6 +151,7 @@ async fn thread_turn_context(pool: &SqlitePool, thread_id: &str) -> Result<TurnC
         extra_roots: ctx.extra_roots,
         acp_session: ctx.acp_session,
         kind: SessionKind::Thread,
+        agent_id: None,
     })
 }
 
@@ -169,6 +171,7 @@ async fn agent_turn_context(pool: &SqlitePool, chat_id: &str) -> Result<TurnCont
         extra_roots,
         acp_session: ctx.acp_session,
         kind: SessionKind::Agent,
+        agent_id: Some(ctx.agent_id),
     })
 }
 
@@ -276,6 +279,13 @@ fn make_permission_hook(
             .execute(&pool)
             .await
         });
+        if kind == SessionKind::Agent {
+            let _ = block_on(harbor_core::chats::set_status(
+                &pool,
+                &session_ref,
+                "needs_you",
+            ));
+        }
         let _ = app.emit(
             "acp_permission",
             permission_card(&perm_id, &session_ref, &params),
@@ -403,6 +413,9 @@ async fn run_turn(
         .grant(&command, ExecutableKind::Engine)
         .and_then(|path| allow.authorize(&path, ExecutableKind::Engine))
         .map_err(|error| error.to_string())?;
+    if ctx.kind == SessionKind::Agent {
+        let _ = harbor_core::chats::set_status(pool, session_ref, "running").await;
+    }
     let prompt_parts = prompt_parts(parts);
     let registry = registry.clone();
     let registry_for_err = registry.clone();
@@ -463,6 +476,9 @@ async fn run_turn(
                     "engine_auth_required",
                     json!({ "engineId": engine_id, "hint": "CLI login" }),
                 );
+            }
+            if persist_kind == SessionKind::Agent {
+                let _ = harbor_core::chats::set_status(pool, session_ref, "error").await;
             }
             return Err(error);
         }
@@ -538,6 +554,9 @@ async fn run_turn(
         harbor_core::notifications::Target::session(chat_kind, session_ref),
     )
     .await;
+    if persist_kind == SessionKind::Agent {
+        let _ = harbor_core::chats::set_status(pool, session_ref, "idle").await;
+    }
     Ok(())
 }
 
@@ -573,7 +592,15 @@ pub async fn prompt_agent(
     parts: &[ContentPart],
 ) -> Result<(), String> {
     let ctx = agent_turn_context(pool, chat_id).await?;
-    run_turn(app, pool, allow, registry, chat_id, ctx, parts).await
+    let agent_id = ctx
+        .agent_id
+        .clone()
+        .ok_or_else(|| "agent chat is missing its teammate".to_string())?;
+    let briefing = harbor_core::briefing::load(pool, &agent_id)
+        .await
+        .map_err(|error| error.to_string())?;
+    let parts = harbor_core::briefing::attach(&briefing, parts);
+    run_turn(app, pool, allow, registry, chat_id, ctx, &parts).await
 }
 
 pub async fn cancel(registry: &AcpRegistry, session_ref: &str) -> Result<(), String> {
@@ -757,6 +784,34 @@ mod tests {
             .unwrap();
         let ctx = agent_turn_context(&pool, &chat.id).await.unwrap();
         assert_eq!(ctx.acp_session.as_deref(), Some("sess-agent"));
+        assert_eq!(ctx.agent_id.as_deref(), Some(agent.id.as_str()));
+
+        harbor_core::memory::upsert(&pool, &agent.id, "Prefers tests")
+            .await
+            .unwrap();
+        let briefing = harbor_core::briefing::load(&pool, &agent.id).await.unwrap();
+        let parts = harbor_core::briefing::attach(
+            &briefing,
+            &[ContentPart {
+                r#type: "text".into(),
+                text: Some("hello agent".into()),
+                path: None,
+            }],
+        );
+        assert!(
+            parts[0]
+                .text
+                .as_deref()
+                .unwrap()
+                .contains("<harbor-agent-data>")
+        );
+        assert_eq!(parts[1].text.as_deref(), Some("hello agent"));
+        let history = harbor_core::chats::history(&pool, &chat.id).await.unwrap();
+        assert!(
+            history
+                .iter()
+                .all(|line| !line.text.contains("<harbor-agent-data>"))
+        );
     }
 
     #[tokio::test]

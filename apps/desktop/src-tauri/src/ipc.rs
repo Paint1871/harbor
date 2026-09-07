@@ -395,10 +395,19 @@ pub async fn thread_attach_files(
 }
 
 #[tauri::command]
-pub async fn agent_list(pool: State<'_, SqlitePool>) -> Result<Vec<AgentRecord>, String> {
-    harbor_core::commands::agent_list(&pool)
+pub async fn agent_list(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<AgentRecord>, String> {
+    let agents = harbor_core::commands::agent_list(&pool)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    if let Ok(paths) = harbor_core::places::granted_paths(&pool).await {
+        for path in paths {
+            allow_workspace_directory(&app, &path);
+        }
+    }
+    Ok(agents)
 }
 
 #[tauri::command]
@@ -412,10 +421,19 @@ pub async fn agent_create(
 }
 
 #[tauri::command]
-pub async fn agent_update(pool: State<'_, SqlitePool>, input: UpdateAgent) -> Result<(), String> {
+pub async fn agent_update(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    input: UpdateAgent,
+) -> Result<(), String> {
+    let home = input.home_path.clone();
     harbor_core::commands::agent_update(&pool, input)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    if let Some(path) = home.filter(|path| !path.trim().is_empty()) {
+        allow_workspace_directory(&app, &path);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -556,10 +574,12 @@ pub async fn places_list(
 
 #[tauri::command]
 pub async fn places_grant(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     agent_id: String,
     path: String,
 ) -> Result<(), String> {
+    allow_workspace_directory(&app, &path);
     harbor_core::commands::places_grant(&pool, agent_id, path)
         .await
         .map_err(map_err)

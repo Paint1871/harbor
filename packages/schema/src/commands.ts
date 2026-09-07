@@ -50,6 +50,12 @@ export interface ThreadRecord {
   unread: boolean;
 }
 
+export type AgentTrailing =
+  | { kind: "running"; n: number }
+  | { kind: "needs_you" }
+  | { kind: "last_spoke"; at: number }
+  | { kind: "idle" };
+
 export interface AgentRecord {
   id: string;
   name: string;
@@ -57,6 +63,10 @@ export interface AgentRecord {
   engineId: string;
   faceIndex: number;
   pinned: boolean;
+  homePath?: string;
+  messaging?: boolean;
+  lastLine?: string | null;
+  trailing?: AgentTrailing;
 }
 
 export interface CreateAgent {
@@ -73,6 +83,8 @@ export interface UpdateAgent {
   engineId?: string | null;
   faceIndex?: number | null;
   pinned?: boolean | null;
+  homePath?: string | null;
+  messaging?: boolean | null;
 }
 
 export interface AgentChat {

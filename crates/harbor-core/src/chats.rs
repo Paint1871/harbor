@@ -190,17 +190,21 @@ pub async fn set_config(
     Ok(())
 }
 
-pub async fn cancel(pool: &SqlitePool, chat_id: &str) -> Result<(), Error> {
-    let result =
-        sqlx::query("UPDATE agent_chats SET status = 'idle', updated_at = ?1 WHERE id = ?2")
-            .bind(now())
-            .bind(chat_id)
-            .execute(pool)
-            .await?;
+pub async fn set_status(pool: &SqlitePool, chat_id: &str, status: &str) -> Result<(), Error> {
+    let result = sqlx::query("UPDATE agent_chats SET status = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(status)
+        .bind(now())
+        .bind(chat_id)
+        .execute(pool)
+        .await?;
     if result.rows_affected() == 0 {
         return Err(Error::Message("chat not found".into()));
     }
     Ok(())
+}
+
+pub async fn cancel(pool: &SqlitePool, chat_id: &str) -> Result<(), Error> {
+    set_status(pool, chat_id, "idle").await
 }
 
 pub(crate) async fn find_or_create_titled(

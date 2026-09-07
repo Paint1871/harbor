@@ -3,6 +3,7 @@
 pub mod acp;
 pub mod agents;
 pub mod b64;
+pub mod briefing;
 pub mod chats;
 pub mod commands;
 pub mod db;

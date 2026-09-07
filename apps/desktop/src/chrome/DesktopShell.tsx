@@ -107,8 +107,8 @@ export function DesktopShell({
         ) : null}
         <div className="harbor-body">
           <div className="harbor-stage" data-destination={destination} data-rail={railOpen}>
-            {destination !== "mode" && railOpen ? (
-              <AppRail className="harbor-destination-rail">
+            {destination !== "mode" ? (
+              <AppRail className="harbor-destination-rail" open={railOpen}>
                 <DestinationWorkspaceRail />
               </AppRail>
             ) : null}

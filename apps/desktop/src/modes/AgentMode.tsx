@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { Button } from "@harbor/ui/Button";
 import { Logo } from "@harbor/ui/Logo";
 import type { AgentRecord } from "@harbor/schema/commands";
@@ -17,8 +18,8 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
+  const reload = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       setAgents(await invoke<AgentRecord[]>("agent_list"));
@@ -33,6 +34,23 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
     void reload();
   }, [reload]);
 
+  useEffect(() => {
+    let disposed = false;
+    const stops: Array<() => void> = [];
+    for (const event of ["acp_update", "acp_permission"] as const) {
+      void listen(event, () => {
+        if (!disposed) void reload({ silent: true });
+      }).then((unlisten) => {
+        if (disposed) unlisten();
+        else stops.push(unlisten);
+      }).catch(() => undefined);
+    }
+    return () => {
+      disposed = true;
+      for (const stop of stops) stop();
+    };
+  }, [reload]);
+
   const agent = agents.find((item) => item.id === selected) ?? agents[0] ?? null;
 
   return (
@@ -43,6 +61,10 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
             selectedId={agent?.id ?? null}
             onSelect={setSelected}
             onNew={() => setCreating(true)}
+            onPin={(id, pinned) => {
+              setAgents((current) => current.map((item) => (item.id === id ? { ...item, pinned } : item)));
+              void invoke("agent_update", { input: { id, pinned } }).catch(() => void reload({ silent: true }));
+            }}
           />
       </AppRail>
       <div className="harbor-stage-panel">
@@ -82,9 +104,16 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
         <NewAgent
           onClose={() => setCreating(false)}
           onCreate={async (input) => {
-            const created = await invoke<AgentRecord>("agent_create", { input });
-            setAgents((current) => [...current, created]);
-            setSelected(created.id);
+            const created = await invoke<AgentRecord>("agent_create", {
+              input: { name: input.name, brief: input.brief, engineId: input.engineId, faceIndex: input.faceIndex },
+            });
+            let record = created;
+            if (input.homePath) {
+              await invoke("agent_update", { input: { id: created.id, homePath: input.homePath } });
+              record = { ...created, homePath: input.homePath };
+            }
+            setAgents((current) => [...current, record]);
+            setSelected(record.id);
             setCreating(false);
           }}
         />

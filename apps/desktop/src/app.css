@@ -347,6 +347,10 @@ button, input, textarea, select {
 }
 .harbor-roster { display: flex; flex-direction: column; gap: 1px; }
 .harbor-roster .harbor-rail-row { min-height: 52px; padding: 8px 10px; }
+.harbor-roster-item { display: flex; align-items: stretch; gap: 2px; min-width: 0; }
+.harbor-roster-item .harbor-rail-row { flex: 1; min-width: 0; }
+.harbor-roster-item .harbor-pin { flex: 0 0 auto; padding: 0 8px; }
+.harbor-roster-item .harbor-pin[data-on="true"] { color: var(--harbor-text); }
 .harbor-pin-band {
   display: flex;
   flex-direction: column;
@@ -355,6 +359,7 @@ button, input, textarea, select {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--harbor-hairline);
 }
+.harbor-pin-band[data-empty="true"] { padding: 6px 8px 10px; }
 .harbor-pane-rows { list-style: none; margin: 0; padding: 2px 0 0 10px; }
 .harbor-pane-rows button {
   width: 100%;
@@ -1752,9 +1757,12 @@ button, input, textarea, select {
   width: auto;
   height: auto;
   flex: none;
+  pointer-events: none;
+}
+.harbor-stage[data-destination]:not([data-destination="mode"]) > .harbor-modes > .harbor-mode {
+  pointer-events: none;
 }
 .harbor-destination-rail {
-  flex: 0 0 var(--harbor-rail-w);
   height: calc(100% - (var(--harbor-space-2) * 2));
 }
 .harbor-rail-spacer { flex: 1 1 auto; min-height: 0; }
@@ -1879,6 +1887,24 @@ button, input, textarea, select {
 .harbor-gear-form label { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; color: var(--harbor-muted); font-size: 11px; }
 .harbor-gear-form input { width: 100%; padding: 8px 9px; border: 1px solid var(--harbor-hairline); border-radius: var(--harbor-radius-control); background: var(--harbor-field); color: var(--harbor-text); }
 .harbor-gear-form .harbor-button { flex: 0 0 auto; }
+.harbor-gear-stack { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.harbor-gear-stack label { display: flex; flex-direction: column; gap: 6px; color: var(--harbor-muted); font-size: 11px; }
+.harbor-gear-stack input,
+.harbor-gear-stack textarea,
+.harbor-gear-stack select {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid var(--harbor-hairline);
+  border-radius: var(--harbor-radius-control);
+  background: var(--harbor-field);
+  color: var(--harbor-text);
+  font: inherit;
+}
+.harbor-gear-stack textarea { resize: vertical; min-height: 72px; }
+.harbor-gear-home { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0 0 14px; }
+.harbor-gear-home .harbor-path { margin: 0; max-width: 100%; }
+.harbor-home-picker { display: flex; gap: 8px; align-items: center; }
+.harbor-home-picker input { flex: 1; min-width: 0; }
 .harbor-memory-list { max-height: 150px; overflow: auto; }
 .harbor-path { direction: ltr; text-align: left; }
 .harbor-check-row { display: flex; align-items: flex-start; gap: 9px; color: var(--harbor-text); font-size: var(--harbor-text-sm); cursor: pointer; }
