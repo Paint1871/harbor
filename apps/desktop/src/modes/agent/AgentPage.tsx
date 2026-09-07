@@ -6,7 +6,7 @@ import type { AgentRecord } from "@harbor/schema/commands";
 import { Face } from "./Face";
 import { GearPanel } from "./GearPanel";
 import { useAgentChat } from "./useAgentChat";
-import { ModelMenu } from "../chat/ModelMenu";
+import { EnginePicker } from "../chat/EnginePicker";
 import { PermissionCard } from "../chat/PermissionCard";
 import { MentionList, mentionQuery } from "../../chrome/MentionList";
 import { Transcript } from "../../chrome/Transcript";
@@ -225,11 +225,12 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                 }}
                 controls={
                   <>
-                    <span className="harbor-chip">{engineLabel}</span>
-                    <ModelMenu
+                    <EnginePicker
+                      engines={[]}
+                      engineId={engineLabel}
                       options={chat.configOptions}
-                      value={selectedOption}
-                      onChange={(id) => {
+                      choice={selectedOption}
+                      onOptionChange={(id: string) => {
                         const chatId = chat.activeId;
                         if (chatId) setConfigChoice((current) => ({ ...current, [chatId]: id }));
                         void chat.setConfig(id, id);

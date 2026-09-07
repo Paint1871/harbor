@@ -37,11 +37,15 @@ beforeEach(() => {
   invoke.mockReset();
   invoke.mockImplementation((command) => {
     if (command === "workspace_list") return Promise.resolve([workspace]);
-    if (command === "engines_detect") return Promise.resolve([{ id: "opencode", displayName: "OpenCode", status: "ready", supportsChat: true }]);
+    if (command === "engines_detect") return Promise.resolve([
+      { id: "opencode", displayName: "OpenCode", status: "ready", supportsChat: true },
+      { id: "claude-code", displayName: "Claude Code", status: "ready", supportsChat: true },
+    ]);
     if (command === "thread_create") return Promise.resolve(thread);
     if (command === "thread_history") return Promise.resolve(stored);
     if (command === "thread_send") { stored = [{ id: "saved", role: "user", text: "Keep my message" }]; return Promise.reject(new Error("engine offline")); }
     if (command === "thread_set_config") return Promise.resolve();
+    if (command === "thread_set_engine") return Promise.resolve();
     if (command === "thread_attach_files") return Promise.resolve();
     if (command === "thread_cancel") return Promise.resolve();
     if (command === "acp_permission_resolve") return Promise.resolve();
@@ -168,4 +172,30 @@ it("mounts a permission card and resolves with the option id", async () => {
       cancelled: false,
     }),
   );
+});
+
+it("switches the thread to another engine from the composer", async () => {
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  await screen.findByRole("textbox", { name: "Message" });
+
+  fireEvent.click(screen.getByRole("button", { name: /OpenCode/ }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: /Claude Code/ }));
+
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_set_engine", { id: thread.id, engineId: "claude-code" }));
+  await screen.findByRole("button", { name: /Claude Code/ });
+  expect(screen.getByText("/tmp/project · claude-code")).toBeTruthy();
+});
+
+it("reports the conversation size without claiming a context window", async () => {
+  stored = [
+    { id: "a", role: "user", text: "x".repeat(4000) },
+    { id: "b", role: "assistant", text: "y".repeat(4000) },
+  ];
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+
+  const meter = await screen.findByText("~2.0k tokens · 2 messages");
+  expect(meter.getAttribute("title")).toMatch(/four characters per token/);
+  expect(screen.queryByText(/%/)).toBeNull();
 });

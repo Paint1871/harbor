@@ -218,6 +218,14 @@ pub async fn thread_set_config(
     crate::threads::set_config(pool, &id, &option_id, value).await
 }
 
+pub async fn thread_set_engine(
+    pool: &SqlitePool,
+    id: String,
+    engine_id: String,
+) -> Result<(), Error> {
+    crate::threads::set_engine(pool, &id, &engine_id).await
+}
+
 pub async fn thread_grant_root(pool: &SqlitePool, id: String, path: String) -> Result<(), Error> {
     crate::threads::grant_root(pool, &id, &path).await
 }

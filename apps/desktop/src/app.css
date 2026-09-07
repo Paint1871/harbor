@@ -2049,8 +2049,100 @@ button, input, textarea, select {
 .harbor-file-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 24px; color: var(--harbor-muted); text-align: center; }
 .harbor-file-empty strong { color: var(--harbor-text); font-size: 14px; font-weight: 500; }
 .harbor-file-empty p { margin: 0; font-size: var(--harbor-text-xs); }
-.harbor-model-menu { display: inline-flex; align-items: center; gap: 6px; color: var(--harbor-muted); font-size: 11px; }
-.harbor-model-menu select { max-width: 160px; padding: 5px 7px; border: 1px solid var(--harbor-hairline); border-radius: 6px; background: var(--harbor-field); color: var(--harbor-text); font-size: 11px; }
+/* Engine and model in one trigger; the menu opens upward out of the composer. */
+.harbor-engine-picker { position: relative; display: inline-flex; }
+.harbor-engine-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--harbor-hairline);
+  border-radius: var(--harbor-radius-pill);
+  background: transparent;
+  color: var(--harbor-text);
+  font: inherit;
+  font-size: var(--harbor-text-xs);
+  cursor: pointer;
+  transition: background-color var(--harbor-motion-duration) var(--harbor-motion-easing),
+              border-color var(--harbor-motion-duration) var(--harbor-motion-easing);
+}
+.harbor-engine-trigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--harbor-text) 26%, var(--harbor-hairline));
+  background: var(--harbor-raised);
+}
+.harbor-engine-trigger:disabled { cursor: default; opacity: .5; }
+.harbor-engine-trigger[aria-expanded="true"] { background: var(--harbor-raised); }
+.harbor-engine-trigger-name,
+.harbor-engine-trigger-choice { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.harbor-engine-trigger-choice {
+  padding-left: 7px;
+  border-left: 1px solid var(--harbor-hairline);
+  color: var(--harbor-muted);
+  font-family: var(--harbor-font-mono);
+  font-size: 10px;
+}
+.harbor-engine-trigger > svg { flex: 0 0 auto; color: var(--harbor-muted); }
+.harbor-engine-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: auto;
+  min-width: 216px;
+  max-width: 300px;
+  max-height: 320px;
+  overflow: auto;
+}
+.harbor-engine-menu button[role="menuitemradio"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+}
+.harbor-engine-menu button[role="menuitemradio"][aria-checked="true"] { color: var(--harbor-text); }
+.harbor-engine-menu button[role="menuitemradio"] > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.harbor-engine-menu button[role="menuitemradio"] > span:last-child {
+  flex: 0 0 auto;
+  color: var(--harbor-accent-think);
+}
+.harbor-engine-menu-label {
+  margin: 6px 0 3px !important;
+  padding: 0 8px;
+  color: var(--harbor-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--harbor-label-tracking);
+  text-transform: uppercase;
+}
+.harbor-engine-menu > .harbor-engine-menu-label:first-child { margin-top: 2px !important; }
+.harbor-engine-menu-note {
+  margin: 6px 0 2px !important;
+  padding: 0 8px;
+  color: var(--harbor-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* Conversation size, with no claim about the engine's own window. */
+.harbor-thread-header-end { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.harbor-context-meter {
+  margin-left: 0 !important;
+  color: var(--harbor-muted);
+  font-size: var(--harbor-text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: help;
+}
+@media (max-width: 760px) {
+  .harbor-context-meter { display: none; }
+}
 .harbor-chat-transcript { display: flex; flex-direction: column; gap: 17px; }
 .harbor-chat-transcript > * { display: flex; flex-direction: column; gap: 5px; }
 .harbor-transcript-line::before { content: attr(data-role); color: var(--harbor-muted); font-size: 10px; font-weight: 600; letter-spacing: var(--harbor-label-tracking); text-transform: uppercase; }

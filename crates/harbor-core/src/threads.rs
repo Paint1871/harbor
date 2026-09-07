@@ -127,6 +127,27 @@ pub async fn pin(pool: &SqlitePool, id: &str, pinned: bool) -> Result<(), Error>
     Ok(())
 }
 
+/// Switching engines abandons the old agent's session and its option values —
+/// both belong to the process we are leaving behind.
+pub async fn set_engine(pool: &SqlitePool, id: &str, engine_id: &str) -> Result<(), Error> {
+    if engine_id.trim().is_empty() {
+        return Err(Error::Message("engine_id required".into()));
+    }
+    let result = sqlx::query(
+        "UPDATE threads SET engine_id = ?1, acp_session = NULL, config_json = '{}', updated_at = ?2
+         WHERE id = ?3",
+    )
+    .bind(engine_id)
+    .bind(now())
+    .bind(id)
+    .execute(pool)
+    .await?;
+    if result.rows_affected() == 0 {
+        return Err(Error::Message("thread not found".into()));
+    }
+    Ok(())
+}
+
 pub async fn grant_root(pool: &SqlitePool, id: &str, path: &str) -> Result<(), Error> {
     let (extra,): (String,) = sqlx::query_as("SELECT extra_roots_json FROM threads WHERE id = ?1")
         .bind(id)
@@ -425,6 +446,31 @@ mod tests {
         let ctx = context(&pool, &thread.id).await.unwrap();
         assert_eq!(ctx.engine_id, "opencode");
         assert_eq!(ctx.acp_session.as_deref(), Some("sess-1"));
+    }
+
+    #[tokio::test]
+    async fn set_engine_drops_the_old_session_and_its_options() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let thread = create(&pool, None, "opencode".into()).await.unwrap();
+        set_config(&pool, &thread.id, "model", json!("local"))
+            .await
+            .unwrap();
+        set_acp_session(&pool, &thread.id, "sess-1").await.unwrap();
+
+        set_engine(&pool, &thread.id, "claude-code").await.unwrap();
+
+        let ctx = context(&pool, &thread.id).await.unwrap();
+        assert_eq!(ctx.engine_id, "claude-code");
+        assert_eq!(ctx.acp_session, None);
+        let (config,): (String,) = sqlx::query_as("SELECT config_json FROM threads WHERE id = ?1")
+            .bind(&thread.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(config, "{}");
+        assert!(set_engine(&pool, &thread.id, " ").await.is_err());
+        assert!(set_engine(&pool, "missing", "opencode").await.is_err());
     }
 
     #[tokio::test]

@@ -9,7 +9,7 @@ import { FolderRail } from "./FolderRail";
 import { ThreadHeader } from "./ThreadHeader";
 import { ThreadList } from "./ThreadList";
 import { ChangesPanel } from "./ChangesPanel";
-import { ModelMenu } from "./ModelMenu";
+import { EnginePicker } from "./EnginePicker";
 import { PermissionCard } from "./PermissionCard";
 import { useAcpThread } from "./useAcpThread";
 import { AppRail } from "../../chrome/AppRail";
@@ -92,6 +92,23 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
       setActive(thread);
     } catch { setError("The thread could not be created. Your folder is still open. Please try again."); }
     finally { setCreating(false); createLock.current = false; }
+  }
+
+  async function setThreadEngine(threadId: string, nextEngineId: string) {
+    try {
+      await invoke("thread_set_engine", { id: threadId, engineId: nextEngineId });
+      const apply = (items: ThreadRecord[]) => items.map((item) => item.id === threadId ? { ...item, engineId: nextEngineId } : item);
+      if (workspaceId) setLists((current) => ({ ...current, [workspaceId]: apply(current[workspaceId] ?? []) }));
+      else setOther(apply);
+      setActive((current) => current?.id === threadId ? { ...current, engineId: nextEngineId } : current);
+      // The old engine's option values died with its session.
+      setConfigChoice((current) => {
+        const { [threadId]: _dropped, ...rest } = current;
+        return rest;
+      });
+    } catch (reason) {
+      setError(`Could not switch the engine for this thread. ${String(reason)}`);
+    }
   }
 
   async function pin(id: string, pinned: boolean) {
@@ -178,7 +195,8 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     <div className="harbor-stage-panel harbor-chat-main">
       {error ? <div className="harbor-status-banner" role="alert"><span>{error}</span><Button variant="ghost" onClick={() => { void reload(); void checkEngines(); }}>Try again</Button></div> : null}
       {active ? <>
-        <ThreadHeader thread={threads?.find((thread) => thread.id === active.id) ?? active} workspace={workspace} disabled={!canCreate} onNew={() => void newThread()} />
+        <ThreadHeader thread={threads?.find((thread) => thread.id === active.id) ?? active} workspace={workspace}
+          lines={acp.lines} attached={attached[active.id]?.length ?? 0} disabled={!canCreate} onNew={() => void newThread()} />
         <ChangesPanel workspaceId={active.workspaceId} refreshToken={acp.turn} />
         {acp.loading && !acp.lines.length ? <div className="harbor-conversation-placeholder" role="status">Loading conversation…</div>
           : acp.lines.length ? <Transcript key={active.id} lines={acp.lines} />
@@ -221,10 +239,14 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
               }
             },
           }} controls={<>
-            <ModelMenu
+            <EnginePicker
+              engines={ready}
+              engineId={active.engineId}
               options={acp.configOptions}
-              value={configChoice[active.id] ?? acp.configOptions[0]?.id ?? null}
-              onChange={(optionId) => {
+              choice={configChoice[active.id] ?? acp.configOptions[0]?.id ?? null}
+              disabled={acp.sending}
+              onEngineChange={(id) => void setThreadEngine(active.id, id)}
+              onOptionChange={(optionId) => {
                 setConfigChoice((current) => ({ ...current, [active.id]: optionId }));
                 void invoke("thread_set_config", { id: active.id, optionId, value: optionId }).catch((reason) => {
                   setError(`Could not update engine options. ${String(reason)}`);

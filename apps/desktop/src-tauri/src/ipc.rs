@@ -372,6 +372,20 @@ pub async fn thread_set_config(
     crate::acp_host::set_live_config(&registry, &id, option_id, value).await
 }
 
+/// The live session speaks the old engine's protocol state, so it goes first.
+#[tauri::command]
+pub async fn thread_set_engine(
+    pool: State<'_, SqlitePool>,
+    registry: State<'_, AcpRegistry>,
+    id: String,
+    engine_id: String,
+) -> Result<(), String> {
+    crate::acp_host::drop_session(&registry, &id);
+    harbor_core::commands::thread_set_engine(&pool, id, engine_id)
+        .await
+        .map_err(map_err)
+}
+
 #[tauri::command]
 pub async fn thread_grant_root(
     pool: State<'_, SqlitePool>,
@@ -859,6 +873,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         thread_send,
         thread_cancel,
         thread_set_config,
+        thread_set_engine,
         thread_grant_root,
         thread_attach_files,
         agent_list,
