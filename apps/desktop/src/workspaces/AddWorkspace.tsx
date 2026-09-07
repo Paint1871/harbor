@@ -169,6 +169,7 @@ export function AddWorkspace({
     }
   }
 
+  const folderName = folder.trim().replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
   const visibleTerminalEngineIds = Array.from(
     { length: totalTerminals },
     (_, index) => terminalEngineIds[index] || (detectionState === "ready" ? preferredEngineId(engines) : SHELL_ENGINE_ID),
@@ -196,19 +197,42 @@ export function AddWorkspace({
         <h2 id="add-folder-title">Bring your project into Harbor.</h2>
         <p>Your files stay in place. Harbor groups conversations under this folder.</p>
 
-        <Button type="button" className="harbor-browse-folder" disabled={busy} onClick={() => void browse()}>
-          Choose folder…
-        </Button>
-        <label>
-          Or enter a full folder path
-          <input
-            autoFocus
-            disabled={busy}
-            value={folder}
-            onChange={(event) => setFolder(event.target.value)}
-            placeholder="Full path to your project"
-          />
-        </label>
+        <div className="harbor-workspace-folder">
+          <label htmlFor="add-folder-path">Folder path</label>
+          <div className="harbor-workspace-folder-row">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path
+                d="M1.25 3.6c0-.61.5-1.1 1.1-1.1h2.6c.35 0 .68.17.89.45l.6.8h5.2c.61 0 1.1.5 1.1 1.1v5.55c0 .61-.49 1.1-1.1 1.1H2.35c-.6 0-1.1-.49-1.1-1.1V3.6Z"
+                stroke="currentColor"
+                strokeWidth="1.1"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <input
+              id="add-folder-path"
+              autoFocus
+              disabled={busy}
+              value={folder}
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => setFolder(event.target.value)}
+              placeholder="/Users/you/projects/your-app"
+            />
+            <button
+              type="button"
+              className="harbor-workspace-browse"
+              disabled={busy}
+              onClick={() => void browse()}
+            >
+              Browse…
+            </button>
+          </div>
+          <p className="harbor-workspace-folder-hint">
+            {folderName
+              ? <>Opens as <strong>{folderName}</strong>.</>
+              : "Paste a path, or pick the folder from Finder."}
+          </p>
+        </div>
 
         <fieldset className="harbor-workspace-setup">
           <legend>Start layout</legend>
@@ -244,16 +268,29 @@ export function AddWorkspace({
               <strong>Terminal launch</strong>
               <small>Which installed CLI these terminals open with.</small>
             </span>
-            <button
-              type="button"
-              className="harbor-workspace-detect"
-              disabled={busy || detectionState === "checking"}
-              onClick={() => void detectEngines("engines_recheck")}
-            >
-              {detectionState === "checking" ? "Checking…" : "Check again"}
-            </button>
+            <span className="harbor-workspace-terminal-actions">
+              {totalTerminals > 1 ? (
+                <label className="harbor-workspace-per-terminal">
+                  <input
+                    type="checkbox"
+                    checked={perTerminal}
+                    disabled={busy}
+                    onChange={(event) => setPerTerminal(event.target.checked)}
+                  />
+                  <span>Per terminal</span>
+                </label>
+              ) : null}
+              <button
+                type="button"
+                className="harbor-workspace-detect"
+                disabled={busy || detectionState === "checking"}
+                onClick={() => void detectEngines("engines_recheck")}
+              >
+                {detectionState === "checking" ? "Checking…" : "Check again"}
+              </button>
+            </span>
           </div>
-          <div className="harbor-workspace-terminals" aria-live="polite">
+          <div className="harbor-workspace-terminals" data-mode={perTerminal ? "per" : "all"} aria-live="polite">
             {!perTerminal ? (
               <label className="harbor-workspace-terminal">
                 <span className="harbor-workspace-terminal-label">
@@ -328,17 +365,6 @@ export function AddWorkspace({
               );
               })
             )}
-            {totalTerminals > 1 ? (
-              <label className="harbor-workspace-per-terminal">
-                <input
-                  type="checkbox"
-                  checked={perTerminal}
-                  disabled={busy}
-                  onChange={(event) => setPerTerminal(event.target.checked)}
-                />
-                <span>Give each terminal its own CLI</span>
-              </label>
-            ) : null}
           </div>
           {detectionState === "error" ? (
             <p className="harbor-workspace-detection-note">Could not inspect local CLIs. Harbor will still open regular shells.</p>

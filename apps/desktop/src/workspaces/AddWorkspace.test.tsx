@@ -49,7 +49,7 @@ it("sends the launch profile and remembers it for the next workspace", async () 
   render(<AddWorkspace onAdded={onAdded} onClose={vi.fn()} />);
   await screen.findByText("1 installed CLI detected on this Mac.");
 
-  fireEvent.change(screen.getByRole("textbox", { name: "Or enter a full folder path" }), {
+  fireEvent.change(screen.getByRole("textbox", { name: "Folder path" }), {
     target: { value: workspace.folder },
   });
   fireEvent.change(screen.getByRole("slider", { name: "Additional terminals" }), {
@@ -86,7 +86,7 @@ it("applies one CLI to every terminal without asking per terminal", async () => 
   fireEvent.change(screen.getByRole("combobox", { name: "Terminal CLI" }), {
     target: { value: "shell" },
   });
-  fireEvent.change(screen.getByRole("textbox", { name: "Or enter a full folder path" }), {
+  fireEvent.change(screen.getByRole("textbox", { name: "Folder path" }), {
     target: { value: workspace.folder },
   });
   fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
@@ -108,14 +108,14 @@ it("keeps a different CLI choice for each terminal when asked", async () => {
   render(<AddWorkspace onAdded={onAdded} onClose={vi.fn()} />);
   await screen.findByText("1 installed CLI detected on this Mac.");
 
-  fireEvent.click(screen.getByRole("checkbox", { name: /own CLI/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Per terminal/ }));
   fireEvent.change(screen.getByRole("combobox", { name: "Terminal 1 CLI" }), {
     target: { value: "shell" },
   });
   fireEvent.change(screen.getByRole("combobox", { name: "Terminal 2 CLI" }), {
     target: { value: "claude-code" },
   });
-  fireEvent.change(screen.getByRole("textbox", { name: "Or enter a full folder path" }), {
+  fireEvent.change(screen.getByRole("textbox", { name: "Folder path" }), {
     target: { value: workspace.folder },
   });
   fireEvent.click(screen.getByRole("button", { name: "Open folder" }));

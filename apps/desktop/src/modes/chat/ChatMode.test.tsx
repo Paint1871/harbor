@@ -73,8 +73,8 @@ it("adds and selects the native-picked folder without creating a thread automati
   });
   render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
   fireEvent.click(await screen.findByRole("button", { name: /Open a project folder/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder…" }));
-  const path = screen.getByRole("textbox", { name: "Or enter a full folder path" }) as HTMLInputElement;
+  fireEvent.click(screen.getByRole("button", { name: "Browse…" }));
+  const path = screen.getByRole("textbox", { name: "Folder path" }) as HTMLInputElement;
   await waitFor(() => expect(path.value).toBe(workspace.folder));
   fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
   await screen.findByText("Let’s work on Project.");
