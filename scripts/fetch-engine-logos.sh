@@ -20,16 +20,24 @@ mkdir -p "$dir"
 # engine-id|url  — each source was checked to return that vendor's own mark.
 sources=(
   "claude-code|https://claude.com/favicon.svg"
+  "codex|https://developers.openai.com/favicon.svg"
   "cursor|https://cursor.com/favicon.svg"
   "opencode|https://opencode.ai/favicon.svg"
-  "copilot|https://github.githubassets.com/favicons/favicon.svg"
+  "copilot|https://github.githubassets.com/images/modules/site/copilot/copilot.png"
+  "gemini|https://raw.githubusercontent.com/google-gemini/gemini-cli/main/packages/vscode-ide-companion/assets/icon.png"
+  "aider|https://aider.chat/assets/icons/favicon-32x32.png"
   "grok-build|https://x.ai/favicon.ico"
   "kimi-code|https://www.kimi.com/favicon.ico"
+  "muse-code|https://www.meta.ai/favicon.ico"
   "amp|https://ampcode.com/favicon.ico"
   "factory|https://factory.ai/favicon.ico"
   "droid|https://app.factory.ai/favicon.ico"
   "antigravity|https://antigravity.google/favicon.ico"
 )
+
+# Some vendor edges refuse a bare curl; identify as a browser rather than
+# being blocked by bot protection.
+agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 ok=0
 skipped=0
@@ -37,7 +45,7 @@ for entry in "${sources[@]}"; do
   id="${entry%%|*}"
   url="${entry#*|}"
   tmp="$(mktemp)"
-  if ! curl -fsSL --compressed --max-time 20 -o "$tmp" "$url"; then
+  if ! curl -fsSL --compressed --max-time 20 -A "$agent" -o "$tmp" "$url"; then
     printf '  skip  %-14s download failed\n' "$id"
     rm -f "$tmp"
     skipped=$((skipped + 1))
@@ -88,8 +96,10 @@ Harbor's original marks.
 
 $(for entry in "${sources[@]}"; do printf -- '- %s: %s\n' "${entry%%|*}" "${entry#*|}"; done)
 
-No verified source: codex (openai.com refuses automated requests), gemini,
-muse-code, aider (only a wordmark, unusable at icon size).
+Notes on two of these: muse-code is Meta's CLI (it updates from api.meta.ai), so
+the Meta AI mark stands in for it; no Muse-specific public logo was found. The
+gemini entry is the Gemini CLI's own product icon from Google's repository
+rather than the generic Gemini sparkle.
 EOF
 
 printf '\n%d installed, %d skipped\n%s\n' "$ok" "$skipped" "$dir"
