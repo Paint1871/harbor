@@ -89,8 +89,9 @@ export function DesktopShell({
           onToggleRail={() => setRailOpen((open) => !open)}
           onTidy={() => tidyHandler.current()}
           onBellClick={() => setInboxOpen((open) => !open)}
+          inboxOpen={inboxOpen}
         />
-        <Inbox open={inboxOpen} />
+        <Inbox open={inboxOpen} onClose={() => setInboxOpen(false)} />
         {settingsOpen ? (
           <Settings
             theme={theme}

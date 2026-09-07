@@ -84,6 +84,7 @@
     "allow-mail-send",
     "allow-default-profile-name",
     "allow-notifications-list",
+    "allow-notifications-unread-count",
     "allow-notifications-mark-read",
     "allow-dictation-begin",
     "allow-dictation-end",

@@ -68,54 +68,19 @@ pub async fn send(
         .execute(pool)
         .await?;
 
-    let notification_id = Uuid::now_v7().to_string();
-    let target = json!({
-        "mode": "agent",
-        "agentId": to_id,
-        "chatId": chat.id,
-    });
-    sqlx::query(
-        "INSERT INTO notifications (id, kind, title, body, target_json, created_at)
-         VALUES (?1, 'mail', ?2, ?3, ?4, ?5)",
+    crate::notifications::record(
+        pool,
+        "mail",
+        &format!("Mail from {from_name}"),
+        body,
+        crate::notifications::Target {
+            mode: Some("agent".into()),
+            workspace_id: None,
+            pane_id: None,
+            session_ref: Some(chat.id.clone()),
+        },
     )
-    .bind(&notification_id)
-    .bind(format!("Mail from {from_name}"))
-    .bind(body)
-    .bind(target.to_string())
-    .bind(ts)
-    .execute(pool)
     .await?;
-    Ok(())
-}
-
-/// Newest first. The Inbox shows only what the local database actually holds.
-pub async fn notifications(pool: &SqlitePool) -> Result<Vec<crate::types::Notification>, Error> {
-    let rows: Vec<(String, String, String, String, Option<i64>, i64)> = sqlx::query_as(
-        "SELECT id, kind, title, body, read_at, created_at
-         FROM notifications ORDER BY created_at DESC, id DESC LIMIT 50",
-    )
-    .fetch_all(pool)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(
-            |(id, kind, title, body, read_at, created_at)| crate::types::Notification {
-                id,
-                kind,
-                title,
-                body,
-                read: read_at.is_some(),
-                created_at,
-            },
-        )
-        .collect())
-}
-
-pub async fn mark_notifications_read(pool: &SqlitePool) -> Result<(), Error> {
-    sqlx::query("UPDATE notifications SET read_at = ?1 WHERE read_at IS NULL")
-        .bind(now())
-        .execute(pool)
-        .await?;
     Ok(())
 }
 
@@ -171,29 +136,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn notifications_list_is_newest_first_and_marks_read() {
+    async fn mail_notifies_the_recipient_with_a_target_that_opens_the_chat() {
         let dir = tempfile::tempdir().unwrap();
         let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
-        assert!(notifications(&pool).await.unwrap().is_empty());
+        assert!(crate::notifications::list(&pool).await.unwrap().is_empty());
 
-        let from = agent(&pool, "From").await;
-        let to = agent(&pool, "To").await;
-        send(&pool, &from, &to, "first").await.unwrap();
-        send(&pool, &from, &to, "second").await.unwrap();
+        let from = agent(&pool, "Scout").await;
+        let to = agent(&pool, "Release manager").await;
+        send(&pool, &from, &to, "handoff please").await.unwrap();
 
-        let rows = notifications(&pool).await.unwrap();
-        assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].body, "second");
+        let rows = crate::notifications::list(&pool).await.unwrap();
+        assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].kind, "mail");
-        assert!(rows.iter().all(|row| !row.read));
-
-        mark_notifications_read(&pool).await.unwrap();
-        assert!(
-            notifications(&pool)
-                .await
-                .unwrap()
-                .iter()
-                .all(|row| row.read)
-        );
+        assert_eq!(rows[0].title, "Mail from Scout");
+        assert_eq!(rows[0].body, "handoff please");
+        // The row points at the recipient's Mail chat, not just at Agent mode.
+        assert_eq!(rows[0].mode.as_deref(), Some("agent"));
+        let chats = crate::chats::list(&pool, &to).await.unwrap();
+        assert_eq!(rows[0].session_ref.as_deref(), Some(chats[0].id.as_str()));
     }
 }

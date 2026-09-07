@@ -13,6 +13,7 @@ pub mod icons;
 pub mod layout;
 pub mod mail;
 pub mod memory;
+pub mod notifications;
 pub mod places;
 pub mod plugins;
 pub mod restore;

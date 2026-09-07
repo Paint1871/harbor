@@ -164,6 +164,8 @@ pub async fn pty_spawn(
         .as_deref()
         .map(str::trim)
         .filter(|id| !id.is_empty() && *id != "shell");
+    // Names the terminal in a way the builder recognises in the inbox.
+    let engine_label;
     let (target, target_args) = if let Some(engine_id) = requested_engine {
         let spec = harbor_core::engines::catalog()
             .into_iter()
@@ -185,8 +187,10 @@ pub async fn pty_spawn(
         let target = allow
             .grant(Path::new(&detected.path), ExecutableKind::Engine)
             .map_err(|error| error.to_string())?;
+        engine_label = spec.display_name.clone();
         (target, spec.pty_args)
     } else {
+        engine_label = "Shell".into();
         (login_shell.clone(), vec!["-i".into()])
     };
     let cols = cols.clamp(20, 500);
@@ -225,6 +229,9 @@ pub async fn pty_spawn(
     )
     .map_err(|error| error.to_string())?;
     let emit_id = pane_id.clone();
+    let notify_pool = (*pool).clone();
+    let notify_workspace = workspace_id.clone();
+    let notify_label = engine_label.clone();
     thread::spawn(move || {
         while let Ok(chunk) = rx.recv() {
             let _ = app.emit(
@@ -233,6 +240,15 @@ pub async fn pty_spawn(
             );
         }
         let _ = app.emit("pty-exit", serde_json::json!({ "paneId": emit_id }));
+        // A terminal in a workspace the builder is not looking at just ended.
+        tauri::async_runtime::block_on(crate::ipc::notify(
+            &app,
+            &notify_pool,
+            "terminal-exit",
+            &format!("{notify_label} stopped"),
+            "The terminal exited. Resume it to start a fresh shell.",
+            harbor_core::notifications::Target::code(&notify_workspace, &emit_id),
+        ));
     });
     // Insert only after the PTY has been created so a failed spawn never
     // leaves a stale registry entry behind.

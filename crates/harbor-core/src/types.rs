@@ -242,4 +242,9 @@ pub struct Notification {
     pub body: String,
     pub read: bool,
     pub created_at: i64,
+    /// Where clicking the row should take the builder.
+    pub mode: Option<String>,
+    pub workspace_id: Option<String>,
+    pub pane_id: Option<String>,
+    pub session_ref: Option<String>,
 }

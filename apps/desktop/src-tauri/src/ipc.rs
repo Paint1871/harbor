@@ -609,6 +609,27 @@ pub fn default_profile_name() -> String {
     harbor_core::commands::default_profile_name()
 }
 
+/// Records an event and tells the renderer, so the bell updates without polling.
+pub async fn notify(
+    app: &AppHandle,
+    pool: &SqlitePool,
+    kind: &str,
+    title: &str,
+    body: &str,
+    target: harbor_core::notifications::Target,
+) {
+    if let Ok(row) = harbor_core::notifications::record(pool, kind, title, body, target).await {
+        let _ = app.emit("notification", row);
+    }
+}
+
+#[tauri::command]
+pub async fn notifications_unread_count(pool: State<'_, SqlitePool>) -> Result<i64, String> {
+    harbor_core::commands::notifications_unread_count(&pool)
+        .await
+        .map_err(map_err)
+}
+
 #[tauri::command]
 pub async fn notifications_list(pool: State<'_, SqlitePool>) -> Result<Vec<Notification>, String> {
     harbor_core::commands::notifications_list(&pool)
@@ -842,6 +863,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         default_profile_name,
         engine_icons,
         notifications_list,
+        notifications_unread_count,
         notifications_mark_read,
         face_preview,
         acp_permission_resolve,

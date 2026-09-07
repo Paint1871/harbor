@@ -280,6 +280,22 @@ fn make_permission_hook(
             "acp_permission",
             permission_card(&perm_id, &session_ref, &params),
         );
+        // The turn is now blocked until someone answers, possibly in a
+        // workspace the builder is not looking at.
+        block_on(crate::ipc::notify(
+            &app,
+            &pool,
+            "permission",
+            &format!(
+                "{} needs permission",
+                title.as_deref().unwrap_or("An agent")
+            ),
+            command
+                .as_deref()
+                .or(path.as_deref())
+                .unwrap_or("Waiting for your answer"),
+            harbor_core::notifications::Target::session(kind.as_str(), &session_ref),
+        ));
         match rx.recv_timeout(PERMISSION_TIMEOUT) {
             Ok(outcome) => Ok(outcome),
             Err(_) => {
@@ -486,7 +502,54 @@ async fn run_turn(
             }
         }),
     );
+    // The turn is over. Say so, and say why it ended if the engine gave up.
+    let stop = result
+        .get("stopReason")
+        .and_then(Value::as_str)
+        .unwrap_or("end_turn");
+    let (kind, title, body) = match stop {
+        "end_turn" => (
+            "turn-finished",
+            "Finished",
+            first_line(&prose).unwrap_or_else(|| "The agent finished its turn.".into()),
+        ),
+        "cancelled" => (
+            "turn-cancelled",
+            "Cancelled",
+            "The turn was cancelled.".into(),
+        ),
+        "refusal" => (
+            "turn-refused",
+            "Refused",
+            "The engine refused the turn.".into(),
+        ),
+        other => (
+            "turn-stopped",
+            "Stopped",
+            format!("The turn stopped: {other}."),
+        ),
+    };
+    crate::ipc::notify(
+        app,
+        pool,
+        kind,
+        title,
+        &body,
+        harbor_core::notifications::Target::session(chat_kind, session_ref),
+    )
+    .await;
     Ok(())
+}
+
+/// The opening line of a reply is what makes a finished-turn row worth reading.
+fn first_line(prose: &str) -> Option<String> {
+    let line = prose.lines().map(str::trim).find(|line| !line.is_empty())?;
+    let trimmed: String = line.chars().take(120).collect();
+    Some(if trimmed.len() < line.len() {
+        format!("{trimmed}…")
+    } else {
+        trimmed
+    })
 }
 
 pub async fn prompt(
@@ -599,6 +662,22 @@ pub async fn resolve_permission(
 
 #[cfg(test)]
 mod tests {
+    use super::first_line;
+
+    #[test]
+    fn finished_turn_body_uses_the_first_real_line_and_caps_it() {
+        assert_eq!(first_line("").as_deref(), None);
+        assert_eq!(first_line("   \n\n  ").as_deref(), None);
+        assert_eq!(
+            first_line("\n\n  Ran the tests.  \nAll green.").as_deref(),
+            Some("Ran the tests.")
+        );
+        let long = "x".repeat(200);
+        let capped = first_line(&long).unwrap();
+        assert_eq!(capped.chars().count(), 121, "120 chars plus an ellipsis");
+        assert!(capped.ends_with('…'));
+    }
+
     use super::*;
     use harbor_core::types::CreateAgent;
 

@@ -165,6 +165,10 @@ export interface Notification {
   body: string;
   read: boolean;
   createdAt: number;
+  mode: string | null;
+  workspaceId: string | null;
+  paneId: string | null;
+  sessionRef: string | null;
 }
 
 export interface EngineIcon {
@@ -247,6 +251,7 @@ export interface HarborCommands {
   mail_send: (fromAgentId: string, toAgentId: string, body: string) => Promise<void>;
   notifications_list: () => Promise<Notification[]>;
   notifications_mark_read: () => Promise<void>;
+  notifications_unread_count: () => Promise<number>;
   face_preview: (agentId: string, faceIndex: number) => Promise<{ pngB64: string }>;
 
   acp_permission_resolve: (id: string, optionId: string | null, cancelled: boolean) => Promise<void>;

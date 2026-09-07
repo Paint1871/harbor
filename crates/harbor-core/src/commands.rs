@@ -332,11 +332,15 @@ pub async fn mail_send(
 }
 
 pub async fn notifications_list(pool: &SqlitePool) -> Result<Vec<Notification>, Error> {
-    crate::mail::notifications(pool).await
+    crate::notifications::list(pool).await
+}
+
+pub async fn notifications_unread_count(pool: &SqlitePool) -> Result<i64, Error> {
+    crate::notifications::unread_count(pool).await
 }
 
 pub async fn notifications_mark_read(pool: &SqlitePool) -> Result<(), Error> {
-    crate::mail::mark_notifications_read(pool).await
+    crate::notifications::mark_read(pool).await
 }
 
 pub async fn face_preview(

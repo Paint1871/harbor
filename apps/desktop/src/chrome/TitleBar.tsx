@@ -13,6 +13,7 @@ export interface TitleBarProps {
   onToggleRail: () => void;
   onTidy: () => void;
   onBellClick: () => void;
+  inboxOpen: boolean;
 }
 
 export function TitleBar({
@@ -22,6 +23,7 @@ export function TitleBar({
   onToggleRail,
   onTidy,
   onBellClick,
+  inboxOpen,
 }: TitleBarProps) {
   const platform = hostPlatform();
 
@@ -42,7 +44,7 @@ export function TitleBar({
       <div className="harbor-titlebar-flex" data-tauri-drag-region />
       <div className="harbor-titlebar-end">
         {mode === "code" ? <WorkspaceMenu onTidy={onTidy} /> : null}
-        <BellButton onClick={onBellClick} />
+        <BellButton onClick={onBellClick} suppressed={inboxOpen} />
         {platform === "windows" ? (
           <div className="harbor-window-controls">
             <button type="button" aria-label="Minimize" onClick={() => void minimizeWindow()}>
