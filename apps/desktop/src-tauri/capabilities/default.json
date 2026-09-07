@@ -16,6 +16,7 @@
     "allow-settings-get",
     "allow-settings-set",
     "allow-engines-detect",
+    "allow-engine-icons",
     "allow-engines-recheck",
     "allow-workspace-list",
     "allow-workspace-add",

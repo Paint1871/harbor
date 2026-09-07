@@ -1,4 +1,5 @@
-import type { ReactElement } from "react";
+import { useSyncExternalStore, type ReactElement } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 const STROKE = { fill: "none", stroke: "currentColor", strokeWidth: 1.35, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -87,6 +88,47 @@ function monogram(label: string): string {
   return (first.charAt(0) + second.charAt(0)).toUpperCase();
 }
 
+
+/**
+ * Real vendor logos, if the builder installed any.
+ *
+ * Harbor ships original marks and does not redistribute vendor trademarks, so
+ * this store is empty until logos are placed in the engine-icons directory.
+ * Loaded once per session; every mark re-renders when it arrives.
+ */
+let installedIcons: Record<string, string> = {};
+const iconListeners = new Set<() => void>();
+let iconsRequested = false;
+
+function subscribeIcons(listener: () => void): () => void {
+  iconListeners.add(listener);
+  if (!iconsRequested) {
+    iconsRequested = true;
+    void invoke<{ engineId: string; dataUrl: string }[]>("engine_icons")
+      .then((rows) => {
+        const next: Record<string, string> = {};
+        for (const row of rows) next[row.engineId] = row.dataUrl;
+        installedIcons = next;
+        iconListeners.forEach((notify) => notify());
+      })
+      .catch(() => undefined);
+  }
+  return () => {
+    iconListeners.delete(listener);
+  };
+}
+
+function iconSnapshot(): Record<string, string> {
+  return installedIcons;
+}
+
+/** Test seam: drop any loaded logos so drawn marks are exercised. */
+export function resetEngineIconsForTest(): void {
+  installedIcons = {};
+  iconsRequested = false;
+  iconListeners.forEach((notify) => notify());
+}
+
 export interface EngineMarkProps {
   engineId?: string | null;
   label: string;
@@ -118,6 +160,15 @@ export function resolveEngineId(engineId: string | null | undefined, label: stri
 
 export function EngineMark({ engineId, label, size = 14 }: EngineMarkProps) {
   const resolved = resolveEngineId(engineId, label);
+  const icons = useSyncExternalStore(subscribeIcons, iconSnapshot, iconSnapshot);
+  const installed = icons[resolved];
+  if (installed) {
+    return (
+      <span className="harbor-engine-mark harbor-engine-logo" style={{ width: size, height: size }}>
+        <img src={installed} alt="" width={size} height={size} />
+      </span>
+    );
+  }
   const mark = MARKS[resolved];
   if (mark) {
     return (

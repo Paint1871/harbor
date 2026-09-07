@@ -1,6 +1,7 @@
 use crate::acp_host::AcpRegistry;
 use crate::security::ExecutableAllowlist;
 use harbor_core::SqlitePool;
+use harbor_core::icons::EngineIcon;
 use harbor_core::types::{
     AgentChat, AgentRecord, ChatMessage, ContentPart, CreateAgent, DetectedEngine, FileDiff,
     FsEntry, Memory, Notification, PaneLayout, PaneState, Place, PluginApproval, PluginGrant,
@@ -594,6 +595,15 @@ pub async fn mail_send(
         .map_err(map_err)
 }
 
+/// Where a builder may drop real engine logos. Harbor ships original marks and
+/// does not redistribute vendor trademarks, so this directory starts empty.
+pub struct EngineIconDir(pub std::path::PathBuf);
+
+#[tauri::command]
+pub fn engine_icons(dir: State<'_, EngineIconDir>) -> Result<Vec<EngineIcon>, String> {
+    harbor_core::icons::engine_icons(&dir.0).map_err(map_err)
+}
+
 #[tauri::command]
 pub fn default_profile_name() -> String {
     harbor_core::commands::default_profile_name()
@@ -830,6 +840,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         session_search,
         mail_send,
         default_profile_name,
+        engine_icons,
         notifications_list,
         notifications_mark_read,
         face_preview,

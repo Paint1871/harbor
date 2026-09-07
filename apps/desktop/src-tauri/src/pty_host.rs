@@ -13,31 +13,7 @@ use crate::security::{ExecutableAllowlist, ExecutableKind};
 #[derive(Default)]
 pub struct PtyRegistry(Mutex<HashMap<String, LivePty>>);
 
-fn b64_encode(bytes: &[u8]) -> String {
-    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        let b0 = bytes[i];
-        let b1 = if i + 1 < bytes.len() { bytes[i + 1] } else { 0 };
-        let b2 = if i + 2 < bytes.len() { bytes[i + 2] } else { 0 };
-        let triple = ((b0 as u32) << 16) | ((b1 as u32) << 8) | b2 as u32;
-        out.push(TABLE[((triple >> 18) & 63) as usize] as char);
-        out.push(TABLE[((triple >> 12) & 63) as usize] as char);
-        out.push(if i + 1 < bytes.len() {
-            TABLE[((triple >> 6) & 63) as usize] as char
-        } else {
-            '='
-        });
-        out.push(if i + 2 < bytes.len() {
-            TABLE[(triple & 63) as usize] as char
-        } else {
-            '='
-        });
-        i += 3;
-    }
-    out
-}
+use harbor_core::b64::encode as b64_encode;
 
 fn b64_decode(input: &str) -> Result<Vec<u8>, String> {
     fn val(ch: u8) -> Option<u8> {

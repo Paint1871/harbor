@@ -53,6 +53,8 @@ pub fn run() {
             app.manage(allowlist);
             app.manage(pty_host::PtyRegistry::default());
             app.manage(acp_host::AcpRegistry::default());
+            // Optional vendor logos live beside the database, never in the bundle.
+            app.manage(ipc::EngineIconDir(data_root.join("engine-icons")));
             let db_path = data_root.join("harbor.sqlite");
             let pool = tauri::async_runtime::block_on(harbor_core::db::open(&db_path))?;
             app.manage(pool);

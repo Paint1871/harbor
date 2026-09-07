@@ -2,12 +2,14 @@
 
 pub mod acp;
 pub mod agents;
+pub mod b64;
 pub mod chats;
 pub mod commands;
 pub mod db;
 pub mod engines;
 pub mod error;
 pub mod files;
+pub mod icons;
 pub mod layout;
 pub mod mail;
 pub mod memory;

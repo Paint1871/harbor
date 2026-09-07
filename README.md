@@ -107,6 +107,26 @@ four checks above), **ACP handshake** (a live handshake against OpenCode), and
 **Windows PTY** (the PowerShell PTY gates, which decide whether a Windows
 preview build is allowed at all).
 
+## Engine logos
+
+Harbor draws its own mark for every engine, so two terminals running different
+CLIs never look alike. Those marks are original Harbor artwork and deliberately
+not the vendors' trademarks, which Harbor does not redistribute.
+
+If you would rather see the real logos, `scripts/fetch-engine-logos.sh`
+downloads each vendor's own artwork from that vendor's own domain into a runtime
+directory outside the repository:
+
+```sh
+bash scripts/fetch-engine-logos.sh
+```
+
+Harbor reads `<app data>/engine-icons/<engine-id>.{svg,png,webp}` on start and
+falls back to its own mark for anything missing. The files are never committed
+and never ship with Harbor; whether your use of a vendor's mark is permitted is
+between you and that vendor's brand guidelines. Delete the directory to go back
+to the drawn marks.
+
 ## Layout
 
 ```text

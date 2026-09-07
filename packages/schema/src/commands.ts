@@ -167,6 +167,11 @@ export interface Notification {
   createdAt: number;
 }
 
+export interface EngineIcon {
+  engineId: string;
+  dataUrl: string;
+}
+
 export interface HarborCommands {
   settings_get: (key: string) => Promise<unknown>;
   default_profile_name: () => Promise<string>;
@@ -174,6 +179,7 @@ export interface HarborCommands {
 
   engines_detect: () => Promise<DetectedEngine[]>;
   engines_recheck: () => Promise<DetectedEngine[]>;
+  engine_icons: () => Promise<EngineIcon[]>;
 
   workspace_list: () => Promise<Workspace[]>;
   workspace_pick_folder: () => Promise<string | null>;
