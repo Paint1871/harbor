@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { Button } from "./Button";
 
@@ -11,15 +12,42 @@ export interface ComposerProps {
   textareaProps?: Omit<ComponentPropsWithRef<"textarea">, "value" | "defaultValue" | "onChange" | "disabled" | "children">;
 }
 
+/** How long after a send a repeat of that exact text is treated as a write-back. */
+const ECHO_WINDOW_MS = 1000;
+
 export function Composer({ value, onValueChange, onSend, disabled = false, controls, className = "", textareaProps = {} }: ComposerProps) {
   const { onKeyDown, className: textareaClassName = "", ...inputProps } = textareaProps;
   const canSend = !disabled && value.trim().length > 0;
+  // A sent message can come back on its own: the platform's text engine holds a
+  // pending correction across the submit and writes it into the box we cleared,
+  // which reads as a message that never went out. Only the exact text just
+  // sent, only within a moment of sending, is refused — nobody retypes a whole
+  // message that fast, and everything else is the builder still writing.
+  const echo = useRef<{ text: string; at: number } | null>(null);
+
+  function submit() {
+    if (!canSend) return;
+    echo.current = { text: value, at: Date.now() };
+    onSend(value);
+  }
+
+  function change(next: string) {
+    const sent = echo.current;
+    if (sent && next === sent.text && Date.now() - sent.at < ECHO_WINDOW_MS) {
+      echo.current = null;
+      onValueChange("");
+      return;
+    }
+    echo.current = null;
+    onValueChange(next);
+  }
+
   return (
     <form
       className={`harbor-composer ${className}`}
       onSubmit={(event) => {
         event.preventDefault();
-        if (canSend) onSend(value);
+        submit();
       }}
     >
       <textarea
@@ -36,7 +64,7 @@ export function Composer({ value, onValueChange, onSend, disabled = false, contr
         className={`harbor-composer-input ${textareaClassName}`}
         value={value}
         disabled={disabled}
-        onChange={(event) => onValueChange(event.target.value)}
+        onChange={(event) => change(event.target.value)}
         onKeyDown={(event) => {
           onKeyDown?.(event);
           if (event.defaultPrevented || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;

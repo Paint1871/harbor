@@ -258,10 +258,31 @@ it("tells the host which conversation is on screen", async () => {
 });
 
 it("does not let a text suggestion write the sent message back into the box", async () => {
+  let release: () => void = () => {};
+  const turn = new Promise<void>((resolve) => { release = resolve; });
+  const base = invoke.getMockImplementation()!;
+  invoke.mockImplementation((command: string, args: unknown) => command === "thread_send" ? turn : base(command, args));
+
   render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
   fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
-  const composer = await screen.findByRole("textbox", { name: "Message" });
-  // macOS resurrects an accepted autocorrect into the cleared box.
+  const composer = await screen.findByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+  await waitFor(() => expect(composer.hasAttribute("disabled")).toBe(false));
+
+  // The platform is asked not to correct at all…
   expect(composer.getAttribute("autocorrect")).toBe("off");
   expect(composer.getAttribute("autocapitalize")).toBe("off");
+
+  fireEvent.change(composer, { target: { value: "test" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(composer.value).toBe(""));
+
+  // …and if it corrects anyway, the write-back is refused.
+  fireEvent.change(composer, { target: { value: "test" } });
+  await waitFor(() => expect(composer.value).toBe(""));
+
+  // Typing it again is not a write-back, and still works.
+  fireEvent.change(composer, { target: { value: "t" } });
+  fireEvent.change(composer, { target: { value: "test" } });
+  await waitFor(() => expect(composer.value).toBe("test"));
+  release();
 });
