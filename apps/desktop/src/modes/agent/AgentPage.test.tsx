@@ -155,7 +155,7 @@ it("creates a chat and sends text parts through invoke", async () => {
     }),
   );
   expect(screen.getByText("Ship the checklist", { selector: ".harbor-bubble-user" })).toBeTruthy();
-  expect(await screen.findByText(/Waiting on engine/)).toBeTruthy();
+  expect(await screen.findByText(/Waiting for opencode/)).toBeTruthy();
   expect(screen.getByText("1 working")).toBeTruthy();
 });
 
@@ -332,4 +332,30 @@ it("sets a home folder from gear", async () => {
       input: { id: "agent-1", homePath: "/tmp/project" },
     }),
   );
+});
+
+it("says in the chat list which chat is working and which is waiting on you", async () => {
+  chats = [
+    { id: "busy", agentId: "agent-1", title: "Release notes", status: "running" },
+    { id: "blocked", agentId: "agent-1", title: "Deploy", status: "needs_you" },
+    { id: "quiet", agentId: "agent-1", title: "Backlog", status: "idle" },
+  ];
+  render(<AgentPage agent={agent} onAgentChange={() => {}} />);
+
+  const working = (await screen.findByText("Release notes")).closest("button");
+  expect(working?.querySelector(".harbor-live-dot[data-on='true']")).toBeTruthy();
+  const blocked = screen.getByText("Deploy").closest("button");
+  expect(blocked?.textContent).toContain("Needs you");
+  const quiet = screen.getByText("Backlog").closest("button");
+  expect(quiet?.querySelector(".harbor-live-dot")).toBeNull();
+  expect(quiet?.textContent).toBe("Backlog");
+});
+
+it("carries the same conversation-size readout as the chat header", async () => {
+  chats = [{ id: "weekly", agentId: "agent-1", title: "Weekly notes", status: "idle" }];
+  transcripts = { weekly: [{ id: "a", role: "user", text: "x".repeat(4000) }] };
+  render(<AgentPage agent={agent} onAgentChange={() => {}} />);
+
+  fireEvent.click(await screen.findByText("Weekly notes"));
+  expect(await screen.findByText("~1.0k tokens · 1 message")).toBeTruthy();
 });

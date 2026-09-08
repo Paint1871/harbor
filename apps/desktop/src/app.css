@@ -1028,6 +1028,15 @@ button, input, textarea, select {
   font-size: var(--harbor-text-sm);
 }
 .harbor-chat-tab[data-selected="true"] { color: var(--harbor-text); background: var(--harbor-raised); }
+.harbor-chat-tab { display: flex; align-items: center; gap: 8px; }
+.harbor-chat-tab-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.harbor-chat-tab-flag {
+  flex: 0 0 auto;
+  color: var(--harbor-needs-you);
+  font-size: 10px;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
 .harbor-agent-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .harbor-agent-page header { display: flex; gap: var(--harbor-space-3); align-items: center; padding: var(--harbor-space-3); border-bottom: 1px solid var(--harbor-hairline); }
 .harbor-face {

@@ -7,6 +7,7 @@ import { Face } from "./Face";
 import { GearPanel } from "./GearPanel";
 import { useAgentChat } from "./useAgentChat";
 import { EnginePicker } from "../chat/EnginePicker";
+import { ContextMeter } from "../chat/ContextMeter";
 import { PermissionCard } from "../chat/PermissionCard";
 import { MentionList, mentionQuery } from "../../chrome/MentionList";
 import { Transcript } from "../../chrome/Transcript";
@@ -81,6 +82,7 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
           <p>Powered by {engineLabel}</p>
         </div>
         <div className="harbor-agent-header-actions">
+          <ContextMeter lines={chat.lines} />
           <span className="harbor-agent-status">
             <span className="harbor-live-dot" data-on={needsYou || workingCount > 0} />
             {needsYou ? "Needs you" : `${workingCount} working`}
@@ -129,7 +131,9 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                   data-selected={chat.activeId === item.id}
                   onClick={() => { chat.setActiveId(item.id); setTab("chats"); }}
                 >
-                  {item.title}
+                  <span className="harbor-chat-tab-title">{item.title}</span>
+                  {item.status === "running" ? <span className="harbor-live-dot" data-on="true" title="Working" /> : null}
+                  {item.status === "needs_you" ? <span className="harbor-chat-tab-flag">Needs you</span> : null}
                 </button>
               ))}
               {!chat.chats.length ? <p className="harbor-muted">{chat.loading ? "Loading chats…" : "No chats yet."}</p> : null}
@@ -175,7 +179,7 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
               ))}
               {chat.sending ? (
                 <div className="harbor-chat-progress" role="status">
-                  <span className="harbor-live-dot" data-on="true" /> Waiting on engine…
+                  <span className="harbor-live-dot" data-on="true" /> Waiting for {engineLabel}…
                   <Button variant="ghost" onClick={() => void chat.cancel()}>Stop</Button>
                 </div>
               ) : null}
