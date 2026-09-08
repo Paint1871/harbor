@@ -2230,11 +2230,15 @@ button, input, textarea, select {
 .harbor-pill-menu-name > small {
   color: var(--harbor-muted);
   font-size: 10px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
+.harbor-pill-trigger-label {
+  flex: 0 0 auto;
+  color: var(--harbor-muted);
+  font-weight: 400;
+}
+.harbor-pill-trigger[data-tone="quiet"] > span:not(.harbor-pill-trigger-label) { color: var(--harbor-text); }
 .harbor-pill-menu button[role="menuitemradio"][aria-checked="true"] { background: var(--harbor-raised); }
 .harbor-pill-menu-check { flex: 0 0 auto; color: var(--harbor-accent-think); }
 .harbor-pill-menu-note {

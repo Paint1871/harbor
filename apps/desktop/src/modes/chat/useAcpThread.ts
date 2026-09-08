@@ -116,6 +116,12 @@ export function useAcpThread(threadId: string | null) {
     return () => { disposed = true; for (const unlisten of stops) unlisten(); };
   }, [reload, threadId]);
 
+  /** Options belong to one engine's session. Switching engines invalidates them. */
+  const resetConfigOptions = useCallback(() => {
+    if (!threadId) return;
+    setOptions((current) => ({ ...current, [threadId]: [] }));
+  }, [threadId]);
+
   /** Opening the picker is the moment to ask; connecting an engine is not free. */
   const loadConfigOptions = useCallback(async () => {
     if (!threadId) return;
@@ -195,6 +201,7 @@ export function useAcpThread(threadId: string | null) {
     sending: !!threadId && !!sending[threadId],
     configOptions: threadId ? options[threadId] ?? [] : [],
     loadConfigOptions,
+    resetConfigOptions,
     permissions: threadId ? permissions[threadId] ?? [] : [],
     turn,
     send,

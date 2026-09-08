@@ -12,6 +12,8 @@ export interface MenuPillProps {
   label: string;
   /** What is chosen, shown on the pill itself. */
   value: string;
+  /** Put the label on the pill too, where the value alone says nothing ("Off"). */
+  showLabel?: boolean;
   items: MenuItem[];
   current: string | null;
   onSelect: (id: string) => void;
@@ -26,7 +28,7 @@ export interface MenuPillProps {
 /** A list this long stops being scannable without a filter. */
 const SEARCH_THRESHOLD = 10;
 
-export function MenuPill({ label, value, items, current, onSelect, disabled = false, busy = false, onOpen, emptyNote, footer, tone = "default" }: MenuPillProps) {
+export function MenuPill({ label, value, showLabel = false, items, current, onSelect, disabled = false, busy = false, onOpen, emptyNote, footer, tone = "default" }: MenuPillProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
@@ -90,6 +92,7 @@ export function MenuPill({ label, value, items, current, onSelect, disabled = fa
           });
         }}
       >
+        {showLabel ? <span className="harbor-pill-trigger-label">{label}</span> : null}
         <span>{value}</span>
         <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
           <path d="M2.5 4 5 6.5 7.5 4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -118,7 +121,6 @@ export function MenuPill({ label, value, items, current, onSelect, disabled = fa
                     type="button"
                     role="menuitemradio"
                     aria-checked={item.id === current}
-                    title={item.description ?? undefined}
                     onClick={() => {
                       setOpen(false);
                       if (item.id !== current) onSelect(item.id);

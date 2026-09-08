@@ -133,11 +133,15 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
       if (workspaceId) setLists((current) => ({ ...current, [workspaceId]: apply(current[workspaceId] ?? []) }));
       else setOther(apply);
       setActive((current) => current?.id === threadId ? { ...current, engineId: nextEngineId } : current);
-      // The old engine's option values died with its session.
+      // The old engine's models and option values died with its session. Show
+      // the new engine's, not a Claude model list under a Grok pill.
       setConfigChoice((current) => {
         const { [threadId]: _dropped, ...rest } = current;
         return rest;
       });
+      acp.resetConfigOptions();
+      setOptionsBusy(true);
+      void acp.loadConfigOptions().finally(() => setOptionsBusy(false));
     } catch (reason) {
       setError(`Could not switch the engine for this thread. ${String(reason)}`);
     }

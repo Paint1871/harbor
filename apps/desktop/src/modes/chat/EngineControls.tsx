@@ -97,6 +97,7 @@ export function EngineControls({ engines, installable = [], installing = null, o
           disabled={disabled}
           busy={busy}
           tone="quiet"
+          showLabel={option.category !== "model"}
           onSelect={(value) => onOptionChange(option.id, value)}
         />
       ))}

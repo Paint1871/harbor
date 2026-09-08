@@ -339,3 +339,29 @@ it("filters a long model list instead of making you scroll it", async () => {
   expect(left).toHaveLength(1);
   expect(left[0]!.textContent).toContain("Model 17");
 });
+
+it("drops the old engine's models when the thread switches engine", async () => {
+  const base = invoke.getMockImplementation()!;
+  const byEngine: Record<string, unknown[]> = {
+    opencode: [{ id: "model", name: "Model", category: "model", currentValue: "opencode/big-pickle", values: [{ value: "opencode/big-pickle", name: "OpenCode Zen/Big Pickle" }] }],
+    "claude-code": [{ id: "model", name: "Model", category: "model", currentValue: "opus", values: [{ value: "opus", name: "Opus" }, { value: "sonnet", name: "Sonnet" }] }],
+  };
+  let engine = "opencode";
+  invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+    if (command === "thread_config_options") return Promise.resolve(byEngine[engine]);
+    if (command === "thread_set_engine") { engine = String(args?.engineId); return Promise.resolve(); }
+    return base(command, args);
+  });
+
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  await screen.findByRole("button", { name: "Model: Big Pickle" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Engine: OpenCode" }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: /Claude Code/ }));
+
+  // A Claude model list must never sit under an OpenCode pill, or the reverse.
+  await screen.findByRole("button", { name: "Engine: Claude Code" });
+  await screen.findByRole("button", { name: "Model: Opus" });
+  expect(screen.queryByRole("button", { name: "Model: Big Pickle" })).toBeNull();
+});
