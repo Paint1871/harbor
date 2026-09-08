@@ -543,6 +543,30 @@ pub async fn agent_chat_cancel(
 }
 
 #[tauri::command]
+pub async fn agent_chat_rename(
+    pool: State<'_, SqlitePool>,
+    chat_id: String,
+    title: String,
+) -> Result<(), String> {
+    harbor_core::commands::agent_chat_rename(&pool, chat_id, title)
+        .await
+        .map_err(map_err)
+}
+
+/// The live session dies with the chat it belonged to.
+#[tauri::command]
+pub async fn agent_chat_delete(
+    pool: State<'_, SqlitePool>,
+    registry: State<'_, AcpRegistry>,
+    chat_id: String,
+) -> Result<(), String> {
+    crate::acp_host::drop_session(&registry, &chat_id);
+    harbor_core::commands::agent_chat_delete(&pool, chat_id)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
 pub async fn agent_chat_config_options(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
@@ -940,6 +964,8 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         agent_chat_cancel,
         agent_chat_set_config,
         agent_chat_config_options,
+        agent_chat_rename,
+        agent_chat_delete,
         memory_list,
         memory_upsert,
         memory_delete,

@@ -234,7 +234,7 @@ it("toggles the GitHub plugin grant for the current agent", async () => {
   );
 });
 
-it("lists teammates from @ and sends mail", async () => {
+it("completes a teammate name into the draft, and mails the handoff only when sent", async () => {
   const other: AgentRecord = { ...agent, id: "agent-2", name: "Reviewer" };
   invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
     if (command === "agent_list") return Promise.resolve([agent, other]);
@@ -249,14 +249,20 @@ it("lists teammates from @ and sends mail", async () => {
   expect(await screen.findByRole("button", { name: "Reviewer" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Release manager" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Reviewer" }));
+
+  // Completing the name is not sending it.
+  await waitFor(() => expect((composer as HTMLTextAreaElement).value).toBe("@Reviewer "));
+  expect(invoke).not.toHaveBeenCalledWith("mail_send", expect.anything());
+
+  fireEvent.change(composer, { target: { value: "@Reviewer please take the deploy" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() =>
     expect(invoke).toHaveBeenCalledWith("mail_send", {
       fromAgentId: "agent-1",
       toAgentId: "agent-2",
-      body: "Handoff from Release manager",
+      body: "please take the deploy",
     }),
   );
-  expect(screen.queryByRole("button", { name: agent.name })).toBeNull();
 });
 
 const chrome: ChromeValue = {
@@ -358,4 +364,35 @@ it("carries the same conversation-size readout as the chat header", async () => 
 
   fireEvent.click(await screen.findByText("Weekly notes"));
   expect(await screen.findByText("~1.0k tokens · 1 message")).toBeTruthy();
+});
+
+it("renames and deletes a chat, and asks before deleting", async () => {
+  chats = [
+    { id: "weekly", agentId: "agent-1", title: "Weekly notes", status: "idle" },
+    { id: "other", agentId: "agent-1", title: "Other", status: "idle" },
+  ];
+  render(<AgentPage agent={agent} onAgentChange={() => {}} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Rename Weekly notes" }));
+  const field = screen.getByRole("textbox", { name: "Rename Weekly notes" });
+  fireEvent.change(field, { target: { value: "Launch checklist" } });
+  fireEvent.blur(field);
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("agent_chat_rename", { chatId: "weekly", title: "Launch checklist" }));
+  await screen.findByText("Launch checklist");
+
+  // One click arms the delete; the second commits it.
+  fireEvent.click(screen.getByRole("button", { name: "Delete Other" }));
+  expect(invoke).not.toHaveBeenCalledWith("agent_chat_delete", expect.anything());
+  fireEvent.click(screen.getByRole("button", { name: "Delete Other" }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("agent_chat_delete", { chatId: "other" }));
+  await waitFor(() => expect(screen.queryByText("Other")).toBeNull());
+});
+
+it("offers the skill catalog in the agent's own Skills tab", async () => {
+  render(<AgentPage agent={agent} onAgentChange={() => {}} />);
+  fireEvent.click(await screen.findByRole("tab", { name: "Skills" }));
+
+  fireEvent.click(screen.getAllByRole("button", { name: "Use in this chat" })[0]!);
+  const composer = await screen.findByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+  expect(composer.value).toMatch(/^Review the current change carefully/);
 });

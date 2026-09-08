@@ -245,6 +245,33 @@ export function useAgentChat(agentId: string) {
     }
   }, [activeId]);
 
+  const renameChat = useCallback(async (chatId: string, title: string) => {
+    const previous = chats.find((item) => item.id === chatId)?.title;
+    setChats((current) => current.map((item) => item.id === chatId ? { ...item, title } : item));
+    try {
+      await invoke("agent_chat_rename", { chatId, title });
+    } catch (error) {
+      if (previous !== undefined) {
+        setChats((current) => current.map((item) => item.id === chatId ? { ...item, title: previous } : item));
+      }
+      setErrors((current) => ({ ...current, list: `Could not rename that chat. ${String(error)}` }));
+    }
+  }, [chats]);
+
+  const deleteChat = useCallback(async (chatId: string) => {
+    try {
+      await invoke("agent_chat_delete", { chatId });
+      setChats((current) => current.filter((item) => item.id !== chatId));
+      setHistory((current) => {
+        const { [chatId]: _gone, ...rest } = current;
+        return rest;
+      });
+      setActiveId((current) => current === chatId ? null : current);
+    } catch (error) {
+      setErrors((current) => ({ ...current, list: `Could not delete that chat. ${String(error)}` }));
+    }
+  }, []);
+
   const setConfig = useCallback(async (optionId: string, value: unknown) => {
     const chatId = activeId;
     if (!chatId) return;
@@ -297,6 +324,8 @@ export function useAgentChat(agentId: string) {
       if (activeRef.current) void loadHistory(activeRef.current);
     },
     createChat,
+    renameChat,
+    deleteChat,
     send,
     cancel,
     setConfig,

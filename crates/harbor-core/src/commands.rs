@@ -281,6 +281,18 @@ pub async fn agent_chat_send(
     crate::chats::send(pool, &chat_id, &parts).await
 }
 
+pub async fn agent_chat_rename(
+    pool: &SqlitePool,
+    chat_id: String,
+    title: String,
+) -> Result<(), Error> {
+    crate::chats::rename(pool, &chat_id, &title).await
+}
+
+pub async fn agent_chat_delete(pool: &SqlitePool, chat_id: String) -> Result<(), Error> {
+    crate::chats::delete(pool, &chat_id).await
+}
+
 pub async fn agent_chat_cancel(pool: &SqlitePool, chat_id: String) -> Result<(), Error> {
     crate::chats::cancel(pool, &chat_id).await
 }

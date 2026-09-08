@@ -203,6 +203,42 @@ pub async fn set_status(pool: &SqlitePool, chat_id: &str, status: &str) -> Resul
     Ok(())
 }
 
+pub async fn rename(pool: &SqlitePool, chat_id: &str, title: &str) -> Result<(), Error> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(Error::Message("title required".into()));
+    }
+    let result = sqlx::query("UPDATE agent_chats SET title = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(title)
+        .bind(now())
+        .bind(chat_id)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(Error::Message("chat not found".into()));
+    }
+    Ok(())
+}
+
+/// The transcript goes with the chat; leaving orphaned messages behind would
+/// only reappear in search.
+pub async fn delete(pool: &SqlitePool, chat_id: &str) -> Result<(), Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM messages WHERE chat_kind = 'agent' AND chat_id = ?1")
+        .bind(chat_id)
+        .execute(&mut *tx)
+        .await?;
+    let result = sqlx::query("DELETE FROM agent_chats WHERE id = ?1")
+        .bind(chat_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    if result.rows_affected() == 0 {
+        return Err(Error::Message("chat not found".into()));
+    }
+    Ok(())
+}
+
 pub async fn cancel(pool: &SqlitePool, chat_id: &str) -> Result<(), Error> {
     set_status(pool, chat_id, "idle").await
 }
@@ -338,5 +374,44 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(messages, 0);
+    }
+
+    #[tokio::test]
+    async fn rename_and_delete_take_the_transcript_with_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let agent_id = agent(&pool, "Release manager").await;
+        let chat = create(&pool, &agent_id).await.unwrap();
+        send(
+            &pool,
+            &chat.id,
+            &[ContentPart {
+                r#type: "text".into(),
+                text: Some("hello".into()),
+                path: None,
+            }],
+        )
+        .await
+        .unwrap();
+
+        rename(&pool, &chat.id, "  Launch checklist  ")
+            .await
+            .unwrap();
+        assert_eq!(
+            list(&pool, &agent_id).await.unwrap()[0].title,
+            "Launch checklist"
+        );
+        assert!(rename(&pool, &chat.id, "   ").await.is_err());
+        assert!(rename(&pool, "missing", "x").await.is_err());
+
+        delete(&pool, &chat.id).await.unwrap();
+        assert!(list(&pool, &agent_id).await.unwrap().is_empty());
+        let (left,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM messages WHERE chat_id = ?1")
+            .bind(&chat.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(left, 0);
+        assert!(delete(&pool, &chat.id).await.is_err());
     }
 }

@@ -8,6 +8,7 @@ import { GearPanel } from "./GearPanel";
 import { useAgentChat } from "./useAgentChat";
 import { EnginePicker } from "../chat/EnginePicker";
 import { ContextMeter } from "../chat/ContextMeter";
+import { SKILLS } from "../../skills/catalog";
 import { PermissionCard } from "../chat/PermissionCard";
 import { MentionList, mentionQuery } from "../../chrome/MentionList";
 import { Transcript } from "../../chrome/Transcript";
@@ -64,6 +65,8 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id, chrome?.destination]);
   const [optionsBusy, setOptionsBusy] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
   const engineLabel = agent.engineId.replace(/-/g, " ");
   const selectedOptions = (chat.activeId ? configChoice[chat.activeId] : undefined) ?? {};
   const workingCount = Math.max(
@@ -85,7 +88,7 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
           <ContextMeter lines={chat.lines} />
           <span className="harbor-agent-status">
             <span className="harbor-live-dot" data-on={needsYou || workingCount > 0} />
-            {needsYou ? "Needs you" : `${workingCount} working`}
+            {needsYou ? "Needs you" : workingCount ? `${workingCount} working` : "Idle"}
           </span>
           <div className="harbor-agent-tabs" role="tablist" aria-label="Agent sections">
             <button type="button" role="tab" aria-selected={tab === "chats"} onClick={() => setTab("chats")}>
@@ -124,29 +127,89 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                 <span className="harbor-chip">{chat.chats.length}</span>
               </div>
               {chat.chats.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="harbor-chat-tab"
-                  data-selected={chat.activeId === item.id}
-                  onClick={() => { chat.setActiveId(item.id); setTab("chats"); }}
-                >
-                  <span className="harbor-chat-tab-title">{item.title}</span>
-                  {item.status === "running" ? <span className="harbor-live-dot" data-on="true" title="Working" /> : null}
-                  {item.status === "needs_you" ? <span className="harbor-chat-tab-flag">Needs you</span> : null}
-                </button>
+                <div key={item.id} className="harbor-chat-tab-row">
+                  {renaming === item.id ? (
+                    <input
+                      className="harbor-chat-tab-rename"
+                      aria-label={`Rename ${item.title}`}
+                      autoFocus
+                      defaultValue={item.title}
+                      onBlur={(event) => {
+                        const title = event.target.value.trim();
+                        setRenaming(null);
+                        if (title && title !== item.title) void chat.renameChat(item.id, title);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                        if (event.key === "Escape") {
+                          event.currentTarget.value = item.title;
+                          event.currentTarget.blur();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="harbor-chat-tab"
+                        data-selected={chat.activeId === item.id}
+                        onClick={() => { chat.setActiveId(item.id); setTab("chats"); }}
+                        onDoubleClick={() => setRenaming(item.id)}
+                      >
+                        <span className="harbor-chat-tab-title">{item.title}</span>
+                        {item.status === "running" ? <span className="harbor-live-dot" data-on="true" title="Working" /> : null}
+                        {item.status === "needs_you" ? <span className="harbor-chat-tab-flag">Needs you</span> : null}
+                      </button>
+                      <span className="harbor-chat-tab-actions">
+                        <button type="button" aria-label={`Rename ${item.title}`} title="Rename" onClick={() => setRenaming(item.id)}>✎</button>
+                        <button
+                          type="button"
+                          aria-label={`Delete ${item.title}`}
+                          title="Delete"
+                          data-confirm={confirming === item.id}
+                          onClick={() => {
+                            if (confirming !== item.id) { setConfirming(item.id); return; }
+                            setConfirming(null);
+                            void chat.deleteChat(item.id);
+                          }}
+                        >
+                          {confirming === item.id ? "Delete?" : "✕"}
+                        </button>
+                      </span>
+                    </>
+                  )}
+                </div>
               ))}
               {!chat.chats.length ? <p className="harbor-muted">{chat.loading ? "Loading chats…" : "No chats yet."}</p> : null}
             </aside>
             <div className="harbor-agent-main">
               {tab === "skills" ? (
-                <div className="harbor-agent-info-panel">
-                  <div className="harbor-info-mark" aria-hidden="true">✦</div>
-                  <span className="harbor-eyebrow">SKILLS</span>
-                  <h2>Give this teammate a playbook.</h2>
-                  <p>Start with a reusable local brief, then tune the teammate’s memory, places, and engine in Settings.</p>
+                <div className="harbor-agent-skills">
+                  <div className="harbor-agent-skills-heading">
+                    <span className="harbor-eyebrow">SKILLS</span>
+                    <h2>Give this teammate a playbook.</h2>
+                    <p>Each one drops a starting brief into the composer. Edit it before you send — it is only a first sentence.</p>
+                  </div>
+                  <div className="harbor-agent-skill-list">
+                    {SKILLS.map((skill) => (
+                      <article key={skill.id} className="harbor-agent-skill">
+                        <div className="harbor-agent-skill-top">
+                          <span aria-hidden="true">✦</span>
+                          <div>
+                            <strong>{skill.name}</strong>
+                            <small>{skill.label}</small>
+                          </div>
+                        </div>
+                        <p>{skill.description}</p>
+                        <div className="harbor-agent-skill-foot">
+                          <span className="harbor-skill-tags">{skill.tags.map((tag) => <span key={tag} className="harbor-chip">{tag}</span>)}</span>
+                          <Button onClick={() => { setDraft(skill.brief); setTab("chats"); }}>Use in this chat</Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
                   <div className="harbor-agent-info-actions">
-                    <Button variant="primary" onClick={() => onOpenSkills?.()}>Browse skills <span aria-hidden="true">↗</span></Button>
+                    <Button variant="ghost" onClick={() => onOpenSkills?.()}>All skills <span aria-hidden="true">↗</span></Button>
                     <Button variant="ghost" onClick={() => setTab("settings")}>Open agent settings</Button>
                   </div>
                 </div>
@@ -201,17 +264,19 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                   onPick={(id) => {
                     const to = teammates.find((item) => item.id === id);
                     if (!to) return;
-                    const body = draft.replace(/(?:^|\s)@[^\s]*$/, "").trim() || `Handoff from ${agent.name}`;
+                    // Completing a name is not the same as sending. Fill it in
+                    // and let the builder finish the sentence.
                     setMailError(null);
-                    void invoke("mail_send", { fromAgentId: agent.id, toAgentId: to.id, body })
-                      .then(() => setDraft(""))
-                      .catch((reason) => setMailError(`Mail could not be sent. ${String(reason)}`));
+                    setDraft((current) => current.replace(/(?:^|\s)@[^\s]*$/, (chunk) => `${chunk.startsWith(" ") ? " " : ""}@${to.name} `));
                   }}
                 />
               ) : null}
               <Composer
                 value={draft}
-                onValueChange={setDraft}
+                onValueChange={(value) => {
+                  if (mailError) setMailError(null);
+                  setDraft(value);
+                }}
                 disabled={chat.historyLoading && !chat.sending}
                 onSend={(value) => {
                   const named = teammates.find((item) => item.id !== agent.id && value.toLowerCase().startsWith(`@${item.name.toLowerCase()}`));
