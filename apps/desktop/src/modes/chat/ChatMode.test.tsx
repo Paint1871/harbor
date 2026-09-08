@@ -365,3 +365,22 @@ it("drops the old engine's models when the thread switches engine", async () => 
   await screen.findByRole("button", { name: "Model: Opus" });
   expect(screen.queryByRole("button", { name: "Model: Big Pickle" })).toBeNull();
 });
+
+it("states an effort the engine will not let us change, rather than faking a control", async () => {
+  const base = invoke.getMockImplementation()!;
+  invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+    if (command === "thread_config_options") return Promise.resolve([
+      { id: "model", name: "Model", category: "model", currentValue: "grok-4.6", settable: true, values: [{ value: "grok-4.6", name: "Grok 4.6" }] },
+      { id: "effort", name: "Effort", category: "thought_level", currentValue: "xhigh", settable: false, values: [{ value: "xhigh", name: "Extra High Effort" }] },
+    ]);
+    return base(command, args);
+  });
+
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+
+  await screen.findByRole("button", { name: "Model: Grok 4.6" });
+  expect(screen.getByText("Extra High Effort")).toBeTruthy();
+  // Reported, not offered: no menu behind it.
+  expect(screen.queryByRole("button", { name: /Effort/ })).toBeNull();
+});

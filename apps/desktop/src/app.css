@@ -2158,12 +2158,16 @@ button, input, textarea, select {
 .harbor-pill-trigger[aria-expanded="true"] { background: var(--harbor-raised); color: var(--harbor-text); }
 .harbor-pill-trigger:disabled { cursor: default; opacity: .5; }
 .harbor-pill-static {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   flex: 0 0 auto;
   padding: 0 2px;
   color: var(--harbor-text);
   font-size: var(--harbor-text-xs);
   font-weight: 500;
   white-space: nowrap;
+  cursor: help;
 }
 
 .harbor-pill-menu {

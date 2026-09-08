@@ -44,6 +44,13 @@ pub struct ConfigOption {
     pub values: Vec<ConfigValue>,
     #[serde(default)]
     pub source: ConfigSource,
+    /// False where the agent tells us the value but offers no way to change it.
+    #[serde(default = "yes")]
+    pub settable: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,6 +131,7 @@ fn parse_state_block(result: &Value, spec: &StateBlock) -> Option<ConfigOption> 
             .map(str::to_string),
         values,
         source: spec.source,
+        settable: true,
     })
 }
 
@@ -135,10 +143,66 @@ pub fn parse_config_options(result: &Value) -> Vec<ConfigOption> {
     [
         parse_state_block(result, &MODEL_BLOCK),
         parse_state_block(result, &MODE_BLOCK),
+        parse_reasoning_effort(result),
     ]
     .into_iter()
     .flatten()
     .collect()
+}
+
+/// Grok hangs a reasoning-effort list off the current model's `_meta`. It says
+/// which level is running but exposes no method to change it — `set_model`
+/// accepts any value, including nonsense, and nothing reads back. So it is
+/// reported, not offered: a control that silently does nothing is worse than
+/// none.
+fn parse_reasoning_effort(result: &Value) -> Option<ConfigOption> {
+    let models = result.get("models")?;
+    let current = models.get("currentModelId").and_then(Value::as_str);
+    let model = models
+        .get("availableModels")?
+        .as_array()?
+        .iter()
+        .find(|model| model.get("modelId").and_then(Value::as_str) == current)?;
+    let meta = model.get("_meta")?;
+    if meta.get("supportsReasoningEffort").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let values: Vec<ConfigValue> = meta
+        .get("reasoningEfforts")?
+        .as_array()?
+        .iter()
+        .filter_map(|entry| {
+            let id = entry.get("value").or_else(|| entry.get("id"))?.as_str()?;
+            Some(ConfigValue {
+                name: entry
+                    .get("label")
+                    .or_else(|| entry.get("name"))
+                    .and_then(Value::as_str)
+                    .unwrap_or(id)
+                    .to_string(),
+                value: id.to_string(),
+                description: entry
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+            })
+        })
+        .collect();
+    if values.is_empty() {
+        return None;
+    }
+    Some(ConfigOption {
+        id: "effort".into(),
+        name: "Effort".into(),
+        category: "thought_level".into(),
+        current_value: meta
+            .get("reasoningEffort")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        values,
+        source: ConfigSource::Model,
+        settable: false,
+    })
 }
 
 fn parse_declared_options(result: &Value) -> Vec<ConfigOption> {
@@ -192,6 +256,7 @@ fn parse_declared_options(result: &Value) -> Vec<ConfigOption> {
                             })
                             .unwrap_or_default(),
                         source: ConfigSource::Config,
+                        settable: true,
                     })
                 })
                 .collect()

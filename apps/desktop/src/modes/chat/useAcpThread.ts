@@ -17,6 +17,8 @@ export interface AcpConfigOption {
   category: string;
   currentValue: string | null;
   values: AcpConfigValue[];
+  /** False where the engine reports the value but offers no way to change it. */
+  settable: boolean;
 }
 
 function readString(source: object, key: string): string | null {
@@ -50,6 +52,7 @@ export function readConfigOptions(raw: unknown): AcpConfigOption[] {
       category: readString(item, "category") ?? "model",
       currentValue: readString(item, "currentValue"),
       values: readValues(item),
+      settable: (item as { settable?: unknown }).settable !== false,
     });
   }
   return options;

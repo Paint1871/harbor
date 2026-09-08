@@ -87,7 +87,11 @@ export function EngineControls({ engines, installable = [], installing = null, o
       ) : (
         <span className="harbor-pill-static">{name}</span>
       )}
-      {options.map((option) => (
+      {options.map((option) => (option.settable === false ? (
+        <span key={option.id} className="harbor-pill-static" title={`${option.name} is set inside ${name}, not from here`}>
+          <span className="harbor-pill-trigger-label">{option.name}</span> {valueLabel(option, choices)}
+        </span>
+      ) : (
         <MenuPill
           key={option.id}
           label={option.name}
@@ -100,7 +104,7 @@ export function EngineControls({ engines, installable = [], installing = null, o
           showLabel={option.category !== "model"}
           onSelect={(value) => onOptionChange(option.id, value)}
         />
-      ))}
+      )))}
     </>
   );
 }

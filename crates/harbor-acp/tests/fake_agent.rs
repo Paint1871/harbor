@@ -203,6 +203,47 @@ fn model_and_mode_blocks_stand_in_for_config_options() {
     assert_eq!(both[0].values[0].name, "Manual");
 }
 
+/// Grok says which effort is running and gives no way to change it: no
+/// set method exists, and set_model accepts nonsense without complaint.
+#[test]
+fn a_reported_but_unsettable_effort_is_marked_as_such() {
+    let options = parse_config_options(&json!({
+        "models": {
+            "currentModelId": "grok-4.6",
+            "availableModels": [
+                {
+                    "modelId": "grok-4.6",
+                    "name": "Grok 4.6",
+                    "_meta": {
+                        "supportsReasoningEffort": true,
+                        "reasoningEffort": "xhigh",
+                        "reasoningEfforts": [
+                            { "value": "xhigh", "label": "Extra High Effort" },
+                            { "value": "low", "label": "Low Effort" }
+                        ]
+                    }
+                },
+                { "modelId": "grok-4.5", "name": "Grok 4.5", "_meta": { "supportsReasoningEffort": true, "reasoningEfforts": [{ "value": "low", "label": "Low Effort" }] } }
+            ]
+        }
+    }));
+    assert_eq!(options.len(), 2);
+    let effort = &options[1];
+    assert_eq!(effort.id, "effort");
+    assert!(!effort.settable);
+    assert_eq!(effort.current_value.as_deref(), Some("xhigh"));
+    // The levels come from the model in use, not the whole catalogue.
+    assert_eq!(effort.values.len(), 2);
+    assert_eq!(effort.values[0].name, "Extra High Effort");
+
+    // A model that says nothing about effort contributes no chip.
+    let quiet = parse_config_options(&json!({
+        "models": { "currentModelId": "m", "availableModels": [{ "modelId": "m", "name": "M" }] }
+    }));
+    assert_eq!(quiet.len(), 1);
+    assert!(quiet[0].settable);
+}
+
 #[test]
 fn mcp_env_is_name_value_array_not_object() {
     let server = McpServer {
