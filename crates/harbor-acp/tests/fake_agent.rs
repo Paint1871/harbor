@@ -2,8 +2,8 @@ use harbor_acp::{
     PermissionKind, map_permission_kind,
     permissions::permission_outcome,
     session::{
-        InitializeCaps, ResumeKind, method_for, parse_config_options, parse_initialize_caps,
-        resume_or_new, session_params, should_drop_session_update,
+        ConfigSource, InitializeCaps, ResumeKind, method_for, parse_config_options,
+        parse_initialize_caps, resume_or_new, session_params, should_drop_session_update,
     },
     spawn::{EnvVariable, McpServer, SpawnSpec},
 };
@@ -162,6 +162,45 @@ fn config_options_are_read_from_the_session_result_too() {
     assert_eq!(options.len(), 1);
     assert_eq!(options[0].values[0].name, "OpenCode Zen/Big Pickle");
     assert!(parse_config_options(&json!({ "sessionId": "ses_1" })).is_empty());
+}
+
+/// Grok answers with the protocol's own blocks and no configOptions at all.
+#[test]
+fn model_and_mode_blocks_stand_in_for_config_options() {
+    let options = parse_config_options(&json!({
+        "sessionId": "ses_1",
+        "models": {
+            "currentModelId": "grok-4.6",
+            "availableModels": [
+                { "modelId": "grok-4.6", "name": "Grok 4.6", "description": "Latest frontier model" },
+                { "modelId": "grok-4.5", "name": "Grok 4.5" }
+            ]
+        },
+        "modes": {
+            "currentModeId": "plan",
+            "availableModes": [{ "id": "plan", "name": "Plan" }, { "id": "build", "name": "Build" }]
+        }
+    }));
+    assert_eq!(options.len(), 2);
+    assert_eq!(options[0].id, "model");
+    assert_eq!(options[0].source, ConfigSource::Model);
+    assert_eq!(options[0].current_value.as_deref(), Some("grok-4.6"));
+    assert_eq!(
+        options[0].values[0].description.as_deref(),
+        Some("Latest frontier model")
+    );
+    assert_eq!(options[1].id, "mode");
+    assert_eq!(options[1].source, ConfigSource::Mode);
+    assert_eq!(options[1].values.len(), 2);
+
+    // A declared list wins; claude-agent-acp sends both and means the declared one.
+    let both = parse_config_options(&json!({
+        "modes": { "currentModeId": "plan", "availableModes": [{ "id": "plan", "name": "Plan" }] },
+        "configOptions": [{ "id": "mode", "name": "Mode", "category": "mode", "options": [{ "value": "default", "name": "Manual" }] }]
+    }));
+    assert_eq!(both.len(), 1);
+    assert_eq!(both[0].source, ConfigSource::Config);
+    assert_eq!(both[0].values[0].name, "Manual");
 }
 
 #[test]

@@ -17,9 +17,23 @@ pub struct InitializeCaps {
     pub config_options: Vec<ConfigOption>,
 }
 
+/// Where an option came from, because that decides how it is set again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum ConfigSource {
+    /// An agent's own `configOptions` list, set with `session/set_config_option`.
+    #[default]
+    Config,
+    /// The protocol's `models` block, set with `session/set_model`.
+    Model,
+    /// The protocol's `modes` block, set with `session/set_mode`.
+    Mode,
+}
+
 /// One knob an agent exposes — "Model", "Session Mode" — with the values it
-/// accepts. Agents send these in the session result; a few send them from
-/// `initialize`, so both are read.
+/// accepts. Agents disagree about where to put these: some send a
+/// `configOptions` list, others the protocol's own `models` and `modes`
+/// blocks, and one sends both. All of them are read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigOption {
@@ -28,6 +42,8 @@ pub struct ConfigOption {
     pub category: String,
     pub current_value: Option<String>,
     pub values: Vec<ConfigValue>,
+    #[serde(default)]
+    pub source: ConfigSource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,7 +54,94 @@ pub struct ConfigValue {
     pub description: Option<String>,
 }
 
+/// `{ currentXId, availableXs: [{ idKey, name, description }] }` — the shape the
+/// protocol uses for both models and modes.
+struct StateBlock {
+    block: &'static str,
+    current_key: &'static str,
+    list_key: &'static str,
+    id_key: &'static str,
+    option_id: &'static str,
+    option_name: &'static str,
+    category: &'static str,
+    source: ConfigSource,
+}
+
+const MODEL_BLOCK: StateBlock = StateBlock {
+    block: "models",
+    current_key: "currentModelId",
+    list_key: "availableModels",
+    id_key: "modelId",
+    option_id: "model",
+    option_name: "Model",
+    category: "model",
+    source: ConfigSource::Model,
+};
+
+const MODE_BLOCK: StateBlock = StateBlock {
+    block: "modes",
+    current_key: "currentModeId",
+    list_key: "availableModes",
+    id_key: "id",
+    option_id: "mode",
+    option_name: "Mode",
+    category: "mode",
+    source: ConfigSource::Mode,
+};
+
+fn parse_state_block(result: &Value, spec: &StateBlock) -> Option<ConfigOption> {
+    let state = result.get(spec.block)?;
+    let values: Vec<ConfigValue> = state
+        .get(spec.list_key)?
+        .as_array()?
+        .iter()
+        .filter_map(|entry| {
+            let id = entry.get(spec.id_key)?.as_str()?.to_string();
+            Some(ConfigValue {
+                name: entry
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&id)
+                    .to_string(),
+                value: id,
+                description: entry
+                    .get("description")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+            })
+        })
+        .collect();
+    if values.is_empty() {
+        return None;
+    }
+    Some(ConfigOption {
+        id: spec.option_id.to_string(),
+        name: spec.option_name.to_string(),
+        category: spec.category.to_string(),
+        current_value: state
+            .get(spec.current_key)
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        values,
+        source: spec.source,
+    })
+}
+
 pub fn parse_config_options(result: &Value) -> Vec<ConfigOption> {
+    let declared = parse_declared_options(result);
+    if !declared.is_empty() {
+        return declared;
+    }
+    [
+        parse_state_block(result, &MODEL_BLOCK),
+        parse_state_block(result, &MODE_BLOCK),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
+fn parse_declared_options(result: &Value) -> Vec<ConfigOption> {
     result
         .get("configOptions")
         .and_then(Value::as_array)
@@ -88,6 +191,7 @@ pub fn parse_config_options(result: &Value) -> Vec<ConfigOption> {
                                     .collect()
                             })
                             .unwrap_or_default(),
+                        source: ConfigSource::Config,
                     })
                 })
                 .collect()
@@ -283,18 +387,44 @@ impl AcpHostSession {
         self.conn.stdin_handle()
     }
 
+    /// Set an option by the route it arrived on. A model that came from the
+    /// protocol's `models` block is changed with `session/set_model`; sending
+    /// it as a config option would be refused as an unknown id.
     pub fn set_config_option(&mut self, id: &str, value: Value) -> Result<Value, AcpError> {
-        let result = self.conn.request(
-            "session/set_config_option",
-            json!({
-                "sessionId": self.session_id,
-                "configId": id,
-                "value": value
-            }),
-        )?;
+        let source = self
+            .config_options
+            .iter()
+            .find(|option| option.id == id)
+            .map(|option| option.source)
+            .unwrap_or_default();
+        let (method, params) = match source {
+            ConfigSource::Model => (
+                "session/set_model",
+                json!({ "sessionId": self.session_id, "modelId": value }),
+            ),
+            ConfigSource::Mode => (
+                "session/set_mode",
+                json!({ "sessionId": self.session_id, "modeId": value }),
+            ),
+            ConfigSource::Config => (
+                "session/set_config_option",
+                json!({ "sessionId": self.session_id, "configId": id, "value": value }),
+            ),
+        };
+        let result = self.conn.request(method, params)?;
         let options = parse_config_options(&result);
         if !options.is_empty() {
             self.config_options = options;
+        } else if let Some(chosen) = value.as_str() {
+            // set_model and set_mode answer with nothing to re-read, so remember
+            // the choice rather than showing the old value back.
+            if let Some(option) = self
+                .config_options
+                .iter_mut()
+                .find(|option| option.id == id)
+            {
+                option.current_value = Some(chosen.to_string());
+            }
         }
         Ok(result)
     }

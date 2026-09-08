@@ -300,6 +300,7 @@
 
 .harbor-composer-controls {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--harbor-space-2);
