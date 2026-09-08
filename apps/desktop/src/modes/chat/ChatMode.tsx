@@ -9,7 +9,8 @@ import { FolderRail } from "./FolderRail";
 import { ThreadHeader } from "./ThreadHeader";
 import { ThreadList } from "./ThreadList";
 import { ChangesPanel } from "./ChangesPanel";
-import { EnginePicker } from "./EnginePicker";
+import { EngineControls } from "./EngineControls";
+import { ContextMeter } from "./ContextMeter";
 import { PermissionCard } from "./PermissionCard";
 import { useAcpThread } from "./useAcpThread";
 import { AppRail } from "../../chrome/AppRail";
@@ -73,6 +74,13 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     void reload();
     void checkEngines();
   }, [checkEngines, mode, reload]);
+
+  useEffect(() => {
+    if (!active || acp.configOptions.length) return;
+    setOptionsBusy(true);
+    void acp.loadConfigOptions().finally(() => setOptionsBusy(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id]);
 
   // Tell the host which conversation is on screen, so a reply the builder is
   // watching land does not also arrive as an inbox row.
@@ -220,7 +228,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
       {error ? <div className="harbor-status-banner" role="alert"><span>{error}</span><Button variant="ghost" onClick={() => { void reload(); void checkEngines(); }}>Try again</Button></div> : null}
       {active ? <>
         <ThreadHeader thread={threads?.find((thread) => thread.id === active.id) ?? active} workspace={workspace}
-          lines={acp.lines} attached={attached[active.id]?.length ?? 0} disabled={!canCreate} onNew={() => void newThread()} />
+          disabled={!canCreate} onNew={() => void newThread()} />
         <ChangesPanel workspaceId={active.workspaceId} refreshToken={acp.turn} />
         {acp.loading && !acp.lines.length ? <div className="harbor-conversation-placeholder" role="status">Loading conversation…</div>
           : acp.lines.length ? <Transcript key={active.id} lines={acp.lines} />
@@ -266,7 +274,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
               }
             },
           }} controls={<>
-            <EnginePicker
+            <EngineControls
               engines={ready}
               installable={installable}
               installing={installing}
@@ -277,7 +285,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
               busy={optionsBusy}
               disabled={acp.sending}
               onOpen={() => {
-                if (acp.configOptions.length) return;
+                if (acp.configOptions.length || optionsBusy) return;
                 setOptionsBusy(true);
                 void acp.loadConfigOptions().finally(() => setOptionsBusy(false));
               }}
@@ -289,6 +297,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
                 });
               }}
             />
+            <span className="harbor-composer-spacer" />
             <Button variant="ghost" disabled={acp.sending} onClick={() => void attachFolder()}>Attach folder</Button>
             <label className="harbor-chip">
               Attach files
@@ -297,8 +306,8 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
                 event.currentTarget.value = "";
               }} />
             </label>
-            {attached[active.id]?.length ? <span className="harbor-muted">{attached[active.id]?.length} attached</span> : null}
-            <span className="harbor-muted">Enter to send · Shift + Enter for a new line</span>
+            <ContextMeter lines={acp.lines} attached={attached[active.id]?.length ?? 0} />
+            {(drafts[active.id] ?? "") ? null : <span className="harbor-composer-hint">Enter to send</span>}
           </>} />
       </> : <div className="harbor-start-page harbor-chat-start">
         <div className="harbor-start-mark"><Logo size={36} /></div>

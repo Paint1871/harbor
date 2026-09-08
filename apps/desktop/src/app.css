@@ -2125,75 +2125,132 @@ button, input, textarea, select {
 .harbor-file-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 24px; color: var(--harbor-muted); text-align: center; }
 .harbor-file-empty strong { color: var(--harbor-text); font-size: 14px; font-weight: 500; }
 .harbor-file-empty p { margin: 0; font-size: var(--harbor-text-xs); }
-/* Engine and model in one trigger; the menu opens upward out of the composer. */
-.harbor-engine-picker { position: relative; display: inline-flex; }
-.harbor-engine-trigger {
+/* One pill per decision. The menu opens upward out of the composer. */
+.harbor-menu-pill { position: relative; display: inline-flex; flex: 0 0 auto; }
+.harbor-pill-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  max-width: 240px;
-  min-height: 24px;
-  padding: 0 8px;
+  gap: 5px;
+  max-width: 200px;
+  min-height: 26px;
+  padding: 0 9px;
   border: 1px solid var(--harbor-hairline);
   border-radius: var(--harbor-radius-pill);
   background: transparent;
   color: var(--harbor-text);
   font: inherit;
   font-size: var(--harbor-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--harbor-motion-duration) var(--harbor-motion-easing),
-              border-color var(--harbor-motion-duration) var(--harbor-motion-easing);
+              border-color var(--harbor-motion-duration) var(--harbor-motion-easing),
+              color var(--harbor-motion-duration) var(--harbor-motion-easing);
 }
-.harbor-engine-trigger:hover:not(:disabled) {
+.harbor-pill-trigger[data-tone="quiet"] { border-color: transparent; color: var(--harbor-muted); font-weight: 400; }
+.harbor-pill-trigger > span { overflow: hidden; text-overflow: ellipsis; }
+.harbor-pill-trigger > svg { flex: 0 0 auto; opacity: .6; }
+.harbor-pill-trigger:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--harbor-text) 26%, var(--harbor-hairline));
   background: var(--harbor-raised);
+  color: var(--harbor-text);
 }
-.harbor-engine-trigger:disabled { cursor: default; opacity: .5; }
-.harbor-engine-trigger[aria-expanded="true"] { background: var(--harbor-raised); }
-.harbor-engine-trigger-name,
-.harbor-engine-trigger-choice { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.harbor-engine-trigger-choice {
-  padding-left: 7px;
-  border-left: 1px solid var(--harbor-hairline);
-  color: var(--harbor-muted);
-  font-family: var(--harbor-font-mono);
-  font-size: 10px;
+.harbor-pill-trigger[aria-expanded="true"] { background: var(--harbor-raised); color: var(--harbor-text); }
+.harbor-pill-trigger:disabled { cursor: default; opacity: .5; }
+.harbor-pill-static {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  color: var(--harbor-text);
+  font-size: var(--harbor-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
 }
-.harbor-engine-trigger > svg { flex: 0 0 auto; color: var(--harbor-muted); }
-.harbor-engine-menu {
+
+.harbor-pill-menu {
   top: auto;
   bottom: calc(100% + 6px);
   left: 0;
   right: auto;
-  min-width: 216px;
-  max-width: 300px;
-  max-height: 320px;
-  overflow: auto;
-}
-.harbor-engine-menu button[role="menuitemradio"] {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  min-width: 232px;
+  max-width: 320px;
+  max-height: 340px;
+  padding: 5px;
+}
+.harbor-pill-menu-label {
+  margin: 3px 0 4px !important;
+  padding: 0 7px;
+  color: var(--harbor-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--harbor-label-tracking);
+  text-transform: uppercase;
+}
+.harbor-pill-menu-search {
+  width: 100%;
+  min-height: 28px;
+  margin-bottom: 4px;
+  padding: 0 9px;
+  border: 1px solid var(--harbor-hairline);
+  border-radius: 7px;
+  background: var(--harbor-field);
+  color: var(--harbor-text);
+  font: inherit;
+  font-size: var(--harbor-text-sm);
+}
+.harbor-pill-menu-search:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--harbor-accent-think) 55%, var(--harbor-hairline));
+}
+.harbor-pill-menu-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.harbor-pill-menu-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 6px 0 2px !important;
+  padding: 3px 7px;
+  background: var(--harbor-surface);
+  color: var(--harbor-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.harbor-pill-menu-scroll > div:first-child > .harbor-pill-menu-group { margin-top: 0 !important; }
+.harbor-pill-menu button[role="menuitemradio"] {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   width: 100%;
+  padding: 6px 8px;
   text-align: left;
 }
-.harbor-engine-menu button[role="menuitemradio"][aria-checked="true"] { color: var(--harbor-text); }
-.harbor-engine-menu button[role="menuitemradio"] > span:first-child {
+.harbor-pill-menu-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.harbor-pill-menu-name > small {
+  color: var(--harbor-muted);
+  font-size: 10px;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.harbor-engine-menu-check {
-  flex: 0 0 auto;
-  color: var(--harbor-accent-think);
+.harbor-pill-menu button[role="menuitemradio"][aria-checked="true"] { background: var(--harbor-raised); }
+.harbor-pill-menu-check { flex: 0 0 auto; color: var(--harbor-accent-think); }
+.harbor-pill-menu-note {
+  margin: 4px 0 2px !important;
+  padding: 0 8px;
+  color: var(--harbor-muted);
+  font-size: 10px;
+  line-height: 1.5;
 }
+.harbor-pill-menu-foot { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--harbor-hairline); }
 .harbor-engine-install {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 5px 10px;
+  padding: 4px 8px;
   color: var(--harbor-muted);
   font-size: var(--harbor-text-sm);
 }
@@ -2202,7 +2259,7 @@ button, input, textarea, select {
   flex: 0 0 auto;
   width: auto;
   min-height: 22px;
-  padding: 0 9px;
+  padding: 0 10px;
   border: 1px solid var(--harbor-hairline);
   border-radius: var(--harbor-radius-pill);
   background: transparent;
@@ -2215,26 +2272,12 @@ button, input, textarea, select {
   background: var(--harbor-raised);
 }
 .harbor-engine-install button:disabled { cursor: default; opacity: .55; }
-.harbor-engine-menu-label {
-  margin: 6px 0 3px !important;
-  padding: 0 8px;
-  color: var(--harbor-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: var(--harbor-label-tracking);
-  text-transform: uppercase;
-}
-.harbor-engine-menu > .harbor-engine-menu-label:first-child { margin-top: 2px !important; }
-.harbor-engine-menu-note {
-  margin: 6px 0 2px !important;
-  padding: 0 8px;
-  color: var(--harbor-muted);
-  font-size: 10px;
-  line-height: 1.5;
-}
+
+/* The row reads left to right: what answers, then what it works on, then size. */
+.harbor-composer-spacer { flex: 1 1 auto; min-width: 0; }
+.harbor-composer-hint { flex: 0 0 auto; color: var(--harbor-muted); font-size: var(--harbor-text-xs); }
 
 /* Conversation size, with no claim about the engine's own window. */
-.harbor-thread-header-end { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
 .harbor-context-meter {
   margin-left: 0 !important;
   color: var(--harbor-muted);

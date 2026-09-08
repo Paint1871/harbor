@@ -193,8 +193,7 @@ it("switches the thread to another engine from the composer", async () => {
   fireEvent.click(screen.getByRole("menuitemradio", { name: /Claude Code/ }));
 
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_set_engine", { id: thread.id, engineId: "claude-code" }));
-  await screen.findByRole("button", { name: /Claude Code/ });
-  expect(screen.getByText("/tmp/project · claude-code")).toBeTruthy();
+  expect(await screen.findByRole("button", { name: "Engine: Claude Code" })).toBeTruthy();
 });
 
 it("reports the conversation size without claiming a context window", async () => {
@@ -210,25 +209,26 @@ it("reports the conversation size without claiming a context window", async () =
   expect(screen.queryByText(/%/)).toBeNull();
 });
 
-it("asks the engine for its models when the picker opens, and sets the one picked", async () => {
+it("shows the engine's model as its own control, grouped by provider", async () => {
   render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
   fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
-  await screen.findByRole("textbox", { name: "Message" });
-  expect(invoke).not.toHaveBeenCalledWith("thread_config_options", expect.anything());
 
-  fireEvent.click(screen.getByRole("button", { name: /OpenCode/ }));
+  // Opening the thread is enough; the model is not hidden behind the engine menu.
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_config_options", { id: thread.id }));
+  fireEvent.click(await screen.findByRole("button", { name: "Model: Big Pickle" }));
 
-  const current = await screen.findByRole("menuitemradio", { name: /OpenCode Zen\/Big Pickle/ });
-  expect(current.getAttribute("aria-checked")).toBe("true");
-  fireEvent.click(screen.getByRole("menuitemradio", { name: /Forge AI\/Kimi K3/ }));
+  // The provider half of a qualified name becomes the group heading.
+  expect(screen.getByText("OpenCode Zen")).toBeTruthy();
+  expect(screen.getByText("Forge AI")).toBeTruthy();
+  expect(screen.getByRole("menuitemradio", { name: /Big Pickle/ }).getAttribute("aria-checked")).toBe("true");
 
+  fireEvent.click(screen.getByRole("menuitemradio", { name: /Kimi K3/ }));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_set_config", {
     id: thread.id,
     optionId: "model",
     value: "forge/kimi-k3",
   }));
-  await screen.findByText("Forge AI/Kimi K3");
+  expect(await screen.findByRole("button", { name: "Model: Kimi K3" })).toBeTruthy();
 });
 
 it("frees the composer as soon as the message is in the transcript", async () => {
@@ -314,4 +314,28 @@ it("offers to add an engine whose ACP adapter is missing, then uses it", async (
 
   fireEvent.click(await screen.findByRole("menuitemradio", { name: /Claude Code/ }));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_set_engine", { id: thread.id, engineId: "claude-code" }));
+});
+
+it("filters a long model list instead of making you scroll it", async () => {
+  const base = invoke.getMockImplementation()!;
+  const many = Array.from({ length: 24 }, (_, index) => ({
+    value: `vendor-${index}/model-${index}`,
+    name: `Vendor ${index}/Model ${index}`,
+  }));
+  invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+    if (command === "thread_config_options") return Promise.resolve([
+      { id: "model", name: "Model", category: "model", currentValue: many[0]!.value, values: many },
+    ]);
+    return base(command, args);
+  });
+
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Model: Model 0" }));
+
+  expect(screen.getAllByRole("menuitemradio")).toHaveLength(24);
+  fireEvent.change(screen.getByRole("textbox", { name: "Filter Model" }), { target: { value: "Model 17" } });
+  const left = screen.getAllByRole("menuitemradio");
+  expect(left).toHaveLength(1);
+  expect(left[0]!.textContent).toContain("Model 17");
 });

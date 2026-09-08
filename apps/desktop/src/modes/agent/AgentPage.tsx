@@ -6,7 +6,7 @@ import type { AgentRecord } from "@harbor/schema/commands";
 import { Face } from "./Face";
 import { GearPanel } from "./GearPanel";
 import { useAgentChat } from "./useAgentChat";
-import { EnginePicker } from "../chat/EnginePicker";
+import { EngineControls } from "../chat/EngineControls";
 import { ContextMeter } from "../chat/ContextMeter";
 import { SKILLS } from "../../skills/catalog";
 import { PermissionCard } from "../chat/PermissionCard";
@@ -35,6 +35,13 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
     .filter((item) => item.id !== agent.id)
     .filter((item) => !mention || item.name.toLowerCase().includes(mention.toLowerCase()))
     .map((item) => ({ id: item.id, label: item.name }));
+
+  useEffect(() => {
+    if (!chat.activeId || chat.configOptions.length) return;
+    setOptionsBusy(true);
+    void chat.loadConfigOptions().finally(() => setOptionsBusy(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.activeId]);
 
   useEffect(() => {
     const watched = chrome?.mode === "agent" && chrome?.destination === "mode";
@@ -85,7 +92,6 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
           <p>Powered by {engineLabel}</p>
         </div>
         <div className="harbor-agent-header-actions">
-          <ContextMeter lines={chat.lines} />
           <span className="harbor-agent-status">
             <span className="harbor-live-dot" data-on={needsYou || workingCount > 0} />
             {needsYou ? "Needs you" : workingCount ? `${workingCount} working` : "Idle"}
@@ -303,24 +309,22 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                 }}
                 controls={
                   <>
-                    <EnginePicker
+                    <EngineControls
                       engines={[]}
-                      engineId={engineLabel}
+                      engineId={agent.engineId}
+                      engineName={engineLabel}
                       options={chat.configOptions}
                       choices={selectedOptions}
                       busy={optionsBusy}
-                      onOpen={() => {
-                        if (chat.configOptions.length) return;
-                        setOptionsBusy(true);
-                        void chat.loadConfigOptions().finally(() => setOptionsBusy(false));
-                      }}
                       onOptionChange={(optionId: string, value: string) => {
                         const chatId = chat.activeId;
                         if (chatId) setConfigChoice((current) => ({ ...current, [chatId]: { ...current[chatId], [optionId]: value } }));
                         void chat.setConfig(optionId, value);
                       }}
                     />
-                    <span className="harbor-muted">Enter to send · Shift + Enter for a new line</span>
+                    <span className="harbor-composer-spacer" />
+                    <ContextMeter lines={chat.lines} />
+                    {draft ? null : <span className="harbor-composer-hint">Enter to send</span>}
                   </>
                 }
               />
