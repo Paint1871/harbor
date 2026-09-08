@@ -83,7 +83,7 @@ fn acp_command(engine_id: &str) -> Result<(PathBuf, Vec<String>), String> {
         .into_iter()
         .find(|spec| spec.id == engine_id)
         .ok_or_else(|| format!("unknown engine {engine_id}"))?;
-    let path_env = std::env::var("PATH").unwrap_or_default();
+    let path_env = harbor_core::engines::runtime_path();
     let cwd = std::env::current_dir().ok();
     let binary = if spec.chat_mode == "adapter" && spec.binaries.len() > 1 {
         spec.binaries.get(1)

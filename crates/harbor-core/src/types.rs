@@ -55,6 +55,9 @@ pub struct DetectedEngine {
     pub status: String,
     pub supports_chat: bool,
     pub supports_terminal: bool,
+    /// Set when chat needs an adapter this machine does not have yet.
+    #[serde(default)]
+    pub adapter_package: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

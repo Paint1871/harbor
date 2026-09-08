@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-engine-install-adapter"
+description = "Enables the engine_install_adapter command without any pre-configured scope."
+commands.allow = ["engine_install_adapter"]
+
+[[permission]]
+identifier = "deny-engine-install-adapter"
+description = "Denies the engine_install_adapter command without any pre-configured scope."
+commands.deny = ["engine_install_adapter"]

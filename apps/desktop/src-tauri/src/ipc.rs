@@ -74,6 +74,24 @@ pub async fn engines_recheck(
     Ok(engines)
 }
 
+/// Fetch the ACP adapter an engine needs, then report the fresh engine list so
+/// the caller sees the engine become usable in the same round trip.
+#[tauri::command]
+pub async fn engine_install_adapter(
+    pool: State<'_, SqlitePool>,
+    allow: State<'_, ExecutableAllowlist>,
+    engine_id: String,
+) -> Result<Vec<DetectedEngine>, String> {
+    tauri::async_runtime::spawn_blocking(move || harbor_core::engines::install_adapter(&engine_id))
+        .await
+        .map_err(|error| error.to_string())??;
+    let engines = harbor_core::commands::engines_recheck(&pool)
+        .await
+        .map_err(map_err)?;
+    crate::acp_host::grant_engines(&allow, &engines);
+    Ok(engines)
+}
+
 fn allow_workspace_directory(app: &AppHandle, folder: &str) {
     // The native picker and the persisted workspace list both feed the
     // Tauri filesystem scope. The custom Rust commands still enforce their
@@ -916,6 +934,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         settings_set,
         engines_detect,
         engines_recheck,
+        engine_install_adapter,
         workspace_list,
         workspace_add,
         workspace_pick_folder,

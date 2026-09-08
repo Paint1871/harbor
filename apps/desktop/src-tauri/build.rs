@@ -7,6 +7,7 @@ fn main() {
             "engine_icons",
             "engines_detect",
             "engines_recheck",
+            "engine_install_adapter",
             "workspace_list",
             "workspace_add",
             "workspace_pick_folder",

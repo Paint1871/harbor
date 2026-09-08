@@ -36,10 +36,13 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
   const [attached, setAttached] = useState<Record<string, string[]>>({});
   const [fileMentions, setFileMentions] = useState<FsEntry[]>([]);
   const [optionsBusy, setOptionsBusy] = useState(false);
+  const [installing, setInstalling] = useState<string | null>(null);
   const createLock = useRef(false);
   const acp = useAcpThread(active?.id ?? null);
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const ready = engines.filter((engine) => engine.status === "ready" && engine.supportsChat);
+  // Chat-capable engines that are installed but still need their ACP adapter.
+  const installable = engines.filter((engine) => engine.status === "adapter-missing" && !!engine.adapterPackage);
   const engine = ready.find((item) => item.id === engineId) ?? ready[0];
   const threads = workspaceId ? lists[workspaceId] : other;
 
@@ -101,6 +104,18 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
       setActive(thread);
     } catch { setError("The thread could not be created. Your folder is still open. Please try again."); }
     finally { setCreating(false); createLock.current = false; }
+  }
+
+  async function installAdapter(engineId: string) {
+    setInstalling(engineId);
+    setError(null);
+    try {
+      setEngines(await invoke<DetectedEngine[]>("engine_install_adapter", { engineId }));
+    } catch (reason) {
+      setError(`Could not add that engine. ${String(reason)}`);
+    } finally {
+      setInstalling(null);
+    }
   }
 
   async function setThreadEngine(threadId: string, nextEngineId: string) {
@@ -253,6 +268,9 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
           }} controls={<>
             <EnginePicker
               engines={ready}
+              installable={installable}
+              installing={installing}
+              onInstall={(id) => void installAdapter(id)}
               engineId={active.engineId}
               options={acp.configOptions}
               choices={configChoice[active.id] ?? {}}

@@ -27,6 +27,8 @@ export interface DetectedEngine {
   status: string;
   supportsChat: boolean;
   supportsTerminal: boolean;
+  /** Set when chat needs an adapter this machine does not have yet. */
+  adapterPackage?: string | null;
 }
 
 export type PaneLayout =

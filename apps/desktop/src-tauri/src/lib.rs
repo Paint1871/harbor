@@ -48,6 +48,8 @@ pub fn run() {
                 main.set_decorations(false)?;
             }
             // No workspace roots or engine processes are opened on cold start.
+            // Adapters Harbor installs live beside the database, never globally.
+            harbor_core::engines::set_adapter_root(data_root.join("adapters"));
             let allowlist = security::ExecutableAllowlist::bootstrap()?;
             acp_host::grant_engines(&allowlist, &harbor_core::engines::recheck());
             app.manage(allowlist);

@@ -2188,6 +2188,33 @@ button, input, textarea, select {
   flex: 0 0 auto;
   color: var(--harbor-accent-think);
 }
+.harbor-engine-install {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 10px;
+  color: var(--harbor-muted);
+  font-size: var(--harbor-text-sm);
+}
+.harbor-engine-install > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.harbor-engine-install button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--harbor-hairline);
+  border-radius: var(--harbor-radius-pill);
+  background: transparent;
+  color: var(--harbor-text);
+  font-size: 10px;
+  cursor: pointer;
+}
+.harbor-engine-install button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--harbor-accent-think) 55%, var(--harbor-hairline));
+  background: var(--harbor-raised);
+}
+.harbor-engine-install button:disabled { cursor: default; opacity: .55; }
 .harbor-engine-menu-label {
   margin: 6px 0 3px !important;
   padding: 0 8px;

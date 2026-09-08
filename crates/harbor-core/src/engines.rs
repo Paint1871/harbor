@@ -139,10 +139,31 @@ fn login_shell_path() -> Option<&'static str> {
         .as_deref()
 }
 
-fn runtime_path() -> String {
+/// Where Harbor installs the ACP adapters it manages itself. The host sets it
+/// once at startup; without it, only adapters already on PATH are found.
+static ADAPTER_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_adapter_root(dir: PathBuf) {
+    let _ = ADAPTER_ROOT.set(dir);
+}
+
+pub fn adapter_root() -> Option<&'static PathBuf> {
+    ADAPTER_ROOT.get()
+}
+
+fn adapter_bin_dir() -> Option<PathBuf> {
+    adapter_root().map(|root| root.join("node_modules/.bin"))
+}
+
+/// The PATH Harbor searches. Detection and launch must agree on it, or an
+/// engine can be found and then fail to start.
+pub fn runtime_path() -> String {
     let mut entries = env::var_os("PATH")
         .map(|path| env::split_paths(&path).collect::<Vec<_>>())
         .unwrap_or_default();
+    if let Some(bin) = adapter_bin_dir().filter(|bin| bin.is_dir()) {
+        entries.insert(0, bin);
+    }
     // The login shell is the authority. The fixed candidates below stay as a
     // fallback for the case where the probe cannot run at all.
     if let Some(probed) = login_shell_path() {
@@ -184,6 +205,56 @@ fn runtime_path() -> String {
         .unwrap_or_default()
 }
 
+/// Fetch the ACP adapter an engine needs into Harbor's own directory. Nothing
+/// is installed globally and nothing runs during the install but the package
+/// manager itself, resolved from an absolute PATH entry like every other
+/// executable Harbor starts.
+pub fn install_adapter(engine_id: &str) -> Result<PathBuf, String> {
+    let spec = catalog()
+        .into_iter()
+        .find(|spec| spec.id == engine_id)
+        .ok_or_else(|| format!("unknown engine {engine_id}"))?;
+    let package = spec
+        .adapter_package
+        .clone()
+        .ok_or_else(|| format!("{} needs no adapter", spec.display_name))?;
+    let binary = spec
+        .binaries
+        .get(1)
+        .cloned()
+        .ok_or_else(|| format!("{} names no adapter binary", spec.display_name))?;
+    let root = adapter_root()
+        .cloned()
+        .ok_or_else(|| "adapter directory unavailable".to_string())?;
+    fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+
+    let path = runtime_path();
+    let npm = resolve_on_path("npm", &path, None)
+        .ok_or_else(|| "npm was not found. Install Node.js, then try again.".to_string())?;
+    let output = Command::new(&npm)
+        .args([
+            "install",
+            "--prefix",
+            &root.display().to_string(),
+            "--no-audit",
+            "--no-fund",
+            "--loglevel",
+            "error",
+            &package,
+        ])
+        .env("PATH", &path)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|error| format!("npm could not be started. {error}"))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        let detail = detail.lines().next_back().unwrap_or("npm failed").trim();
+        return Err(format!("{package} could not be installed. {detail}"));
+    }
+    resolve_on_path(&binary, &runtime_path(), None)
+        .ok_or_else(|| format!("{package} installed without a {binary} command"))
+}
+
 fn detect_one(spec: &EngineSpec, search_path: &str, cwd: Option<&Path>) -> DetectedEngine {
     let resolved: Vec<PathBuf> = spec
         .binaries
@@ -217,6 +288,9 @@ fn detect_one(spec: &EngineSpec, search_path: &str, cwd: Option<&Path>) -> Detec
             .as_ref()
             .map(|path| path.display().to_string())
             .unwrap_or_default(),
+        adapter_package: (status == "adapter-missing")
+            .then(|| spec.adapter_package.clone())
+            .flatten(),
         status,
         supports_chat,
         supports_terminal: spec.supports_terminal && found.is_some(),
@@ -376,6 +450,34 @@ mod tests {
         assert_eq!(engine.status, "adapter-missing");
         assert!(engine.supports_terminal);
         assert!(!engine.supports_chat);
+        // The gap is nameable, so the view can offer to close it rather than
+        // hiding the engine as if it were not installed at all.
+        assert_eq!(
+            engine.adapter_package.as_deref(),
+            Some("@agentclientprotocol/claude-agent-acp@^0.75")
+        );
+
+        // A ready engine has nothing to install.
+        let adapter = root.path().join("claude-agent-acp");
+        fs::write(&adapter, "fixture").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&adapter, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let engine = detect_engines(&root.path().display().to_string())
+            .into_iter()
+            .find(|engine| engine.id == "claude-code")
+            .unwrap();
+        assert_eq!(engine.status, "ready");
+        assert!(engine.supports_chat);
+        assert_eq!(engine.adapter_package, None);
+    }
+
+    #[test]
+    fn install_adapter_refuses_engines_that_need_none() {
+        assert!(install_adapter("opencode").is_err());
+        assert!(install_adapter("nonesuch").is_err());
     }
 
     #[test]

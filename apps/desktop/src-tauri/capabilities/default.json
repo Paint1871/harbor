@@ -18,6 +18,7 @@
     "allow-engines-detect",
     "allow-engine-icons",
     "allow-engines-recheck",
+    "allow-engine-install-adapter",
     "allow-workspace-list",
     "allow-workspace-add",
     "allow-workspace-pick-folder",

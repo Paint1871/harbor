@@ -19,7 +19,7 @@
     "acpArgs": [],
     "ptyArgs": [],
     "supportsTerminal": true,
-    "adapterPackage": "@agentclientprotocol/claude-agent-acp@^0.24",
+    "adapterPackage": "@agentclientprotocol/claude-agent-acp@^0.75",
     "minVersion": null,
     "lastHandshake": null,
     "authHint": "auth-required if initialize lists auth",

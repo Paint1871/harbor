@@ -286,3 +286,32 @@ it("does not let a text suggestion write the sent message back into the box", as
   await waitFor(() => expect(composer.value).toBe("test"));
   release();
 });
+
+it("offers to add an engine whose ACP adapter is missing, then uses it", async () => {
+  const base = invoke.getMockImplementation()!;
+  const withAdapter = { id: "claude-code", displayName: "Claude Code", path: "/usr/bin/claude", status: "ready", supportsChat: true };
+  invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+    if (command === "engines_detect") return Promise.resolve([
+      { id: "opencode", displayName: "OpenCode", path: "/usr/bin/opencode", status: "ready", supportsChat: true },
+      { id: "claude-code", displayName: "Claude Code", path: "/usr/bin/claude", status: "adapter-missing", supportsChat: false, adapterPackage: "@agentclientprotocol/claude-agent-acp@^0.75" },
+    ]);
+    if (command === "engine_install_adapter") return Promise.resolve([
+      { id: "opencode", displayName: "OpenCode", path: "/usr/bin/opencode", status: "ready", supportsChat: true },
+      withAdapter,
+    ]);
+    return base(command, args);
+  });
+
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  await screen.findByRole("textbox", { name: "Message" });
+  fireEvent.click(screen.getByRole("button", { name: /OpenCode/ }));
+
+  // Not selectable yet, but no longer invisible.
+  expect(screen.queryByRole("menuitemradio", { name: /Claude Code/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("engine_install_adapter", { engineId: "claude-code" }));
+
+  fireEvent.click(await screen.findByRole("menuitemradio", { name: /Claude Code/ }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_set_engine", { id: thread.id, engineId: "claude-code" }));
+});

@@ -4,6 +4,10 @@ import type { AcpConfigOption } from "./useAcpThread";
 
 export interface EnginePickerProps {
   engines: DetectedEngine[];
+  /** Chat-capable once their adapter is fetched. */
+  installable?: DetectedEngine[];
+  installing?: string | null;
+  onInstall?: (id: string) => void;
   engineId: string;
   options: AcpConfigOption[];
   /** Chosen in this session, keyed by option id; falls back to what the engine reports. */
@@ -26,7 +30,7 @@ function labelFor(option: AcpConfigOption, choices: Record<string, string>): str
  * One control for both halves of "who answers this": the engine Harbor launches,
  * and whatever that engine offers once it is running.
  */
-export function EnginePicker({ engines, engineId, options, choices, busy = false, disabled = false, onOpen, onEngineChange, onOptionChange }: EnginePickerProps) {
+export function EnginePicker({ engines, installable = [], installing = null, onInstall, engineId, options, choices, busy = false, disabled = false, onOpen, onEngineChange, onOptionChange }: EnginePickerProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -91,8 +95,22 @@ export function EnginePicker({ engines, engineId, options, choices, busy = false
                   {engine.id === engineId ? <span className="harbor-engine-menu-check" aria-hidden="true">✓</span> : null}
                 </button>
               ))}
+              {installable.map((engine) => (
+                <div key={engine.id} className="harbor-engine-install">
+                  <span>{engine.displayName}</span>
+                  <button
+                    type="button"
+                    disabled={installing !== null}
+                    title={engine.adapterPackage ?? undefined}
+                    onClick={() => onInstall?.(engine.id)}
+                  >
+                    {installing === engine.id ? "Installing…" : "Add"}
+                  </button>
+                </div>
+              ))}
               <p className="harbor-engine-menu-note">
                 Another engine starts a fresh session. The transcript stays here; the engine will not have read it.
+                {installable.length ? " Adding one fetches its ACP adapter into Harbor, not onto your system." : ""}
               </p>
             </>
           ) : null}
