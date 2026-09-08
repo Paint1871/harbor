@@ -27,6 +27,11 @@ export function Composer({ value, onValueChange, onSend, disabled = false, contr
         placeholder="Ask anything..."
         enterKeyHint="send"
         rows={2}
+        // macOS keeps an autocorrect suggestion alive across a submit and
+        // writes it back into the box we just cleared, which reads as a message
+        // that never sent. Spellcheck stays on; it only underlines.
+        autoCorrect="off"
+        autoCapitalize="off"
         {...inputProps}
         className={`harbor-composer-input ${textareaClassName}`}
         value={value}

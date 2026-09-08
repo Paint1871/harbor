@@ -999,3 +999,49 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         git_diff
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    fn handler_commands() -> Vec<String> {
+        let source = include_str!("ipc.rs");
+        let body = source
+            .split_once("tauri::generate_handler![")
+            .expect("handler list")
+            .1
+            .split_once(']')
+            .expect("handler list end")
+            .0;
+        body.split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .map(|entry| entry.rsplit("::").next().unwrap_or(entry).to_string())
+            .collect()
+    }
+
+    /// A command is only reachable if it appears in three places: this handler
+    /// list, the manifest in build.rs that mints its permission, and the main
+    /// capability that grants it. Miss one and the renderer finds out at run
+    /// time, with "not allowed" or "command not found".
+    #[test]
+    fn every_command_is_declared_in_the_manifest_and_the_capability() {
+        let manifest = include_str!("../build.rs");
+        let capability = include_str!("../capabilities/default.json");
+
+        let mut ungranted = Vec::new();
+        let mut unminted = Vec::new();
+        for command in handler_commands() {
+            if !capability.contains(&format!("\"allow-{}\"", command.replace('_', "-"))) {
+                ungranted.push(command.clone());
+            }
+            if !manifest.contains(&format!("\"{command}\"")) {
+                unminted.push(command);
+            }
+        }
+
+        assert!(
+            ungranted.is_empty(),
+            "missing from capabilities/default.json: {ungranted:?}"
+        );
+        assert!(unminted.is_empty(), "missing from build.rs: {unminted:?}");
+    }
+}

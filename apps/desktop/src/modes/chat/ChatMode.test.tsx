@@ -256,3 +256,12 @@ it("tells the host which conversation is on screen", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("session_watch", { sessionRef: thread.id }));
 });
+
+it("does not let a text suggestion write the sent message back into the box", async () => {
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  const composer = await screen.findByRole("textbox", { name: "Message" });
+  // macOS resurrects an accepted autocorrect into the cleared box.
+  expect(composer.getAttribute("autocorrect")).toBe("off");
+  expect(composer.getAttribute("autocapitalize")).toBe("off");
+});

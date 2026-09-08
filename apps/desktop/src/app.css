@@ -2184,7 +2184,7 @@ button, input, textarea, select {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.harbor-engine-menu button[role="menuitemradio"] > span:last-child {
+.harbor-engine-menu-check {
   flex: 0 0 auto;
   color: var(--harbor-accent-think);
 }

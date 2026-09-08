@@ -88,7 +88,7 @@ export function EnginePicker({ engines, engineId, options, choices, busy = false
                   }}
                 >
                   <span>{engine.displayName}</span>
-                  {engine.id === engineId ? <span aria-hidden="true">✓</span> : null}
+                  {engine.id === engineId ? <span className="harbor-engine-menu-check" aria-hidden="true">✓</span> : null}
                 </button>
               ))}
               <p className="harbor-engine-menu-note">
@@ -114,7 +114,7 @@ export function EnginePicker({ engines, engineId, options, choices, busy = false
                     }}
                   >
                     <span>{value.name}</span>
-                    {value.value === current ? <span aria-hidden="true">✓</span> : null}
+                    {value.value === current ? <span className="harbor-engine-menu-check" aria-hidden="true">✓</span> : null}
                   </button>
                 ))}
               </div>
