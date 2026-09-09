@@ -502,12 +502,8 @@ impl AcpHostSession {
     /// protocol's `models` block is changed with `session/set_model`; sending
     /// it as a config option would be refused as an unknown id.
     pub fn set_config_option(&mut self, id: &str, value: Value) -> Result<Value, AcpError> {
-        let (method, params) = set_option_call(
-            self.session_id.as_deref(),
-            &self.config_options,
-            id,
-            &value,
-        )?;
+        let (method, params) =
+            set_option_call(self.session_id.as_deref(), &self.config_options, id, &value)?;
         let result = self.conn.request(method, params)?;
         let options = parse_config_options(&result);
         if !options.is_empty() {
