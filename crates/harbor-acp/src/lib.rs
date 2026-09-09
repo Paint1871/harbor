@@ -7,7 +7,8 @@ pub mod transport;
 
 pub use permissions::{PermissionKind, map_permission_kind, permission_outcome};
 pub use session::{
-    ConfigOption, ConfigValue, InitializeCaps, ResumeKind, parse_config_options, resume_or_new,
+    ConfigOption, ConfigSource, ConfigValue, InitializeCaps, ResumeKind, parse_config_options,
+    resume_or_new, set_option_call,
 };
 pub use spawn::{McpServer, SpawnSpec};
 pub use transport::PermissionHook;

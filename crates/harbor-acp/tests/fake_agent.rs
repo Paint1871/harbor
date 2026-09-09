@@ -3,7 +3,8 @@ use harbor_acp::{
     permissions::permission_outcome,
     session::{
         ConfigSource, InitializeCaps, ResumeKind, method_for, parse_config_options,
-        parse_initialize_caps, resume_or_new, session_params, should_drop_session_update,
+        parse_initialize_caps, resume_or_new, session_params, set_option_call,
+        should_drop_session_update,
     },
     spawn::{EnvVariable, McpServer, SpawnSpec},
 };
@@ -203,10 +204,10 @@ fn model_and_mode_blocks_stand_in_for_config_options() {
     assert_eq!(both[0].values[0].name, "Manual");
 }
 
-/// Grok says which effort is running and gives no way to change it: no
-/// set method exists, and set_model accepts nonsense without complaint.
+/// Grok hangs effort off the current model's `_meta`. Changing it is
+/// `session/set_model` with the same model id and `_meta.reasoningEffort`.
 #[test]
-fn a_reported_but_unsettable_effort_is_marked_as_such() {
+fn grok_effort_is_set_on_the_current_model() {
     let options = parse_config_options(&json!({
         "models": {
             "currentModelId": "grok-4.6",
@@ -230,11 +231,22 @@ fn a_reported_but_unsettable_effort_is_marked_as_such() {
     assert_eq!(options.len(), 2);
     let effort = &options[1];
     assert_eq!(effort.id, "effort");
-    assert!(!effort.settable);
+    assert_eq!(effort.source, ConfigSource::Effort);
+    assert!(effort.settable);
     assert_eq!(effort.current_value.as_deref(), Some("xhigh"));
     // The levels come from the model in use, not the whole catalogue.
     assert_eq!(effort.values.len(), 2);
     assert_eq!(effort.values[0].name, "Extra High Effort");
+
+    let (method, params) =
+        set_option_call(Some("ses_1"), &options, "effort", &json!("low")).unwrap();
+    assert_eq!(method, "session/set_model");
+    assert_eq!(params["sessionId"], "ses_1");
+    assert_eq!(params["modelId"], "grok-4.6");
+    assert_eq!(params["_meta"]["reasoningEffort"], "low");
+
+    // Sending the effort as modelId is the old no-op; do not do that.
+    assert_ne!(params["modelId"], "low");
 
     // A model that says nothing about effort contributes no chip.
     let quiet = parse_config_options(&json!({

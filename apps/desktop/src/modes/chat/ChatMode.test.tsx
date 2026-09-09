@@ -366,12 +366,22 @@ it("drops the old engine's models when the thread switches engine", async () => 
   expect(screen.queryByRole("button", { name: "Model: Big Pickle" })).toBeNull();
 });
 
-it("states an effort the engine will not let us change, rather than faking a control", async () => {
+it("lets you change Grok reasoning effort from the composer", async () => {
   const base = invoke.getMockImplementation()!;
   invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
     if (command === "thread_config_options") return Promise.resolve([
       { id: "model", name: "Model", category: "model", currentValue: "grok-4.6", settable: true, values: [{ value: "grok-4.6", name: "Grok 4.6" }] },
-      { id: "effort", name: "Effort", category: "thought_level", currentValue: "xhigh", settable: false, values: [{ value: "xhigh", name: "Extra High Effort" }] },
+      {
+        id: "effort",
+        name: "Effort",
+        category: "thought_level",
+        currentValue: "xhigh",
+        settable: true,
+        values: [
+          { value: "xhigh", name: "Extra High Effort" },
+          { value: "low", name: "Low Effort" },
+        ],
+      },
     ]);
     return base(command, args);
   });
@@ -379,8 +389,12 @@ it("states an effort the engine will not let us change, rather than faking a con
   render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
   fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
 
-  await screen.findByRole("button", { name: "Model: Grok 4.6" });
-  expect(screen.getByText("Extra High Effort")).toBeTruthy();
-  // Reported, not offered: no menu behind it.
-  expect(screen.queryByRole("button", { name: /Effort/ })).toBeNull();
+  fireEvent.click(await screen.findByRole("button", { name: "Effort: Extra High Effort" }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: /Low Effort/ }));
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_set_config", {
+    id: thread.id,
+    optionId: "effort",
+    value: "low",
+  }));
+  expect(await screen.findByRole("button", { name: "Effort: Low Effort" })).toBeTruthy();
 });

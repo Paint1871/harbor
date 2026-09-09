@@ -28,6 +28,9 @@ pub enum ConfigSource {
     Model,
     /// The protocol's `modes` block, set with `session/set_mode`.
     Mode,
+    /// Grok hangs effort off the current model's `_meta`. Changing it is
+    /// `session/set_model` with the same `modelId` and `_meta.reasoningEffort`.
+    Effort,
 }
 
 /// One knob an agent exposes — "Model", "Session Mode" — with the values it
@@ -150,11 +153,10 @@ pub fn parse_config_options(result: &Value) -> Vec<ConfigOption> {
     .collect()
 }
 
-/// Grok hangs a reasoning-effort list off the current model's `_meta`. It says
-/// which level is running but exposes no method to change it — `set_model`
-/// accepts any value, including nonsense, and nothing reads back. So it is
-/// reported, not offered: a control that silently does nothing is worse than
-/// none.
+/// Grok hangs a reasoning-effort list off the current model's `_meta`. The
+/// levels are settable: `session/set_model` reads `_meta.reasoningEffort`
+/// next to the current `modelId`. Sending the effort string as `modelId`
+/// is what used to look like a no-op.
 fn parse_reasoning_effort(result: &Value) -> Option<ConfigOption> {
     let models = result.get("models")?;
     let current = models.get("currentModelId").and_then(Value::as_str);
@@ -200,9 +202,53 @@ fn parse_reasoning_effort(result: &Value) -> Option<ConfigOption> {
             .and_then(Value::as_str)
             .map(str::to_string),
         values,
-        source: ConfigSource::Model,
-        settable: false,
+        source: ConfigSource::Effort,
+        settable: true,
     })
+}
+
+/// Method and params for `set_config_option`. Grok's effort knob is not a
+/// config option and not a model id — it rides on `session/set_model`.
+pub fn set_option_call(
+    session_id: Option<&str>,
+    options: &[ConfigOption],
+    id: &str,
+    value: &Value,
+) -> Result<(&'static str, Value), AcpError> {
+    let source = options
+        .iter()
+        .find(|option| option.id == id)
+        .map(|option| option.source)
+        .unwrap_or_default();
+    match source {
+        ConfigSource::Model => Ok((
+            "session/set_model",
+            json!({ "sessionId": session_id, "modelId": value }),
+        )),
+        ConfigSource::Mode => Ok((
+            "session/set_mode",
+            json!({ "sessionId": session_id, "modeId": value }),
+        )),
+        ConfigSource::Config => Ok((
+            "session/set_config_option",
+            json!({ "sessionId": session_id, "configId": id, "value": value }),
+        )),
+        ConfigSource::Effort => {
+            let model_id = options
+                .iter()
+                .find(|option| option.id == "model")
+                .and_then(|option| option.current_value.as_deref())
+                .ok_or(AcpError::Protocol("no current model to set effort on"))?;
+            Ok((
+                "session/set_model",
+                json!({
+                    "sessionId": session_id,
+                    "modelId": model_id,
+                    "_meta": { "reasoningEffort": value }
+                }),
+            ))
+        }
+    }
 }
 
 fn parse_declared_options(result: &Value) -> Vec<ConfigOption> {
@@ -456,26 +502,12 @@ impl AcpHostSession {
     /// protocol's `models` block is changed with `session/set_model`; sending
     /// it as a config option would be refused as an unknown id.
     pub fn set_config_option(&mut self, id: &str, value: Value) -> Result<Value, AcpError> {
-        let source = self
-            .config_options
-            .iter()
-            .find(|option| option.id == id)
-            .map(|option| option.source)
-            .unwrap_or_default();
-        let (method, params) = match source {
-            ConfigSource::Model => (
-                "session/set_model",
-                json!({ "sessionId": self.session_id, "modelId": value }),
-            ),
-            ConfigSource::Mode => (
-                "session/set_mode",
-                json!({ "sessionId": self.session_id, "modeId": value }),
-            ),
-            ConfigSource::Config => (
-                "session/set_config_option",
-                json!({ "sessionId": self.session_id, "configId": id, "value": value }),
-            ),
-        };
+        let (method, params) = set_option_call(
+            self.session_id.as_deref(),
+            &self.config_options,
+            id,
+            &value,
+        )?;
         let result = self.conn.request(method, params)?;
         let options = parse_config_options(&result);
         if !options.is_empty() {
