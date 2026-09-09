@@ -100,11 +100,21 @@ pub async fn rename(pool: &SqlitePool, id: &str, title: &str) -> Result<Workspac
     })
 }
 
+/// Tabs and panes cascade, but `threads.workspace_id` carries no foreign key,
+/// so the folder's threads would be stranded on an id nothing lists any more.
+/// They move to Other instead: the folder leaves the rail, the conversations
+/// stay reachable.
 pub async fn remove(pool: &SqlitePool, id: &str) -> Result<(), Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("UPDATE threads SET workspace_id = NULL WHERE workspace_id = ?1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM workspaces WHERE id = ?1")
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -151,6 +161,28 @@ mod tests {
             .await
             .is_err()
         );
+    }
+
+    #[tokio::test]
+    async fn remove_moves_the_folders_threads_to_other() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = crate::db::open(&dir.path().join("state/db.sqlite"))
+            .await
+            .unwrap();
+        let folder = dir.path().join("project");
+        std::fs::create_dir(&folder).unwrap();
+        let workspace = add(&pool, folder.display().to_string()).await.unwrap();
+        let thread = crate::threads::create(&pool, Some(workspace.id.clone()), "opencode".into())
+            .await
+            .unwrap();
+
+        remove(&pool, &workspace.id).await.unwrap();
+
+        assert!(list(&pool).await.unwrap().is_empty());
+        let orphaned = crate::threads::list(&pool, None).await.unwrap();
+        assert_eq!(orphaned.len(), 1);
+        assert_eq!(orphaned[0].id, thread.id);
+        assert_eq!(orphaned[0].workspace_id, None);
     }
 
     #[tokio::test]

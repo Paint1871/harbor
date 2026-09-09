@@ -109,11 +109,22 @@ pub async fn rename(pool: &SqlitePool, id: &str, title: &str) -> Result<(), Erro
     Ok(())
 }
 
+/// The transcript goes with the thread; leaving orphaned messages behind would
+/// only reappear in search.
 pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), Error> {
-    sqlx::query("DELETE FROM threads WHERE id = ?1")
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM messages WHERE chat_kind = 'thread' AND chat_id = ?1")
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    let result = sqlx::query("DELETE FROM threads WHERE id = ?1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    if result.rows_affected() == 0 {
+        return Err(Error::Message("thread not found".into()));
+    }
     Ok(())
 }
 
@@ -402,6 +413,31 @@ mod tests {
         );
         assert_eq!(lines[1].role, "assistant");
         assert!(history(&pool, "missing").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn delete_takes_the_transcript_and_reports_a_missing_thread() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let gone = create(&pool, None, "opencode".into()).await.unwrap();
+        let kept = create(&pool, None, "opencode".into()).await.unwrap();
+        append_message(&pool, &gone.id, "thread", "user", "secret")
+            .await
+            .unwrap();
+        append_message(&pool, &kept.id, "thread", "user", "kept")
+            .await
+            .unwrap();
+
+        delete(&pool, &gone.id).await.unwrap();
+
+        let left: i64 = sqlx::query_scalar("SELECT count(*) FROM messages WHERE chat_id = ?1")
+            .bind(&gone.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(left, 0);
+        assert_eq!(history(&pool, &kept.id).await.unwrap().len(), 1);
+        assert!(delete(&pool, &gone.id).await.is_err());
     }
 
     #[tokio::test]

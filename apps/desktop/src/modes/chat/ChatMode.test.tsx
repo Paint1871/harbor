@@ -79,6 +79,29 @@ it("requires a thread before composing, preserves a failed draft, and shows the 
   expect(document.querySelector("button button")).toBeNull();
 });
 
+it("renames a thread from the rail and only deletes it after the ask", async () => {
+  render(<ChromeProvider value={chrome}><ChatMode /></ChromeProvider>);
+  fireEvent.click(await screen.findByRole("button", { name: "Start a thread" }));
+  await screen.findByRole("textbox", { name: "Message" });
+
+  fireEvent.click(await screen.findByRole("button", { name: "Rename New thread" }));
+  const field = screen.getByLabelText("Rename New thread");
+  fireEvent.change(field, { target: { value: "Launch work" } });
+  fireEvent.keyDown(field, { key: "Enter" });
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_rename", { id: "thread", title: "Launch work" }));
+  await screen.findByRole("button", { name: "Delete Launch work" });
+
+  const remove = screen.getByRole("button", { name: "Delete Launch work" });
+  fireEvent.click(remove);
+  expect(invoke.mock.calls.some(([command]) => command === "thread_delete")).toBe(false);
+  expect(remove.textContent).toBe("Delete?");
+
+  fireEvent.click(remove);
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("thread_delete", { id: "thread" }));
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: "Message" })).toBeNull());
+  expect(screen.queryByRole("button", { name: "Delete Launch work" })).toBeNull();
+});
+
 it("adds and selects the native-picked folder without creating a thread automatically", async () => {
   invoke.mockImplementation((command) => {
     if (command === "workspace_pick_folder") return Promise.resolve(workspace.folder);

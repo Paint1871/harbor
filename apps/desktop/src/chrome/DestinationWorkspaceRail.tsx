@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { WorkspaceRailRow, workspaceName } from "../workspaces/WorkspaceRailRow";
 import { DisclosureIcon, PaneIcon, type PaneIconKind } from "./icons";
@@ -58,8 +58,8 @@ export function DestinationWorkspaceRail() {
   useEffect(() => {
     let disposed = false;
     void Promise.all([
-      invoke<Workspace[]>("workspace_list").catch(() => [] as Workspace[]),
-      invoke<WorkspaceTab[]>("layout_restore").catch(() => [] as WorkspaceTab[]),
+      call("workspace_list").catch(() => [] as Workspace[]),
+      call("layout_restore").catch(() => [] as WorkspaceTab[]),
     ]).then(([listed, restored]) => {
       if (disposed) return;
       const nextWorkspaces = Array.isArray(listed) ? listed : [];
@@ -101,6 +101,12 @@ export function DestinationWorkspaceRail() {
                   onRenamed={(updated) =>
                     setWorkspaces((rows) => rows.map((row) => (row.id === updated.id ? updated : row)))
                   }
+                  onRemoved={(id) => {
+                    const rest = workspaces.filter((row) => row.id !== id);
+                    setWorkspaces(rest);
+                    setTabs((rows) => rows.filter((row) => row.workspaceId !== id));
+                    setExpandedWorkspaceId((current) => (current === id ? rest[0]?.id ?? null : current));
+                  }}
                 />
                 {expanded && tab?.panes.length ? (
                   <ul className="harbor-destination-pane-rows" aria-label={`${workspaceName(workspace)} panes`}>
@@ -130,7 +136,7 @@ export function DestinationWorkspaceRail() {
         setAddingWorkspace(false);
         setWorkspaces((current) => current.some((item) => item.id === workspace.id) ? current : [...current, workspace]);
         setExpandedWorkspaceId(workspace.id);
-        const tab = await invoke<WorkspaceTab>("workspace_ensure_tab", { workspaceId: workspace.id }).catch(() => null);
+        const tab = await call("workspace_ensure_tab", { workspaceId: workspace.id }).catch(() => null);
         if (tab) {
           setTabs((current) => [...current.filter((item) => item.workspaceId !== workspace.id), tab]);
           const pane = orderedPanes(tab.panes)[0];

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { listen } from "@tauri-apps/api/event";
 import { Card } from "@harbor/ui/Card";
 import type { Notification } from "@harbor/schema/commands";
@@ -37,7 +37,7 @@ export function Inbox({ open, onClose }: InboxProps) {
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      void invoke<Notification[]>("notifications_list")
+      void call("notifications_list")
         .then((rows) => {
           if (cancelled) return;
           setEvents(Array.isArray(rows) ? rows : []);
@@ -58,7 +58,7 @@ export function Inbox({ open, onClose }: InboxProps) {
 
   useEffect(() => {
     // Opening the panel is what counts as reading it.
-    if (open) void invoke("notifications_mark_read").catch(() => undefined);
+    if (open) void call("notifications_mark_read").catch(() => undefined);
   }, [open, events.length]);
 
   function go(event: Notification) {

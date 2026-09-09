@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { RailRow } from "@harbor/ui/RailRow";
 import type { Workspace } from "@harbor/schema/commands";
 
@@ -16,6 +16,7 @@ interface WorkspaceRailRowProps {
   description?: ReactNode;
   onSelect: () => void;
   onRenamed: (workspace: Workspace) => void;
+  onRemoved?: (id: string) => void;
 }
 
 /**
@@ -25,6 +26,9 @@ interface WorkspaceRailRowProps {
  * Rename opens on right click or F2, never on double click: the row's own click
  * expands and collapses the workspace, and the first click of a double click
  * would toggle it shut on the way to renaming.
+ *
+ * Remove lives in that same editor. It is the one gesture that takes a folder
+ * off the rail, so it asks once and never sits under the pointer by accident.
  */
 export function WorkspaceRailRow({
   workspace,
@@ -34,13 +38,16 @@ export function WorkspaceRailRow({
   description,
   onSelect,
   onRenamed,
+  onRemoved,
 }: WorkspaceRailRowProps) {
   const name = workspaceName(workspace);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const editor = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editing) input.current?.select();
@@ -49,7 +56,28 @@ export function WorkspaceRailRow({
   function open() {
     setDraft(name);
     setError(null);
+    setConfirmingRemove(false);
     setEditing(true);
+  }
+
+  async function remove() {
+    if (busy || !onRemoved) return;
+    if (!confirmingRemove) {
+      setConfirmingRemove(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await call("workspace_remove", { id: workspace.id });
+      setEditing(false);
+      setError(null);
+      onRemoved(workspace.id);
+    } catch (reason) {
+      setError(String(reason));
+      setConfirmingRemove(false);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function commit() {
@@ -61,7 +89,7 @@ export function WorkspaceRailRow({
     }
     setBusy(true);
     try {
-      const updated = await invoke<Workspace>("workspace_rename", { id: workspace.id, title: next });
+      const updated = await call("workspace_rename", { id: workspace.id, title: next });
       onRenamed(updated);
       setEditing(false);
       setError(null);
@@ -74,7 +102,7 @@ export function WorkspaceRailRow({
 
   if (editing) {
     return (
-      <div className="harbor-workspace-rename">
+      <div className="harbor-workspace-rename" ref={editor}>
         <input
           ref={input}
           value={draft}
@@ -82,7 +110,11 @@ export function WorkspaceRailRow({
           disabled={busy}
           aria-label={`Rename ${name}`}
           onChange={(event) => setDraft(event.target.value)}
-          onBlur={() => void commit()}
+          onBlur={(event) => {
+            // Reaching for Remove must not count as leaving the editor.
+            if (editor.current?.contains(event.relatedTarget)) return;
+            void commit();
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
@@ -96,6 +128,19 @@ export function WorkspaceRailRow({
           }}
         />
         {error ? <p role="alert">{error}</p> : <p>Enter saves · Esc cancels · empty restores the folder name</p>}
+        {onRemoved ? (
+          <button
+            type="button"
+            className="harbor-workspace-remove"
+            data-confirm={confirmingRemove}
+            disabled={busy}
+            aria-label={`Remove ${name} from Workspaces`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => void remove()}
+          >
+            {confirmingRemove ? "Remove? The folder on disk stays." : "Remove from Workspaces"}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -105,7 +150,7 @@ export function WorkspaceRailRow({
       className={className}
       label={name}
       description={description}
-      title={`${workspace.folder} — right click or F2 to rename`}
+      title={`${workspace.folder} — right click or F2 to rename${onRemoved ? " or remove" : ""}`}
       leading={leading}
       selected={selected}
       onClick={onSelect}

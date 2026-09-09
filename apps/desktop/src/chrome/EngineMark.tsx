@@ -1,5 +1,5 @@
 import { useSyncExternalStore, type ReactElement } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 
 const STROKE = { fill: "none", stroke: "currentColor", strokeWidth: 1.35, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -104,7 +104,7 @@ function subscribeIcons(listener: () => void): () => void {
   iconListeners.add(listener);
   if (!iconsRequested) {
     iconsRequested = true;
-    void invoke<{ engineId: string; dataUrl: string }[]>("engine_icons")
+    void call("engine_icons")
       .then((rows) => {
         const next: Record<string, string> = {};
         for (const row of rows) next[row.engineId] = row.dataUrl;

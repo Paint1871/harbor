@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { listen } from "@tauri-apps/api/event";
 import type { AgentChat, ChatMessage, ContentPart } from "@harbor/schema/commands";
 import { parsePermissionEvent, type PermissionRequest } from "../chat/PermissionCard";
@@ -37,7 +37,7 @@ export function useAgentChat(agentId: string) {
   const reloadList = useCallback(async (selectId?: string | null) => {
     setLoading(true);
     try {
-      const listed = await invoke<AgentChat[]>("agent_chat_list", { agentId });
+      const listed = await call("agent_chat_list", { agentId });
       setChats(listed);
       setActiveId((current) => {
         if (selectId && listed.some((chat) => chat.id === selectId)) return selectId;
@@ -59,7 +59,7 @@ export function useAgentChat(agentId: string) {
     requests.current.set(id, request);
     setHistoryLoading((current) => ({ ...current, [id]: true }));
     try {
-      const lines = await invoke<ChatMessage[]>("agent_chat_history", { chatId: id });
+      const lines = await call("agent_chat_history", { chatId: id });
       if (requests.current.get(id) === request) setHistory((current) => ({ ...current, [id]: lines }));
     } catch {
       if (requests.current.get(id) === request) {
@@ -112,7 +112,7 @@ export function useAgentChat(agentId: string) {
       }
       setSending((current) => ({ ...current, [sessionRef]: false }));
       pending.current.delete(sessionRef);
-      void invoke<AgentChat[]>("agent_chat_list", { agentId })
+      void call("agent_chat_list", { agentId })
         .then((listed) => {
           if (!disposed) setChats(listed);
         })
@@ -158,7 +158,7 @@ export function useAgentChat(agentId: string) {
     createLock.current = true;
     setCreating(true);
     try {
-      const created = await invoke<AgentChat>("agent_chat_create", { agentId });
+      const created = await call("agent_chat_create", { agentId });
       setChats((current) => {
         if (current.some((chat) => chat.id === created.id)) return current;
         return [...current, created];
@@ -199,7 +199,7 @@ export function useAgentChat(agentId: string) {
     const parts: ContentPart[] = [{ type: "text", text: trimmed }];
     let success = false;
     try {
-      await invoke("agent_chat_send", { chatId, parts });
+      await call("agent_chat_send", { chatId, parts });
       success = true;
     } catch (error) {
       setErrors((current) => ({
@@ -209,7 +209,7 @@ export function useAgentChat(agentId: string) {
       setSending((current) => ({ ...current, [chatId]: false }));
       pending.current.delete(chatId);
     }
-    void invoke<AgentChat[]>("agent_chat_list", { agentId })
+    void call("agent_chat_list", { agentId })
       .then(setChats)
       .catch(() => undefined);
     return success;
@@ -219,7 +219,7 @@ export function useAgentChat(agentId: string) {
     const chatId = activeId;
     if (!chatId) return;
     try {
-      await invoke("agent_chat_cancel", { chatId });
+      await call("agent_chat_cancel", { chatId });
     } catch (error) {
       setErrors((current) => ({
         ...current,
@@ -235,7 +235,7 @@ export function useAgentChat(agentId: string) {
     const chatId = activeId;
     if (!chatId) return;
     try {
-      const listed = await invoke<unknown>("agent_chat_config_options", { chatId });
+      const listed = await call("agent_chat_config_options", { chatId });
       setOptions((current) => ({ ...current, [chatId]: readConfigOptions(listed) }));
     } catch (error) {
       setErrors((current) => ({
@@ -249,7 +249,7 @@ export function useAgentChat(agentId: string) {
     const previous = chats.find((item) => item.id === chatId)?.title;
     setChats((current) => current.map((item) => item.id === chatId ? { ...item, title } : item));
     try {
-      await invoke("agent_chat_rename", { chatId, title });
+      await call("agent_chat_rename", { chatId, title });
     } catch (error) {
       if (previous !== undefined) {
         setChats((current) => current.map((item) => item.id === chatId ? { ...item, title: previous } : item));
@@ -260,7 +260,7 @@ export function useAgentChat(agentId: string) {
 
   const deleteChat = useCallback(async (chatId: string) => {
     try {
-      await invoke("agent_chat_delete", { chatId });
+      await call("agent_chat_delete", { chatId });
       setChats((current) => current.filter((item) => item.id !== chatId));
       setHistory((current) => {
         const { [chatId]: _gone, ...rest } = current;
@@ -276,7 +276,7 @@ export function useAgentChat(agentId: string) {
     const chatId = activeId;
     if (!chatId) return;
     try {
-      await invoke("agent_chat_set_config", { chatId, optionId, value });
+      await call("agent_chat_set_config", { chatId, optionId, value });
     } catch (error) {
       setErrors((current) => ({
         ...current,
@@ -289,7 +289,7 @@ export function useAgentChat(agentId: string) {
     const chatId = activeId;
     if (!chatId) return;
     try {
-      await invoke("acp_permission_resolve", { id, optionId, cancelled });
+      await call("acp_permission_resolve", { id, optionId, cancelled });
       setPermissions((current) => ({
         ...current,
         [chatId]: (current[chatId] ?? []).filter((item) => item.id !== id),

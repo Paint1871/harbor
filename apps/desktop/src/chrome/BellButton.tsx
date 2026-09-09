@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@harbor/ui/Button";
 
@@ -15,7 +15,7 @@ export function BellButton({ onClick, suppressed = false }: BellButtonProps) {
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void invoke<number>("notifications_unread_count")
+      void call("notifications_unread_count")
         .then((count) => {
           if (!cancelled) setUnread(Number.isFinite(count) ? count : 0);
         })

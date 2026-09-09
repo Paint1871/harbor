@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import type { Workspace } from "@harbor/schema/commands";
+import { call } from "../../ipc";
 import { Tree } from "./Tree";
 import { Editor } from "./Editor";
 import { TabBar } from "./TabBar";
@@ -25,7 +24,7 @@ export function FilesPane({ workspaceId: givenId, focused, onFocus, expanded = f
     // missing folder on a cold launch. The fallback is useful only for the
     // browser/preview host where FilesPane can be rendered in isolation.
     if (givenId || (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window)) return;
-    void invoke<Workspace[]>("workspace_list")
+    void call("workspace_list")
       .then((list) => setFallbackWorkspaceId(list[0]?.id))
       .catch(() => undefined);
   }, [givenId]);

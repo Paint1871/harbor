@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import type { FileDiff } from "@harbor/schema/commands";
 
 interface ChangesPanelProps {
@@ -13,7 +13,7 @@ export function ChangesPanel({ workspaceId, refreshToken }: ChangesPanelProps) {
 
   useEffect(() => {
     if (!workspaceId || !open) return;
-    void invoke<FileDiff[]>("git_diff", { workspaceId })
+    void call("git_diff", { workspaceId })
       .then(setDiffs)
       .catch(() => setDiffs([]));
   }, [workspaceId, open, refreshToken]);

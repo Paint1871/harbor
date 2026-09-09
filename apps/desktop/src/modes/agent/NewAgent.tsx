@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { Button } from "@harbor/ui/Button";
 import type { DetectedEngine } from "@harbor/schema/commands";
 import { FacePicker } from "./FacePicker";
@@ -28,7 +28,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
     setError(null);
     try {
       const [detected, savedDefault] = await Promise.all([
-        invoke<DetectedEngine[]>("engines_detect"),
+        call("engines_detect"),
         settingsGet("default_engine").catch(() => null),
       ]);
       setEngines(detected);
@@ -55,7 +55,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
     setDrafting(true);
     setError(null);
     try {
-      const drafted = await invoke<{ name: string; brief: string; engineId?: string }>("agent_draft_with_ai", {
+      const drafted = await call("agent_draft_with_ai", {
         hint: brief.trim() || name.trim() || "coding teammate",
       });
       if (drafted.name) setName(drafted.name);
@@ -95,7 +95,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
             <span className="harbor-home-picker">
               <input readOnly value={homePath} placeholder="Optional — engine working directory" />
               <Button type="button" onClick={() => {
-                void invoke<string | null>("workspace_pick_folder").then((path) => {
+                void call("workspace_pick_folder").then((path) => {
                   if (path) setHomePath(path);
                 }).catch(() => setError("Could not choose a folder. Please try again."));
               }}>Choose…</Button>

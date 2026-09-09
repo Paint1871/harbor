@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { Button } from "@harbor/ui/Button";
 import type { DetectedEngine } from "@harbor/schema/commands";
 
@@ -17,7 +17,7 @@ export function LaunchWizard({ onClose, onLaunch }: LaunchWizardProps) {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKeyDown);
-    void invoke<DetectedEngine[]>("engines_detect")
+    void call("engines_detect")
       .then(setEngines)
       .catch(() => setEngines([]));
     return () => window.removeEventListener("keydown", onKeyDown);

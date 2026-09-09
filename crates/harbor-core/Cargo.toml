@@ -12,7 +12,6 @@ serde_json = "=1.0.151"
 sqlx = { version = "=0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 tokio = { version = "=1.53.1", features = ["rt"] }
 thiserror = "=2.0.20"
-ts-rs = "=10.1.0"
 uuid = { version = "=1.26.0", features = ["v7"] }
 harbor-git = { path = "../harbor-git" }
 harbor-paths = { path = "../harbor-paths" }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import type { AgentRecord, ThreadRecord, Workspace } from "@harbor/schema/commands";
 import { useChrome } from "../chrome/chrome-context";
 
@@ -23,9 +23,9 @@ export function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      invoke<AgentRecord[]>("agent_list"),
-      invoke<Workspace[]>("workspace_list"),
-      invoke<ThreadRecord[]>("thread_list", { workspaceId: null }),
+      call("agent_list"),
+      call("workspace_list"),
+      call("thread_list", { workspaceId: null }),
     ])
       .then(([agents, workspaces, threads]) => {
         if (cancelled) return;

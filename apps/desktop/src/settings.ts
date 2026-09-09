@@ -1,8 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "./ipc";
 
 export async function settingsGet(key: string): Promise<unknown> {
   try {
-    return await invoke("settings_get", { key });
+    return await call("settings_get", { key });
   } catch {
     return null;
   }
@@ -10,7 +10,7 @@ export async function settingsGet(key: string): Promise<unknown> {
 
 export async function settingsSet(key: string, value: unknown): Promise<void> {
   try {
-    await invoke("settings_set", { key, value });
+    await call("settings_set", { key, value });
   } catch {
     /* vite preview outside the native host */
   }

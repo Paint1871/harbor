@@ -14,15 +14,16 @@ const workspace: Workspace = {
   pinned: false,
 };
 
-function renderRow(onRenamed = vi.fn(), onSelect = vi.fn()) {
+function renderRow(onRenamed = vi.fn(), onSelect = vi.fn(), onRemoved?: () => void) {
   render(
     <WorkspaceRailRow
       workspace={workspace}
       onSelect={onSelect}
       onRenamed={onRenamed}
+      onRemoved={onRemoved}
     />,
   );
-  return { onRenamed, onSelect };
+  return { onRenamed, onSelect, onRemoved };
 }
 
 describe("WorkspaceRailRow", () => {
@@ -79,6 +80,39 @@ describe("WorkspaceRailRow", () => {
     const { onSelect } = renderRow();
     fireEvent.click(screen.getByRole("button", { name: /Free Project/ }));
     expect(onSelect).toHaveBeenCalled();
+  });
+
+  it("removes the folder only after the ask, and leaves the row alone without a handler", async () => {
+    mocks.invoke.mockResolvedValue(undefined);
+    const onRemoved = vi.fn();
+    renderRow(vi.fn(), vi.fn(), onRemoved);
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Free Project/ }));
+
+    const remove = screen.getByLabelText("Remove Free Project from Workspaces");
+    fireEvent.click(remove);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(remove.textContent).toContain("Remove?");
+
+    fireEvent.click(remove);
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("workspace_remove", { id: "w1" }));
+    await waitFor(() => expect(onRemoved).toHaveBeenCalledWith("w1"));
+
+    cleanup();
+    renderRow();
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Free Project/ }));
+    expect(screen.queryByLabelText("Remove Free Project from Workspaces")).toBeNull();
+  });
+
+  it("keeps the editor open when focus moves to Remove, instead of committing the rename", () => {
+    const { onRenamed } = renderRow(vi.fn(), vi.fn(), vi.fn());
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Free Project/ }));
+    const input = screen.getByLabelText("Rename Free Project");
+    fireEvent.change(input, { target: { value: "Half typed" } });
+    fireEvent.blur(input, { relatedTarget: screen.getByLabelText("Remove Free Project from Workspaces") });
+
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(onRenamed).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Rename Free Project")).toBeTruthy();
   });
 
   it("does not open the editor on a double click, which the row uses to expand", () => {

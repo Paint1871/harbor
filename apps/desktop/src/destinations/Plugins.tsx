@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@harbor/ui/Button";
-import type { AgentRecord, PluginApproval, PluginGrant, PluginRow } from "@harbor/schema/commands";
+import type { AgentRecord, PluginApproval, PluginRow } from "@harbor/schema/commands";
 import { ApprovalCard } from "./ApprovalCard";
 import { PluginMark } from "./PluginMark";
 
@@ -72,7 +72,7 @@ export function Plugins() {
     setLoadError(null);
     let listedRows: PluginRow[] = [];
     try {
-      const listed = await invoke<PluginRow[]>("plugin_list");
+      const listed = await call("plugin_list");
       listedRows = Array.isArray(listed) ? listed : [];
       setRows(listedRows);
     } catch (reason) {
@@ -80,14 +80,14 @@ export function Plugins() {
       setLoadError(`The connection catalog could not be loaded. ${errorText(reason)}`);
     }
     try {
-      const listed = await invoke<AgentRecord[]>("agent_list");
+      const listed = await call("agent_list");
       const listedAgents = Array.isArray(listed) ? listed : [];
       setAgents(listedAgents);
       const next: Record<string, boolean> = {};
       await Promise.all(
         listedAgents.map(async (agent) => {
           try {
-            const agentGrants = await invoke<PluginGrant[]>("plugin_grants_list", { agentId: agent.id });
+            const agentGrants = await call("plugin_grants_list", { agentId: agent.id });
             for (const grant of agentGrants) next[`${agent.id}:${grant.pluginId}`] = grant.enabled;
           } catch {
             // A single agent grant should not blank the rest of the page.
@@ -100,7 +100,7 @@ export function Plugins() {
       setGrants({});
     }
     try {
-      const pending = await invoke<PluginApproval[]>("plugin_approvals_list");
+      const pending = await call("plugin_approvals_list");
       setApprovals(Array.isArray(pending) ? pending : []);
     } catch {
       setApprovals([]);
@@ -142,7 +142,7 @@ export function Plugins() {
     }
     setBusy(row.id);
     setRows((current) => current.map((item) => item.id === row.id ? { ...item, status: "connecting" } : item));
-    void invoke("plugin_connect", { id: row.id })
+    void call("plugin_connect", { id: row.id })
       .then(() => {
         setNotice(`${displayName(row)} is waiting for browser sign-in.`);
         return reload();
@@ -161,7 +161,7 @@ export function Plugins() {
     setDevice(null);
     setNotice(null);
     try {
-      await invoke("plugin_configure", {
+      await call("plugin_configure", {
         id: selected.id,
         credential: credential.trim(),
         accountLabel: accountLabel.trim() || null,
@@ -181,7 +181,7 @@ export function Plugins() {
   function disconnect(row: PluginRow) {
     setNotice(null);
     setBusy(row.id);
-    void invoke("plugin_disconnect", { id: row.id })
+    void call("plugin_disconnect", { id: row.id })
       .then(() => reload())
       .then(() => {
         setDevice(null);
@@ -195,7 +195,7 @@ export function Plugins() {
     const key = `${agentId}:${pluginId}`;
     setGrants((current) => ({ ...current, [key]: enabled }));
     setBusy(key);
-    void invoke("plugin_set_agent_grant", { agentId, pluginId, enabled })
+    void call("plugin_set_agent_grant", { agentId, pluginId, enabled })
       .catch(() => setGrants((current) => ({ ...current, [key]: !enabled })))
       .finally(() => setBusy(null));
   }

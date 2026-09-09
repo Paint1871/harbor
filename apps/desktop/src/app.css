@@ -266,6 +266,24 @@ button, input, textarea, select {
   line-height: 1.35;
 }
 .harbor-workspace-rename p[role="alert"] { color: var(--harbor-accent-error, var(--harbor-muted)); }
+.harbor-workspace-remove {
+  align-self: flex-start;
+  min-height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--harbor-muted);
+  font: inherit;
+  font-size: var(--harbor-text-xs);
+  cursor: pointer;
+}
+.harbor-workspace-remove:hover { background: var(--harbor-raised); color: var(--harbor-text); }
+.harbor-workspace-remove:disabled { opacity: 0.6; cursor: default; }
+.harbor-workspace-remove[data-confirm="true"] {
+  background: color-mix(in srgb, var(--harbor-accent-error) 18%, transparent);
+  color: var(--harbor-accent-error);
+}
 
 .harbor-window-controls { display: flex; margin-left: var(--harbor-space-2); }
 .harbor-window-controls button {
@@ -1837,6 +1855,9 @@ button, input, textarea, select {
 .harbor-thread-row > .harbor-rail-row { flex: 1; min-width: 0; }
 .harbor-thread-row > .harbor-pin { padding: 8px 4px; font: inherit; font-size: 10px; }
 .harbor-thread-row > .harbor-pin[aria-pressed="true"] { color: var(--harbor-text); }
+.harbor-thread-row > .harbor-chat-tab-rename { flex: 1; min-width: 0; }
+.harbor-thread-row:hover .harbor-chat-tab-actions,
+.harbor-thread-row .harbor-chat-tab-actions:focus-within { opacity: 1; }
 .harbor-thread-heading { min-width: 0; }
 .harbor-thread-heading p { color: var(--harbor-muted); font-size: 11px; margin: 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .harbor-status-banner {

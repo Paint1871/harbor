@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { listen } from "@tauri-apps/api/event";
 import type { Terminal as XtermTerminal } from "@xterm/xterm";
 import { Button } from "@harbor/ui/Button";
@@ -152,7 +152,7 @@ export function TerminalPane({
         if (cancelled || !term) return;
         fit.fit();
         if (!spawned) return;
-        void invoke("pty_resize", { paneId, cols: term.cols, rows: term.rows }).catch((reason) => {
+        void call("pty_resize", { paneId, cols: term.cols, rows: term.rows }).catch((reason) => {
           if (!cancelled) setError(errorText(reason));
         });
       };
@@ -166,7 +166,7 @@ export function TerminalPane({
 
       disposeInput = term.onData((data) => {
         if (!spawned) return;
-        void invoke("pty_write_b64", {
+        void call("pty_write_b64", {
           paneId,
           b64: bytesToB64(new TextEncoder().encode(data)),
         }).catch((reason) => {
@@ -206,7 +206,7 @@ export function TerminalPane({
       };
 
       setStatus("starting");
-      await invoke("pty_spawn", {
+      await call("pty_spawn", {
         paneId,
         workspaceId,
         cols: term.cols,
@@ -234,7 +234,7 @@ export function TerminalPane({
       stopListen?.();
       resizeObserver?.disconnect();
       if (onWindowResize) window.removeEventListener("resize", onWindowResize);
-      void invoke("pty_kill", { paneId }).catch(() => undefined);
+      void call("pty_kill", { paneId }).catch(() => undefined);
       term?.dispose();
       termRef.current = null;
     };

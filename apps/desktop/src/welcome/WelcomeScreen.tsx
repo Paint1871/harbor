@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { Logo } from "@harbor/ui/Logo";
 import { useTheme } from "@harbor/ui/ThemeProvider";
@@ -32,7 +32,7 @@ export function WelcomeScreen({ onStartLocal }: WelcomeScreenProps) {
   // The OS account is a suggestion; nothing is stored until Start local.
   useEffect(() => {
     let cancelled = false;
-    void invoke<string>("default_profile_name")
+    void call("default_profile_name")
       .then((suggested) => {
         if (!cancelled && suggested.trim()) setName(suggested.trim());
       })

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { listen } from "@tauri-apps/api/event";
 import type { ChatMessage, ContentPart } from "@harbor/schema/commands";
 import { parsePermissionEvent, type PermissionRequest } from "./PermissionCard";
@@ -81,7 +81,7 @@ export function useAcpThread(threadId: string | null) {
     requests.current.set(id, request);
     setLoading((current) => ({ ...current, [id]: true }));
     try {
-      const lines = await invoke<ChatMessage[]>("thread_history", { id });
+      const lines = await call("thread_history", { id });
       if (requests.current.get(id) === request) setHistory((current) => ({ ...current, [id]: lines }));
     } catch {
       if (requests.current.get(id) === request) setErrors((current) => ({ ...current, [id]: "Could not load this conversation. Try again." }));
@@ -130,7 +130,7 @@ export function useAcpThread(threadId: string | null) {
     if (!threadId) return;
     const id = threadId;
     try {
-      const listed = await invoke<unknown>("thread_config_options", { id });
+      const listed = await call("thread_config_options", { id });
       setOptions((current) => ({ ...current, [id]: readConfigOptions(listed) }));
     } catch (error) {
       setErrors((current) => ({ ...current, [id]: `Could not read this engine's options. ${String(error)}` }));
@@ -150,7 +150,7 @@ export function useAcpThread(threadId: string | null) {
     const parts: ContentPart[] = [{ type: "text", text }];
     let success = false;
     try {
-      await invoke("thread_send", { id, parts });
+      await call("thread_send", { id, parts });
       success = true;
     } catch (error) {
       setErrors((current) => ({ ...current, [id]: `The engine could not finish this message. ${String(error)}` }));
@@ -167,7 +167,7 @@ export function useAcpThread(threadId: string | null) {
     if (!threadId) return;
     const id = threadId;
     try {
-      await invoke("thread_cancel", { id });
+      await call("thread_cancel", { id });
     } catch (error) {
       setErrors((current) => ({ ...current, [id]: `Could not stop this turn. ${String(error)}` }));
     } finally {
@@ -180,7 +180,7 @@ export function useAcpThread(threadId: string | null) {
     const session = threadId;
     if (!session) return;
     try {
-      await invoke("acp_permission_resolve", { id, optionId, cancelled });
+      await call("acp_permission_resolve", { id, optionId, cancelled });
       setPermissions((current) => ({
         ...current,
         [session]: (current[session] ?? []).filter((item) => item.id !== id),

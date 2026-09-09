@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
 import type { DetectedEngine } from "@harbor/schema/commands";
@@ -155,7 +155,7 @@ export function Settings({
       setDefaultEngine(valueString(engine, "auto"));
       setAccountName(valueString(name, profileName));
     });
-    void invoke<DetectedEngine[]>("engines_detect").then(setEngines).catch(() => setEngines([]));
+    void call("engines_detect").then(setEngines).catch(() => setEngines([]));
     return () => { active = false; };
   }, [profileName]);
 
@@ -169,7 +169,7 @@ export function Settings({
     setRechecking(true);
     setEngineStatus(null);
     try {
-      const next = await invoke<DetectedEngine[]>("engines_recheck");
+      const next = await call("engines_recheck");
       setEngines(next);
       setEngineStatus(next.filter((engine) => engine.status === "ready").length ? "Engines ready" : "No ready engines found");
     } catch {
@@ -182,7 +182,7 @@ export function Settings({
   async function voiceAction(command: "dictation_begin" | "dictation_end" | "dictation_prepare_model", success: string) {
     setVoiceStatus(null);
     try {
-      await invoke(command);
+      await call(command);
       setVoiceStatus(success);
     } catch {
       setVoiceStatus("Voice is not available in this build yet. Dictation remains local to the desktop host.");

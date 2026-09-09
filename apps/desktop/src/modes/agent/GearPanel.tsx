@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { Button } from "@harbor/ui/Button";
-import type { AgentChat, AgentRecord, DetectedEngine, Memory, Place, PluginGrant, PluginRow, SearchHit } from "@harbor/schema/commands";
+import type { AgentChat, AgentRecord, DetectedEngine, Memory, Place, PluginRow, SearchHit } from "@harbor/schema/commands";
 import { FacePicker } from "./FacePicker";
 
 interface GearPanelProps {
@@ -59,19 +59,19 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setError(null);
     setQuery("");
     setHits([]);
-    void invoke<Memory[]>("memory_list", { agentId: agent.id })
+    void call("memory_list", { agentId: agent.id })
       .then(setMemories)
       .catch(() => setMemories([]));
-    void invoke<Place[]>("places_list", { agentId: agent.id })
+    void call("places_list", { agentId: agent.id })
       .then(setPlaces)
       .catch(() => setPlaces([]));
-    void invoke<PluginRow[]>("plugin_list")
+    void call("plugin_list")
       .then((listed) => setPlugins(Array.isArray(listed) && listed.length ? listed : [FALLBACK_PLUGIN]))
       .catch(() => setPlugins([FALLBACK_PLUGIN]));
-    void invoke<PluginGrant[]>("plugin_grants_list", { agentId: agent.id })
+    void call("plugin_grants_list", { agentId: agent.id })
       .then((grants) => setPluginGrants(Object.fromEntries(grants.map((grant) => [grant.pluginId, grant.enabled]))))
       .catch(() => setPluginGrants({}));
-    void invoke<DetectedEngine[]>("engines_detect")
+    void call("engines_detect")
       .then(setEngines)
       .catch(() => setEngines([]));
   }, [agent.id, agent.faceIndex, agent.name, agent.brief, agent.engineId, agent.messaging, agent.homePath]);
@@ -82,7 +82,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setBusy(true);
     setError(null);
     try {
-      const created = await invoke<Memory>("memory_upsert", { agentId: agent.id, body });
+      const created = await call("memory_upsert", { agentId: agent.id, body });
       setMemories((current) => [...current, created]);
       setFact("");
     } catch {
@@ -95,7 +95,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
   async function removeMemory(id: string) {
     setError(null);
     try {
-      await invoke("memory_delete", { id });
+      await call("memory_delete", { id });
       setMemories((current) => current.filter((item) => item.id !== id));
     } catch {
       setError("That fact could not be removed. Please try again.");
@@ -108,7 +108,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setBusy(true);
     setError(null);
     try {
-      await invoke("agent_update", {
+      await call("agent_update", {
         input: { id: agent.id, name: nextName, brief, engineId, messaging },
       });
       onAgentChange?.({ ...agent, name: nextName, brief, engineId, messaging, homePath, faceIndex });
@@ -124,9 +124,9 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setBusy(true);
     setError(null);
     try {
-      const path = await invoke<string | null>("workspace_pick_folder");
+      const path = await call("workspace_pick_folder");
       if (!path) return;
-      await invoke("agent_update", { input: { id: agent.id, homePath: path } });
+      await call("agent_update", { input: { id: agent.id, homePath: path } });
       setHomePath(path);
       onAgentChange?.({ ...agent, homePath: path, name, brief, engineId, messaging, faceIndex });
     } catch (reason) {
@@ -141,10 +141,10 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setBusy(true);
     setError(null);
     try {
-      const path = await invoke<string | null>("workspace_pick_folder");
+      const path = await call("workspace_pick_folder");
       if (!path) return;
-      await invoke("places_grant", { agentId: agent.id, path });
-      setPlaces(await invoke<Place[]>("places_list", { agentId: agent.id }));
+      await call("places_grant", { agentId: agent.id, path });
+      setPlaces(await call("places_list", { agentId: agent.id }));
     } catch (reason) {
       setError(`That folder could not be granted. ${String(reason)}`);
     } finally {
@@ -155,7 +155,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
   async function revokePlace(id: string) {
     setError(null);
     try {
-      await invoke("places_revoke", { id });
+      await call("places_revoke", { id });
       setPlaces((current) => current.filter((row) => row.id !== id));
     } catch {
       setError("That folder could not be revoked. Please try again.");
@@ -168,7 +168,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setBusy(true);
     setError(null);
     try {
-      setHits(await invoke<SearchHit[]>("session_search", { agentId: agent.id, query: text }));
+      setHits(await call("session_search", { agentId: agent.id, query: text }));
     } catch {
       setError("Search could not run. Please try again.");
       setHits([]);
@@ -181,7 +181,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setPluginGrants((current) => ({ ...current, [pluginId]: enabled }));
     setError(null);
     try {
-      await invoke("plugin_set_agent_grant", { agentId: agent.id, pluginId, enabled });
+      await call("plugin_set_agent_grant", { agentId: agent.id, pluginId, enabled });
     } catch {
       setPluginGrants((current) => ({ ...current, [pluginId]: !enabled }));
       setError("Plugin access could not be updated. Please try again.");
@@ -193,8 +193,8 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setFaceIndex(index);
     setError(null);
     try {
-      await invoke("agent_update", { input: { id: agent.id, faceIndex: index } });
-      await invoke<string>("face_preview", { agentId: agent.id, faceIndex: index });
+      await call("agent_update", { input: { id: agent.id, faceIndex: index } });
+      await call("face_preview", { agentId: agent.id, faceIndex: index });
       onAgentChange?.({ ...agent, faceIndex: index });
     } catch {
       setFaceIndex(previous);

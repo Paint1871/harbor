@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { readDir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import type { FsEntry, Workspace } from "@harbor/schema/commands";
+import type { FsEntry } from "@harbor/schema/commands";
 
 const PRIMARY_TIMEOUT_MS = 2200;
 const SCOPED_TIMEOUT_MS = 1800;
@@ -70,7 +70,7 @@ function isWithin(root: string, candidate: string): boolean {
 }
 
 async function workspaceFolder(workspaceId: string): Promise<string> {
-  const workspaces = await invoke<Workspace[]>("workspace_list");
+  const workspaces = await call("workspace_list");
   const workspace = workspaces.find((item) => item.id === workspaceId);
   if (!workspace) throw new Error("workspace not found");
   return lexicalNormalize(workspace.folder);
@@ -107,19 +107,19 @@ async function scopedWrite(workspaceId: string, path: string, contents: string):
 export function listWorkspace(workspaceId: string, path: string): Promise<FsEntry[]> {
   // The native command owns the workspace-root check and does not depend on
   // the WebView scope being granted in the same tick as a cold launch.
-  return retry(() => withTimeout(invoke<FsEntry[]>("fs_list", { workspaceId, path }), PRIMARY_TIMEOUT_MS))
+  return retry(() => withTimeout(call("fs_list", { workspaceId, path }), PRIMARY_TIMEOUT_MS))
     .catch(() => retry(() => scopedList(workspaceId, path)))
     .catch(() => { throw new Error(ACCESS_TIMEOUT_MESSAGE); });
 }
 
 export function readWorkspaceFile(workspaceId: string, path: string): Promise<string> {
-  return retry(() => withTimeout(invoke<string>("fs_read", { workspaceId, path }), PRIMARY_TIMEOUT_MS))
+  return retry(() => withTimeout(call("fs_read", { workspaceId, path }), PRIMARY_TIMEOUT_MS))
     .catch(() => retry(() => scopedRead(workspaceId, path)))
     .catch(() => { throw new Error(ACCESS_TIMEOUT_MESSAGE); });
 }
 
 export function writeWorkspaceFile(workspaceId: string, path: string, contents: string): Promise<void> {
-  return retry(() => withTimeout(invoke<void>("fs_write", { workspaceId, path, contents }), PRIMARY_TIMEOUT_MS))
+  return retry(() => withTimeout(call("fs_write", { workspaceId, path, contents }), PRIMARY_TIMEOUT_MS))
     .catch(() => retry(() => scopedWrite(workspaceId, path, contents)))
     .catch(() => { throw new Error(ACCESS_TIMEOUT_MESSAGE); });
 }

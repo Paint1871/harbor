@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { Composer } from "@harbor/ui/Composer";
 import { Button } from "@harbor/ui/Button";
 import type { AgentRecord } from "@harbor/schema/commands";
@@ -46,12 +46,12 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
   useEffect(() => {
     const watched = chrome?.mode === "agent" && chrome?.destination === "mode";
     const sessionRef = watched ? chat.activeId : null;
-    void invoke("session_watch", { sessionRef }).catch(() => undefined);
-    return () => { void invoke("session_watch", { sessionRef: null }).catch(() => undefined); };
+    void call("session_watch", { sessionRef }).catch(() => undefined);
+    return () => { void call("session_watch", { sessionRef: null }).catch(() => undefined); };
   }, [chat.activeId, chrome?.destination, chrome?.mode]);
 
   useEffect(() => {
-    void invoke<AgentRecord[]>("agent_list")
+    void call("agent_list")
       .then(setTeammates)
       .catch(() => setTeammates([]));
   }, [agent.id]);
@@ -289,7 +289,7 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
                   if (named) {
                     const body = value.slice(named.name.length + 1).trim() || `Handoff from ${agent.name}`;
                     setMailError(null);
-                    void invoke("mail_send", { fromAgentId: agent.id, toAgentId: named.id, body })
+                    void call("mail_send", { fromAgentId: agent.id, toAgentId: named.id, body })
                       .then(() => setDraft(""))
                       .catch((reason) => setMailError(`Mail could not be sent. ${String(reason)}`));
                     return;

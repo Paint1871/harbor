@@ -1063,4 +1063,231 @@ mod tests {
         );
         assert!(unminted.is_empty(), "missing from build.rs: {unminted:?}");
     }
+
+    fn camel(name: &str) -> String {
+        let mut out = String::with_capacity(name.len());
+        let mut upper = false;
+        for ch in name.chars() {
+            if ch == '_' {
+                upper = true;
+            } else if upper {
+                out.extend(ch.to_uppercase());
+                upper = false;
+            } else {
+                out.push(ch);
+            }
+        }
+        out
+    }
+
+    /// The argument names each `#[tauri::command]` expects, as the webview
+    /// spells them. Tauri camel-cases them on the way in, and the managed state
+    /// it injects itself is not part of the payload.
+    fn host_arguments() -> Vec<(String, Vec<String>)> {
+        let mut out = Vec::new();
+        for source in [include_str!("ipc.rs"), include_str!("pty_host.rs")] {
+            for chunk in source.split("#[tauri::command]").skip(1) {
+                let Some(header) = chunk.split_once('{').map(|(header, _)| header) else {
+                    continue;
+                };
+                let Some((before, params)) = header.split_once('(') else {
+                    continue;
+                };
+                let Some(name) = before.split_whitespace().last() else {
+                    continue;
+                };
+                let params = params
+                    .rsplit_once(')')
+                    .map(|(params, _)| params)
+                    .unwrap_or("");
+                let mut args = Vec::new();
+                let mut depth = 0usize;
+                let mut current = String::new();
+                for ch in params.chars() {
+                    match ch {
+                        '<' | '(' | '[' => depth += 1,
+                        '>' | ')' | ']' => depth = depth.saturating_sub(1),
+                        ',' if depth == 0 => {
+                            args.push(std::mem::take(&mut current));
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    current.push(ch);
+                }
+                args.push(current);
+                let args = args
+                    .iter()
+                    .filter_map(|param| param.split_once(':'))
+                    .filter(|(_, ty)| {
+                        !ty.contains("State<")
+                            && !ty.contains("AppHandle")
+                            && !ty.contains("Window")
+                    })
+                    .map(|(name, _)| camel(name.trim()))
+                    .collect::<Vec<_>>();
+                out.push((name.to_string(), args));
+            }
+        }
+        out
+    }
+
+    /// The `HarborCommands` entries, as `(command, Some(argument names))`, with
+    /// `None` for a command the contract declares as taking no arguments.
+    fn contract_arguments() -> Vec<(String, Option<Vec<String>>)> {
+        let source = include_str!("../../../../packages/schema/src/commands.ts");
+        let block = source
+            .split_once("export interface HarborCommands {")
+            .expect("HarborCommands")
+            .1;
+        let mut flat = String::new();
+        for line in block.lines() {
+            let line = line.trim();
+            if line.starts_with("/*") || line.starts_with('*') || line.starts_with("//") {
+                continue;
+            }
+            if line == "}" && flat.matches('{').count() == flat.matches('}').count() {
+                break;
+            }
+            flat.push_str(line);
+            flat.push(' ');
+        }
+
+        let chars: Vec<char> = flat.chars().collect();
+        let mut out = Vec::new();
+        let mut index = 0usize;
+        while index < chars.len() {
+            while index < chars.len() && !chars[index].is_ascii_alphabetic() {
+                index += 1;
+            }
+            let start = index;
+            while index < chars.len()
+                && (chars[index].is_ascii_alphanumeric() || chars[index] == '_')
+            {
+                index += 1;
+            }
+            if start == index {
+                continue;
+            }
+            let name: String = chars[start..index].iter().collect();
+            while index < chars.len() && chars[index] == ' ' {
+                index += 1;
+            }
+            if index >= chars.len() || chars[index] != ':' {
+                continue;
+            }
+            index += 1;
+            while index < chars.len() && chars[index] == ' ' {
+                index += 1;
+            }
+            if index >= chars.len() || chars[index] != '{' {
+                continue;
+            }
+            let (body, next) = balanced(&chars, index);
+            index = next;
+            out.push((name, entry_arguments(&body)));
+        }
+        out
+    }
+
+    /// The text inside the braces at `open`, and the index just past them.
+    fn balanced(chars: &[char], open: usize) -> (String, usize) {
+        let mut depth = 0usize;
+        let mut index = open;
+        while index < chars.len() {
+            match chars[index] {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return (chars[open + 1..index].iter().collect(), index + 1);
+                    }
+                }
+                _ => {}
+            }
+            index += 1;
+        }
+        (String::new(), chars.len())
+    }
+
+    fn entry_arguments(body: &str) -> Option<Vec<String>> {
+        let args = body.split_once("args:")?.1.trim_start().to_string();
+        if args.starts_with("undefined") {
+            return None;
+        }
+        let chars: Vec<char> = args.chars().collect();
+        let (fields, _) = balanced(&chars, 0);
+        let mut names = Vec::new();
+        let mut depth = 0usize;
+        let mut field = String::new();
+        for ch in fields.chars() {
+            match ch {
+                '{' | '(' | '<' => depth += 1,
+                '}' | ')' | '>' => depth = depth.saturating_sub(1),
+                ';' if depth == 0 => {
+                    names.push(std::mem::take(&mut field));
+                    continue;
+                }
+                _ => {}
+            }
+            field.push(ch);
+        }
+        names.push(field);
+        Some(
+            names
+                .iter()
+                .filter_map(|field| field.split_once(':'))
+                .map(|(name, _)| name.trim().trim_end_matches('?').to_string())
+                .collect(),
+        )
+    }
+
+    /// The webview only reaches the host through `HarborCommands`, so a command
+    /// the contract does not list cannot be called and an argument it spells
+    /// differently arrives as `null`. Both used to be caught by hand, and both
+    /// have been missed. Keep the two files saying the same thing.
+    #[test]
+    fn the_typescript_contract_matches_the_registered_commands() {
+        let registered = handler_commands();
+        let contract = contract_arguments();
+        let host = host_arguments();
+
+        let listed: Vec<&String> = contract.iter().map(|(name, _)| name).collect();
+        let missing: Vec<&String> = registered
+            .iter()
+            .filter(|command| !listed.contains(command))
+            .collect();
+        let extra: Vec<&&String> = listed
+            .iter()
+            .filter(|command| !registered.contains(command))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "registered but missing from packages/schema/src/commands.ts: {missing:?}"
+        );
+        assert!(
+            extra.is_empty(),
+            "in packages/schema/src/commands.ts but not registered: {extra:?}"
+        );
+
+        let mut mismatched = Vec::new();
+        for (command, declared) in &contract {
+            let Some((_, expected)) = host.iter().find(|(name, _)| name == command) else {
+                continue;
+            };
+            let mut declared = declared.clone().unwrap_or_default();
+            let mut expected = expected.clone();
+            declared.sort();
+            expected.sort();
+            if declared != expected {
+                mismatched.push(format!(
+                    "{command}: contract {declared:?} host {expected:?}"
+                ));
+            }
+        }
+        assert!(
+            mismatched.is_empty(),
+            "argument names differ — {mismatched:?}"
+        );
+    }
 }

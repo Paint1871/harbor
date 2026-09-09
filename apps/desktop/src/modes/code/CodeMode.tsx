@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { Button } from "@harbor/ui/Button";
 import type { DetectedEngine, PaneLayout, PaneState, RestoredPane, Workspace, WorkspaceTab } from "@harbor/schema/commands";
 import { dropLeaf, leafPaneIds, preferredSplitDir, restoredLayoutPaused, splitLeaf } from "../../layout/restore";
@@ -176,7 +176,7 @@ export function CodeMode({
   const refreshTerminalEngines = useCallback(async () => {
     if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
     try {
-      const next = await invoke<DetectedEngine[]>("engines_detect");
+      const next = await call("engines_detect");
       setDetectedEngines(Array.isArray(next) ? next : []);
     } catch {
       setDetectedEngines([]);
@@ -199,7 +199,7 @@ export function CodeMode({
   const persistLayout = useCallback((id: string, next: PaneLayout) => {
     const write = layoutWritesRef.current
       .catch(() => undefined)
-      .then(() => invoke("workspace_save_layout", { tabId: id, layout: next }))
+      .then(() => call("workspace_save_layout", { tabId: id, layout: next }))
       .then(() => undefined);
     layoutWritesRef.current = write;
     return write;
@@ -237,7 +237,7 @@ export function CodeMode({
       const thread = tab.panes.find((pane) => pane.kind === "thread");
       if (native && terminals[0] && secondaryTerminal && browser && thread && hasOldReferenceRatios(tab.layout)) {
         const nextLayout = referenceLayout(terminals[0].id, secondaryTerminal.id, browser.id, thread.id);
-        await invoke("workspace_save_layout", { tabId: tab.id, layout: nextLayout });
+        await call("workspace_save_layout", { tabId: tab.id, layout: nextLayout });
         return { ...tab, layout: nextLayout };
       }
       return tab;
@@ -248,7 +248,7 @@ export function CodeMode({
     const created: string[] = [];
     try {
       const create = async (kind: CodePaneKind) => {
-        const id = await invoke<string>("pane_create", {
+        const id = await call("pane_create", {
           tabId: tab.id,
           kind,
           state: {
@@ -265,9 +265,9 @@ export function CodeMode({
       const browserId = await create("browser");
       const threadId = await create("thread");
       const legacyFiles = tab.panes.find((pane) => pane.kind === "files");
-      if (legacyFiles) await invoke("pane_close", { id: legacyFiles.id });
+      if (legacyFiles) await call("pane_close", { id: legacyFiles.id });
       const nextLayout = referenceLayout(primaryTerminal.id, secondaryTerminalId, browserId, threadId);
-      await invoke("workspace_save_layout", { tabId: tab.id, layout: nextLayout });
+      await call("workspace_save_layout", { tabId: tab.id, layout: nextLayout });
       return {
         ...tab,
         layout: nextLayout,
@@ -278,7 +278,7 @@ export function CodeMode({
         ),
       };
     } catch (reason) {
-      await Promise.all(created.map((id) => invoke("pane_close", { id }).catch(() => undefined)));
+      await Promise.all(created.map((id) => call("pane_close", { id }).catch(() => undefined)));
       setLayoutError(codeError(reason, "The reference code layout could not be prepared."));
       return tab;
     }
@@ -290,7 +290,7 @@ export function CodeMode({
     workspaceRequestRef.current = request;
     setActiveWorkspaceId(workspace.id);
     try {
-      const tab = await invoke<WorkspaceTab>("workspace_ensure_tab", { workspaceId: workspace.id });
+      const tab = await call("workspace_ensure_tab", { workspaceId: workspace.id });
       if (workspaceRequestRef.current !== request) return null;
       applyTab(await prepareTab(tab, workspace));
       await settingsSet(`code_tab:${workspace.id}`, tab.id);
@@ -336,8 +336,8 @@ export function CodeMode({
   useEffect(() => {
     void (async () => {
       try {
-        const restored = await invoke<WorkspaceTab[]>("layout_restore");
-        const listed = await invoke<Workspace[]>("workspace_list").catch(() => [] as Workspace[]);
+        const restored = await call("layout_restore");
+        const listed = await call("workspace_list").catch(() => [] as Workspace[]);
         setWorkspaces(listed);
         const workspace = listed[0];
         if (workspace && !userSelectedWorkspaceRef.current) setActiveWorkspaceId(workspace.id);
@@ -349,7 +349,7 @@ export function CodeMode({
           await ensureTab(listed);
         }
       } catch {
-        const listed = await invoke<Workspace[]>("workspace_list").catch(() => [] as Workspace[]);
+        const listed = await call("workspace_list").catch(() => [] as Workspace[]);
         setWorkspaces(listed);
         await ensureTab(listed);
       }
@@ -387,7 +387,7 @@ export function CodeMode({
       return copy;
     });
     if (tabId) {
-      void invoke("pane_close", { id: paneId }).catch((reason) => {
+      void call("pane_close", { id: paneId }).catch((reason) => {
         setLayoutError(codeError(reason, "The pane could not be closed."));
       });
     }
@@ -417,10 +417,10 @@ export function CodeMode({
     }
     const dir = splitDirectionFor(paneId);
     try {
-      const created = await invoke<string>("pane_create", { tabId, kind, state });
+      const created = await call("pane_create", { tabId, kind, state });
       const next = splitLeaf(layoutRef.current, paneId, created, dir);
       if (layoutActionRef.current !== action || !leafPaneIds(next).includes(created)) {
-        await invoke("pane_close", { id: created }).catch(() => undefined);
+        await call("pane_close", { id: created }).catch(() => undefined);
         return;
       }
       setPanes((current) => [...current, { id: created, kind, paused: false, engineId: state.engineId }]);
@@ -447,7 +447,7 @@ export function CodeMode({
     engineChangeRef.current[paneId] = action;
     setLayoutError(null);
     try {
-      await invoke("pane_set_engine", { id: paneId, engineId });
+      await call("pane_set_engine", { id: paneId, engineId });
       if (engineChangeRef.current[paneId] !== action) return;
       setPanes((current) => current.map((item) => item.id === paneId ? { ...item, engineId } : item));
     } catch (reason) {
@@ -617,6 +617,26 @@ export function CodeMode({
                     }}
                     onRenamed={(updated) => {
                       setWorkspaces((rows) => rows.map((item) => (item.id === updated.id ? updated : item)));
+                    }}
+                    onRemoved={(id) => {
+                      const rest = workspaces.filter((item) => item.id !== id);
+                      setWorkspaces(rest);
+                      setCollapsedWorkspaces((current) => {
+                        const { [id]: _dropped, ...keep } = current;
+                        return keep;
+                      });
+                      if (id !== workspace?.id) return;
+                      // The open folder just left the rail; show the next one, or nothing.
+                      const next = rest[0];
+                      if (next) {
+                        void openWorkspace(next);
+                        return;
+                      }
+                      setActiveWorkspaceId(null);
+                      setTabId(null);
+                      setPanes([]);
+                      setFocused(null);
+                      setExpandedPaneId(null);
                     }}
                   />
                   {open ? (

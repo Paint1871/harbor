@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "./ipc";
 import { ThemeProvider } from "@harbor/ui/ThemeProvider";
 import type { Theme } from "@harbor/ui/theme";
 import { DesktopShell } from "./chrome/DesktopShell";
@@ -30,7 +30,7 @@ export function App() {
       if (typeof name === "string" && name.trim()) {
         setProfileName(name);
       } else {
-        void invoke<string>("default_profile_name")
+        void call("default_profile_name")
           .then((suggested) => {
             if (suggested.trim()) setProfileName(suggested.trim());
           })

@@ -28,6 +28,12 @@ Match existing English UI copy (`Start local`, `Ask anything...`, and the rest
 of the chrome). If a string is unspecified, write a short literal in the same
 voice; do not add an i18n framework.
 
+The webview reaches the host only through `call()` in `apps/desktop/src/ipc.ts`,
+typed by `HarborCommands` in `packages/schema/src/commands.ts`. A new command
+lands in four places: the `#[tauri::command]` function, `generate_handler!`,
+`build.rs` plus `capabilities/default.json`, and that contract. Two tests in
+`ipc.rs` fail if you miss one.
+
 Architecture and crate boundaries are in [docs/architecture.md](docs/architecture.md).
 Known gaps are in [docs/status.md](docs/status.md). Do not report a listed gap
 as done without the actual build or runtime evidence.

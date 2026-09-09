@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { Card } from "@harbor/ui/Card";
 
@@ -16,7 +16,7 @@ export function ApprovalCard({ id, onResolved }: ApprovalCardProps) {
         <div className="harbor-dialog-actions">
           <Button
             onClick={() =>
-              void invoke("plugin_resolve_approval", { id, allow: true }).then(onResolved).catch(() => undefined)
+              void call("plugin_resolve_approval", { id, allow: true }).then(onResolved).catch(() => undefined)
             }
           >
             Allow
@@ -24,7 +24,7 @@ export function ApprovalCard({ id, onResolved }: ApprovalCardProps) {
           <Button
             variant="ghost"
             onClick={() =>
-              void invoke("plugin_resolve_approval", { id, allow: false }).then(onResolved).catch(() => undefined)
+              void call("plugin_resolve_approval", { id, allow: false }).then(onResolved).catch(() => undefined)
             }
           >
             Deny

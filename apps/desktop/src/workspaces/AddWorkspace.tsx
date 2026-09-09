@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
 import type { DetectedEngine, Workspace, WorkspaceSetup } from "@harbor/schema/commands";
@@ -87,7 +87,7 @@ export function AddWorkspace({
   const detectEngines = useCallback(async (command: "engines_detect" | "engines_recheck" = "engines_detect") => {
     setDetectionState("checking");
     try {
-      const detected = await invoke<DetectedEngine[]>(command);
+      const detected = await call(command);
       const next = Array.isArray(detected) ? detected : [];
       setEngines(next);
       setDetectionState("ready");
@@ -138,7 +138,7 @@ export function AddWorkspace({
     setBusy(true);
     setError(null);
     try {
-      const path = await invoke<string | null>("workspace_pick_folder");
+      const path = await call("workspace_pick_folder");
       if (path) setFolder(path);
     } catch {
       setError("The folder picker is unavailable. Paste the full folder path below.");
@@ -159,8 +159,8 @@ export function AddWorkspace({
       terminalEngineIds: terminalEngineIds.slice(0, totalTerminals).map((id) => id || SHELL_ENGINE_ID),
     };
     try {
-      const added = await invoke<Workspace>("workspace_add", { folder: folder.trim() });
-      await invoke("workspace_configure_tab", { workspaceId: added.id, setup });
+      const added = await call("workspace_add", { folder: folder.trim() });
+      await call("workspace_configure_tab", { workspaceId: added.id, setup });
       await settingsSet("workspace_launch_defaults", setup).catch(() => undefined);
       onAdded(added);
     } catch (reason) {

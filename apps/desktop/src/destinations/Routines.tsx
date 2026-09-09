@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import type { AgentRecord } from "@harbor/schema/commands";
 import { settingsGet, settingsSet } from "../settings";
@@ -53,7 +53,7 @@ export function Routines() {
     void settingsGet("routines_local").then((value) => {
       if (active) setRoutines(readRoutines(value));
     });
-    void invoke<AgentRecord[]>("agent_list")
+    void call("agent_list")
       .then((listed) => {
         if (!active) return;
         setAgents(listed);
@@ -100,7 +100,7 @@ export function Routines() {
     setRunning(routine.id);
     setNotice(null);
     try {
-      const chat = await invoke<{ id: string }>("agent_chat_create", { agentId: routine.agentId });
+      const chat = await call("agent_chat_create", { agentId: routine.agentId });
       await settingsSet("pending_agent_prompt", routine.brief);
       setNotice(`Started a new chat with ${agentName.get(routine.agentId) ?? "your teammate"}.`);
       onModeChange("agent");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../../ipc";
 import { Composer } from "@harbor/ui/Composer";
 import { Button } from "@harbor/ui/Button";
 import { Logo } from "@harbor/ui/Logo";
@@ -49,7 +49,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
 
   const checkEngines = useCallback(async () => {
     setChecking(true);
-    try { setEngines(await invoke<DetectedEngine[]>("engines_detect")); }
+    try { setEngines(await call("engines_detect")); }
     catch { setError("Could not check installed engines. Try again in the desktop app."); }
     finally { setChecking(false); }
   }, []);
@@ -59,8 +59,8 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     setError(null);
     try {
       const [listed, rest] = await Promise.all([
-        invoke<Workspace[]>("workspace_list"),
-        invoke<ThreadRecord[]>("thread_list", { workspaceId: null }),
+        call("workspace_list"),
+        call("thread_list", { workspaceId: null }),
       ]);
       setWorkspaces(listed);
       setOther(rest);
@@ -86,14 +86,14 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
   // watching land does not also arrive as an inbox row.
   useEffect(() => {
     const sessionRef = mode === "chat" ? active?.id ?? null : null;
-    void invoke("session_watch", { sessionRef }).catch(() => undefined);
-    return () => { void invoke("session_watch", { sessionRef: null }).catch(() => undefined); };
+    void call("session_watch", { sessionRef }).catch(() => undefined);
+    return () => { void call("session_watch", { sessionRef: null }).catch(() => undefined); };
   }, [active?.id, mode]);
 
   useEffect(() => {
     if (!workspaceId) return;
     let disposed = false;
-    void invoke<ThreadRecord[]>("thread_list", { workspaceId })
+    void call("thread_list", { workspaceId })
       .then((items) => { if (!disposed) setLists((current) => ({ ...current, [workspaceId]: items })); })
       .catch(() => { if (!disposed) setError("This folder’s threads could not be loaded. Reopen the folder to try again."); });
     return () => { disposed = true; };
@@ -107,7 +107,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     setCreating(true);
     setError(null);
     try {
-      const thread = await invoke<ThreadRecord>("thread_create", { workspaceId: workspace.id, engineId: engine.id });
+      const thread = await call("thread_create", { workspaceId: workspace.id, engineId: engine.id });
       setLists((current) => ({ ...current, [workspace.id]: [thread, ...(current[workspace.id] ?? [])] }));
       setActive(thread);
     } catch { setError("The thread could not be created. Your folder is still open. Please try again."); }
@@ -118,7 +118,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     setInstalling(engineId);
     setError(null);
     try {
-      setEngines(await invoke<DetectedEngine[]>("engine_install_adapter", { engineId }));
+      setEngines(await call("engine_install_adapter", { engineId }));
     } catch (reason) {
       setError(`Could not add that engine. ${String(reason)}`);
     } finally {
@@ -128,7 +128,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
 
   async function setThreadEngine(threadId: string, nextEngineId: string) {
     try {
-      await invoke("thread_set_engine", { id: threadId, engineId: nextEngineId });
+      await call("thread_set_engine", { id: threadId, engineId: nextEngineId });
       const apply = (items: ThreadRecord[]) => items.map((item) => item.id === threadId ? { ...item, engineId: nextEngineId } : item);
       if (workspaceId) setLists((current) => ({ ...current, [workspaceId]: apply(current[workspaceId] ?? []) }));
       else setOther(apply);
@@ -149,11 +149,35 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
 
   async function pin(id: string, pinned: boolean) {
     try {
-      await invoke("thread_pin", { id, pinned });
+      await call("thread_pin", { id, pinned });
       const updated = (items: ThreadRecord[]) => items.map((item) => item.id === id ? { ...item, pinned } : item).sort((a, b) => Number(b.pinned) - Number(a.pinned));
       if (workspaceId) setLists((current) => ({ ...current, [workspaceId]: updated(current[workspaceId] ?? []) }));
       else setOther(updated);
     } catch { setError("Could not update the pin. Please try again."); }
+  }
+
+  async function renameThread(id: string, title: string) {
+    try {
+      await call("thread_rename", { id, title });
+      const apply = (items: ThreadRecord[]) => items.map((item) => item.id === id ? { ...item, title } : item);
+      if (workspaceId) setLists((current) => ({ ...current, [workspaceId]: apply(current[workspaceId] ?? []) }));
+      else setOther(apply);
+      setActive((current) => current?.id === id ? { ...current, title } : current);
+    } catch { setError("Could not rename that thread. Please try again."); }
+  }
+
+  async function deleteThread(id: string) {
+    try {
+      await call("thread_delete", { id });
+      const drop = (items: ThreadRecord[]) => items.filter((item) => item.id !== id);
+      if (workspaceId) setLists((current) => ({ ...current, [workspaceId]: drop(current[workspaceId] ?? []) }));
+      else setOther(drop);
+      setActive((current) => current?.id === id ? null : current);
+      // The thread is gone; its draft, attachments and option values go with it.
+      setDrafts((current) => { const { [id]: _dropped, ...rest } = current; return rest; });
+      setAttached((current) => { const { [id]: _dropped, ...rest } = current; return rest; });
+      setConfigChoice((current) => { const { [id]: _dropped, ...rest } = current; return rest; });
+    } catch { setError("Could not delete that thread. Please try again."); }
   }
 
   function filePath(file: File): string | null {
@@ -167,9 +191,9 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
   async function attachFolder() {
     if (!active) return;
     try {
-      const folder = await invoke<string | null>("workspace_pick_folder");
+      const folder = await call("workspace_pick_folder");
       if (!folder) return;
-      await invoke("thread_attach_files", { id: active.id, paths: [folder] });
+      await call("thread_attach_files", { id: active.id, paths: [folder] });
       setAttached((current) => ({ ...current, [active.id]: [...(current[active.id] ?? []), folder] }));
     } catch (reason) {
       setError(`Could not attach that folder. ${String(reason)}`);
@@ -187,7 +211,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
       return;
     }
     try {
-      await invoke("thread_attach_files", { id: active.id, paths });
+      await call("thread_attach_files", { id: active.id, paths });
       setAttached((current) => ({ ...current, [active.id]: [...(current[active.id] ?? []), ...paths] }));
     } catch (reason) {
       setError(`Could not attach those files. ${String(reason)}`);
@@ -202,7 +226,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
       return;
     }
     let disposed = false;
-    void invoke<FsEntry[]>("fs_list", { workspaceId, path: "" })
+    void call("fs_list", { workspaceId, path: "" })
       .then((entries) => {
         if (disposed) return;
         const needle = mention.toLowerCase();
@@ -224,7 +248,8 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
       <FolderRail workspaces={workspaces} otherCount={other.length} selectedId={workspaceId}
         onAddWorkspace={() => setAdding(true)} onSelect={(id) => { setDestination("mode"); setWorkspaceId(id); setActive(null); }}>
         {threads?.length ? <ThreadList threads={threads} activeId={active?.id ?? null}
-          onSelect={(thread) => { setDestination("mode"); setActive(thread); }} onPin={(id, pinned) => void pin(id, pinned)} />
+          onSelect={(thread) => { setDestination("mode"); setActive(thread); }} onPin={(id, pinned) => void pin(id, pinned)}
+          onRename={(id, title) => void renameThread(id, title)} onDelete={(id) => void deleteThread(id)} />
           : <p className="harbor-rail-hint">{workspaceId && !threads ? "Loading threads…" : "Your conversations will appear here."}</p>}
       </FolderRail>
     </div></AppRail>
@@ -296,7 +321,7 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
               onEngineChange={(id) => void setThreadEngine(active.id, id)}
               onOptionChange={(optionId, value) => {
                 setConfigChoice((current) => ({ ...current, [active.id]: { ...current[active.id], [optionId]: value } }));
-                void invoke("thread_set_config", { id: active.id, optionId, value }).catch((reason) => {
+                void call("thread_set_config", { id: active.id, optionId, value }).catch((reason) => {
                   setError(`Could not update engine options. ${String(reason)}`);
                 });
               }}

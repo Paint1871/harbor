@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { call } from "../ipc";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@harbor/ui/Button";
 import { Logo } from "@harbor/ui/Logo";
@@ -22,7 +22,7 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
     if (!opts?.silent) setLoading(true);
     setError(null);
     try {
-      setAgents(await invoke<AgentRecord[]>("agent_list"));
+      setAgents(await call("agent_list"));
     } catch {
       setError("Your agents could not be loaded. Try again in the Harbor desktop app.");
     } finally {
@@ -63,7 +63,7 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
             onNew={() => setCreating(true)}
             onPin={(id, pinned) => {
               setAgents((current) => current.map((item) => (item.id === id ? { ...item, pinned } : item)));
-              void invoke("agent_update", { input: { id, pinned } }).catch(() => void reload({ silent: true }));
+              void call("agent_update", { input: { id, pinned } }).catch(() => void reload({ silent: true }));
             }}
           />
       </AppRail>
@@ -104,12 +104,12 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
         <NewAgent
           onClose={() => setCreating(false)}
           onCreate={async (input) => {
-            const created = await invoke<AgentRecord>("agent_create", {
+            const created = await call("agent_create", {
               input: { name: input.name, brief: input.brief, engineId: input.engineId, faceIndex: input.faceIndex },
             });
             let record = created;
             if (input.homePath) {
-              await invoke("agent_update", { input: { id: created.id, homePath: input.homePath } });
+              await call("agent_update", { input: { id: created.id, homePath: input.homePath } });
               record = { ...created, homePath: input.homePath };
             }
             setAgents((current) => [...current, record]);

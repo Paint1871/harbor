@@ -1,7 +1,11 @@
-use serde::{Deserialize, Serialize};
-use ts_rs::TS;
+//! The IPC payloads. Their TypeScript side is hand-written in
+//! `packages/schema/src/commands.ts`; the two are held together by
+//! `the_typescript_contract_matches_the_registered_commands` in the desktop
+//! crate, not by generated bindings.
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineSpec {
     pub id: String,
@@ -19,7 +23,7 @@ pub struct EngineSpec {
     pub workspace_settings_arg: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: String,
     pub folder: String,
@@ -27,7 +31,7 @@ pub struct Workspace {
     pub pinned: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSetup {
     pub additional_terminals: u8,
@@ -39,14 +43,14 @@ pub struct WorkspaceSetup {
     pub terminal_engine_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub id: String,
     pub role: String,
     pub text: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DetectedEngine {
     pub id: String,
@@ -60,7 +64,7 @@ pub struct DetectedEngine {
     pub adapter_package: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PaneLayout {
     Leaf {
@@ -79,7 +83,7 @@ pub enum PaneLayout {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadRecord {
     pub id: String,
@@ -90,7 +94,7 @@ pub struct ThreadRecord {
     pub unread: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AgentTrailing {
     Running {
@@ -104,7 +108,7 @@ pub enum AgentTrailing {
     Idle,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRecord {
     pub id: String,
@@ -123,7 +127,7 @@ pub struct AgentRecord {
     pub trailing: AgentTrailing,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAgent {
     pub name: String,
@@ -133,7 +137,7 @@ pub struct CreateAgent {
     pub face_index: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAgent {
     pub id: String,
@@ -148,7 +152,7 @@ pub struct UpdateAgent {
     pub messaging: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentChat {
     pub id: String,
@@ -157,28 +161,28 @@ pub struct AgentChat {
     pub status: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
     pub id: String,
     pub body: String,
     pub kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Place {
     pub id: String,
     pub path: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchHit {
     pub chat_id: String,
     pub prose: String,
     pub created_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginRow {
     pub id: String,
@@ -190,14 +194,14 @@ pub struct PluginRow {
     pub auth_kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginGrant {
     pub plugin_id: String,
     pub enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginApproval {
     pub id: String,
@@ -207,7 +211,7 @@ pub struct PluginApproval {
     pub status: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestoredPane {
     pub id: String,
@@ -217,7 +221,7 @@ pub struct RestoredPane {
     pub engine_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceTab {
     pub id: String,
@@ -226,33 +230,33 @@ pub struct WorkspaceTab {
     pub panes: Vec<RestoredPane>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FsEntry {
     pub name: String,
     pub path: String,
     pub directory: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDiff {
     pub path: String,
     pub patch: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateStatus {
     pub available: bool,
     pub version: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentPart {
     pub r#type: String,
     pub text: Option<String>,
     pub path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaneState {
     pub kind: String,
@@ -262,7 +266,7 @@ pub struct PaneState {
     pub engine_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Notification {
     pub id: String,
