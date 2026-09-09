@@ -1,0 +1,26 @@
+name: Feature request
+description: A change you would like Harbor to make
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is awkward or missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+      description: What should Harbor do instead?
+    validations:
+      required: true
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Product invariants
+      description: Harbor will not add an account gate, paywall, bundled engines, or vendor-key proxy. See AGENTS.md.
+      options:
+        - label: This request does not add an account, paywall, bundled engine, or vendor-key proxy
+          required: true

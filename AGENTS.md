@@ -1,14 +1,8 @@
 # Harbor contribution instructions
 
-Read the supplied `DESIGN.md` before implementation. In the original workspace
-it is `../DESIGN.md`, outside this repository. If it is unavailable in a fresh
-checkout, obtain the specification from the task owner before implementing
-product behavior. It takes precedence over the goal document.
-
-Follow its PR Plan in order, keeping each PR independently reviewable. Implement
-only the current PR. PR-01 is workspace bootstrap; PR-02 adds tokens and UI
-primitives; PR-03 introduces the Tauri window. Do not pull later features into
-earlier PRs. Public 0.1.0 requires PR-01 through PR-27 and their release gates.
+This is a living codebase. Implement against the product invariants below, not
+against an external specification that is not in this repository. The UI, docs,
+and commit messages are English.
 
 ## Product invariants
 
@@ -24,14 +18,28 @@ earlier PRs. Public 0.1.0 requires PR-01 through PR-27 and their release gates.
 - Dictation defaults to on-device; cloud requires an explicit user URL.
 - macOS 14, Windows 10 x64, Ubuntu 22.04 minimums. Degrade unavailable OS features.
 
+## Working in this tree
+
+Keep changes scoped to the concern at hand. Do not add features "while you are
+there." Do not invent protocol, OAuth, paywalls, or cloud backends that the
+invariants forbid.
+
+Match existing English UI copy (`Start local`, `Ask anything...`, and the rest
+of the chrome). If a string is unspecified, write a short literal in the same
+voice; do not add an i18n framework.
+
+Architecture and crate boundaries are in [docs/architecture.md](docs/architecture.md).
+Known gaps are in [docs/status.md](docs/status.md). Do not report a listed gap
+as done without the actual build or runtime evidence.
+
 ## Contribution and verification
 
 Read [CLEANROOM.md](CLEANROOM.md) and certify its statement for contributions.
-Use original source, copy, and assets. Keep changes scoped to the specified
-monorepo directories. Do not add secrets, vendor engines, or reference assets.
+Use original source, copy, and assets. Do not add secrets, vendor engines, or
+reference-product assets.
 
 Run `pnpm install --frozen-lockfile` and `pnpm check` before submitting. Commit
 both lockfiles when dependencies change. Add tests that exercise meaningful
 behavior as features land; a scaffold check is not product acceptance evidence.
-Chrome changes also require the design's visual QA ritual. Never report a
-release gate as passed without its actual build or runtime evidence.
+Never report a release gate as passed without its actual build or runtime
+evidence.

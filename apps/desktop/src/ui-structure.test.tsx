@@ -99,7 +99,7 @@ describe("shipped Harbor chrome and mode trees", () => {
     expect(shell).toContain("Plugins");
     expect(shell).toContain("Skills");
     expect(shell).toContain("Harbor");
-    // Harbor has no credit meter and no plan tier (GOAL.md hard rules).
+    // Harbor has no credit meter and no plan tier.
     expect(shell).not.toContain("Credits");
     expect(shell).not.toContain("PRO");
     expect(shell).not.toContain("Upgrade");

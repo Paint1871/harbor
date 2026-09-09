@@ -1,0 +1,38 @@
+name: Bug report
+description: Something Harbor does wrong
+labels: ["bug"]
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: What did you see?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15, Windows 11, Ubuntu 24.04
+  - type: input
+    id: version
+    attributes:
+      label: Harbor version or commit
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Crash log is written to the app-data `logs/crash.log` file. Paste only what you are comfortable sharing.
+      render: text

@@ -38,17 +38,17 @@ The guard rejects these case-insensitively:
   and the phrase “Agent Super App”.
 
 Only these exact repository-relative documentation paths are exempt:
-`CLEANROOM.md`, `docs-src/references.md`, and `DESIGN.md`. The supplied design
-normally stays outside the repository. There is no general docs, lockfile,
-script, fixture, or source exemption. Unknown reference infrastructure must be
-added to the guard if discovered; do not contact it to implement Harbor.
+`CLEANROOM.md`, `docs-src/references.md`, and `DESIGN.md`. The design document
+is not part of this repository. There is no general docs, lockfile, script,
+fixture, or source exemption. Unknown reference infrastructure must be added
+to the guard if discovered; do not contact it to implement Harbor.
 
 The guard cannot prove asset ownership or detect copied images. Reviewers must
 check provenance and the contribution certification as well.
 
 ## Bootstrap provenance
 
-PR-01 was written from the supplied Harbor design without inspecting the
-reference product's source or fetching its assets. The license is the canonical
-Apache-2.0 text from the Apache Software Foundation. The code of conduct is
-original Harbor community copy. No product assets are included in this PR.
+The repository was started from a written Harbor specification without inspecting
+the reference product's source or fetching its assets. The license is the
+canonical Apache-2.0 text from the Apache Software Foundation. The code of
+conduct is original Harbor community copy.

@@ -78,7 +78,7 @@ const PROBE_CLOSE: &str = "__harbor_path_end__";
 
 /// Runs the login shell once to read the PATH the user actually has.
 ///
-/// `DESIGN.md` specifies engines on the login-shell PATH. A GUI launch inherits
+/// Engines are whatever is on the login-shell PATH. A GUI launch inherits
 /// launchd's minimal PATH instead, so without this a CLI installed anywhere
 /// unusual is invisible when Harbor is opened from the Dock.
 fn probe_login_shell_path(shell: &Path) -> Option<String> {
