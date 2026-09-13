@@ -87,6 +87,9 @@ fn main() {
             "updater_check",
             "updater_install",
             "git_diff",
+            "engine_usage",
+            "usage_bridge_status",
+            "usage_bridge_connect",
         ]),
     ))
     .expect("failed to build Harbor configuration");

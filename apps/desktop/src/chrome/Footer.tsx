@@ -3,6 +3,7 @@ import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
 import { settingsSet } from "../settings";
 import { useChrome } from "./chrome-context";
+import { UsageStrip } from "./UsageStrip";
 
 export function Footer() {
   const { profileName, theme, onThemeChange, onSettings } = useChrome();
@@ -10,6 +11,7 @@ export function Footer() {
   const initial = profileName.trim().charAt(0).toUpperCase() || "L";
   return (
     <footer className="harbor-footer">
+      <UsageStrip />
       <div className="harbor-footer-account">
         <div className="harbor-profile">
           <span className="harbor-profile-mark" aria-hidden="true">

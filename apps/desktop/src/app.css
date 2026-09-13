@@ -3812,6 +3812,35 @@ button, input, textarea, select {
 .harbor-footer-plan { margin: 9px 4px 0; padding: 0; color: var(--harbor-muted); font-size: 9px; letter-spacing: .14em; }
 .harbor-footer-appearance-menu { right: -2px; bottom: calc(100% + 8px); }
 
+/* Usage: what the hosted CLIs report about their own plans, in the rail footer
+   where the account block already answers "what am I working against". */
+.harbor-usage { display: flex; flex-direction: column; gap: 7px; padding: 0 4px 10px; }
+.harbor-usage-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.harbor-usage-heading .harbor-button[data-size="icon"] { width: 22px; min-height: 22px; color: var(--harbor-muted); }
+.harbor-usage-engine { display: flex; flex-direction: column; gap: 5px; }
+.harbor-usage-engine-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--harbor-muted);
+  font-size: 11px;
+  font-weight: 550;
+}
+.harbor-usage-meter { display: flex; align-items: center; gap: 8px; }
+.harbor-usage-track {
+  flex: 0 0 56px;
+  overflow: hidden;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--harbor-raised);
+}
+.harbor-usage-fill { display: block; height: 100%; border-radius: inherit; background: #5e89f4; }
+.harbor-usage-fill[data-level="high"] { background: var(--harbor-accent-warn, #d9a441); }
+.harbor-usage-fill[data-level="spent"] { background: var(--harbor-accent-error, #e0655f); }
+.harbor-usage-read { display: flex; min-width: 0; align-items: baseline; gap: 5px; font-size: 11px; }
+.harbor-usage-read strong { font-weight: 550; }
+.harbor-usage-read span { color: var(--harbor-muted); }
+
 .harbor-dashboard { padding: 30px 28px 34px; }
 .harbor-dashboard-header { margin: 0 0 25px; }
 .harbor-dashboard-header h1 { margin: 0 0 4px; font-size: 25px; font-weight: 550; letter-spacing: -0.04em; line-height: 1.15; }

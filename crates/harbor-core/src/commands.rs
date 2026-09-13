@@ -471,3 +471,12 @@ pub async fn git_diff(pool: &SqlitePool, workspace_id: String) -> Result<Vec<Fil
         })
         .collect())
 }
+
+/// Rate limits the hosted CLIs wrote down themselves. No account, no network.
+pub fn engine_usage(usage_dir: &std::path::Path) -> Vec<crate::usage::EngineUsage> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs() as i64)
+        .unwrap_or_default();
+    crate::usage::read(usage_dir, now)
+}

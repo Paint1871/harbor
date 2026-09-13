@@ -918,6 +918,34 @@ pub async fn updater_install() -> Result<(), String> {
     Err(harbor_updater::refuse_install().to_string())
 }
 
+/// Reading what a CLI already wrote is cheap and touches no network, so this
+/// stays a plain command the UI can poll when the builder asks it to.
+#[tauri::command]
+pub fn engine_usage() -> Vec<harbor_core::usage::EngineUsage> {
+    harbor_core::commands::engine_usage(&crate::usage_dir())
+}
+
+#[tauri::command]
+pub fn usage_bridge_status() -> Result<crate::usage_bridge::BridgeStatus, String> {
+    let settings =
+        crate::usage_bridge::settings_path().ok_or("could not resolve the home directory")?;
+    Ok(crate::usage_bridge::status(&crate::usage_dir(), &settings))
+}
+
+/// Editing a file another application owns is the builder's call, never a side
+/// effect of opening a pane, so this only ever runs from the Settings toggle.
+#[tauri::command]
+pub fn usage_bridge_connect(connected: bool) -> Result<crate::usage_bridge::BridgeStatus, String> {
+    let usage_dir = crate::usage_dir();
+    let settings =
+        crate::usage_bridge::settings_path().ok_or("could not resolve the home directory")?;
+    if !connected {
+        return crate::usage_bridge::disconnect(&usage_dir, &settings);
+    }
+    let exe = std::env::current_exe().map_err(|error| error.to_string())?;
+    crate::usage_bridge::connect(&usage_dir, &settings, &exe)
+}
+
 #[tauri::command]
 pub async fn git_diff(
     pool: State<'_, SqlitePool>,
@@ -1015,7 +1043,10 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         dictation_prepare_model,
         updater_check,
         updater_install,
-        git_diff
+        git_diff,
+        engine_usage,
+        usage_bridge_status,
+        usage_bridge_connect
     ]
 }
 

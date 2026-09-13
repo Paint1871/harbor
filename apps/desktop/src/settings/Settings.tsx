@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
-import type { DetectedEngine } from "@harbor/schema/commands";
+import type { BridgeStatus, DetectedEngine } from "@harbor/schema/commands";
 import type { Theme } from "@harbor/ui/theme";
 import { settingsGet, settingsSet } from "./api";
 
@@ -124,6 +124,29 @@ export function Settings({
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
   const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [bridge, setBridge] = useState<BridgeStatus | null>(null);
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void call("usage_bridge_status")
+      .then((status) => { if (active) setBridge(status); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  async function setUsageBridge(connected: boolean) {
+    setBridgeBusy(true);
+    setBridgeError(null);
+    try {
+      setBridge(await call("usage_bridge_connect", { connected }));
+    } catch (reason) {
+      setBridgeError(String(reason));
+    } finally {
+      setBridgeBusy(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -242,6 +265,17 @@ export function Settings({
                 </SettingRow>
                 <SettingRow label="Engine discovery" description={engineStatus ?? "Refresh the local engine list before starting a session."}>
                   <Button variant="ghost" disabled={rechecking} onClick={() => void recheckEngines()}>{rechecking ? "Checking…" : "Recheck engines"}</Button>
+                </SettingRow>
+                <SettingRow
+                  label="Claude Code usage"
+                  description={bridgeError
+                    ?? (bridge?.connected
+                      ? `Connected. Harbor reads the limits Claude Code reports${bridge.chained ? " and still runs your own status line" : ""}.`
+                      : "Claude Code reports its limits only to a status line. Connecting registers Harbor as one in ~/.claude/settings.json, keeps a copy of the file, and runs any status line you already have.")}
+                >
+                  <Button variant="ghost" disabled={bridgeBusy || !bridge} onClick={() => void setUsageBridge(!bridge?.connected)}>
+                    {bridgeBusy ? "Working…" : bridge?.connected ? "Disconnect" : "Connect"}
+                  </Button>
                 </SettingRow>
                 <Toggle label="Reduce motion" description="Use still transitions and avoid animated halos." checked={reduceMotion} onChange={(value) => { onReduceMotionChange?.(value); void save("reduce_motion", value); }} />
               </div>

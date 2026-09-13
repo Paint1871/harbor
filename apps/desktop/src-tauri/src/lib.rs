@@ -6,6 +6,7 @@ pub mod ipc;
 pub mod plugins_host;
 pub mod pty_host;
 pub mod security;
+pub mod usage_bridge;
 
 use std::path::PathBuf;
 
@@ -26,7 +27,18 @@ pub fn application_data_root() -> PathBuf {
         .join("harbor")
 }
 
+/// Where Harbor keeps what its own usage bridges captured.
+pub fn usage_dir() -> PathBuf {
+    application_data_root().join("usage")
+}
+
 pub fn run() {
+    // Claude Code runs `harbor usage-bridge` as a status-line command many
+    // times a session; it must answer on stdout and exit, never open a window.
+    if std::env::args().nth(1).as_deref() == Some("usage-bridge") {
+        std::process::exit(usage_bridge::run(&usage_dir()));
+    }
+
     let data_root = application_data_root();
     crash::install(&data_root);
 

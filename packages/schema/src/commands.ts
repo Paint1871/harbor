@@ -174,6 +174,35 @@ export interface UpdateStatus {
   version: string | null;
 }
 
+/** One rate-limit window an engine published, straight from its own files. */
+export interface UsageWindow {
+  /** The window length in minutes; 300 is the five-hour window. */
+  windowMinutes: number;
+  usedPercent: number;
+  /** Unix seconds at which the window rolls over. */
+  resetsAt: number;
+}
+
+export interface EngineUsage {
+  engineId: string;
+  displayName: string;
+  windows: UsageWindow[];
+  /** Unix seconds: when the engine last wrote these numbers down. */
+  measuredAt: number;
+}
+
+/**
+ * Claude Code hands its rate limits to a status-line command and nowhere else,
+ * so Harbor registers itself as one. Connecting edits `~/.claude/settings.json`
+ * and is always the builder's explicit choice.
+ */
+export interface BridgeStatus {
+  connected: boolean;
+  /** The status line Harbor runs after its own, when there already was one. */
+  chained: string | null;
+  settingsPath: string;
+}
+
 export interface AudioDevice {
   id: string;
   label: string;
@@ -222,6 +251,10 @@ export interface HarborCommands {
   engines_recheck: { args: undefined; returns: DetectedEngine[] };
   engine_icons: { args: undefined; returns: EngineIcon[] };
   engine_install_adapter: { args: { engineId: string }; returns: DetectedEngine[] };
+  /** Only engines that publish their limits locally answer here. */
+  engine_usage: { args: undefined; returns: EngineUsage[] };
+  usage_bridge_status: { args: undefined; returns: BridgeStatus };
+  usage_bridge_connect: { args: { connected: boolean }; returns: BridgeStatus };
 
   workspace_list: { args: undefined; returns: Workspace[] };
   workspace_pick_folder: { args: undefined; returns: string | null };

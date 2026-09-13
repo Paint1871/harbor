@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-usage-bridge-status"
+description = "Enables the usage_bridge_status command without any pre-configured scope."
+commands.allow = ["usage_bridge_status"]
+
+[[permission]]
+identifier = "deny-usage-bridge-status"
+description = "Denies the usage_bridge_status command without any pre-configured scope."
+commands.deny = ["usage_bridge_status"]

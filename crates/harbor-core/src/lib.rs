@@ -22,6 +22,7 @@ pub mod search;
 pub mod settings;
 pub mod threads;
 pub mod types;
+pub mod usage;
 pub mod workspaces;
 
 pub use sqlx::SqlitePool;
