@@ -26,9 +26,15 @@ export function TitleBar({
   inboxOpen,
 }: TitleBarProps) {
   const platform = hostPlatform();
+  const inContentToolbar = platform === "linux";
 
   return (
-    <header className="harbor-titlebar" data-tauri-drag-region data-platform={platform}>
+    <header
+      className="harbor-titlebar"
+      data-tauri-drag-region
+      data-platform={platform}
+      {...(inContentToolbar ? { "data-chrome": "in-content" } : {})}
+    >
       <div className="harbor-titlebar-start">
         <span className="harbor-wordmark">
           <Logo size={16} />

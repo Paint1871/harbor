@@ -79,7 +79,8 @@ button, input, textarea, select {
   color: var(--harbor-text);
 }
 
-/* Title bar — 44px; macOS traffic-light inset stays 78px. */
+/* Title bar — 44px. macOS overlay pads 78px for traffic lights.
+   Linux is native decorations plus an in-content Harbor toolbar. */
 .harbor-titlebar {
   display: flex;
   align-items: center;
@@ -94,9 +95,13 @@ button, input, textarea, select {
   app-region: drag;
 }
 .harbor-app[data-platform="macos"] .harbor-titlebar { padding-left: 78px; }
-.harbor-app[data-platform="linux"] .harbor-titlebar {
+.harbor-app[data-platform="linux"] .harbor-titlebar,
+.harbor-titlebar[data-chrome="in-content"] {
   padding-left: var(--harbor-space-3);
   padding-right: var(--harbor-space-3);
+}
+.harbor-app[data-platform="linux"] .harbor-window-controls {
+  display: none;
 }
 .harbor-app[data-platform="windows"] .harbor-titlebar { padding-right: 0; }
 .harbor-titlebar-start {

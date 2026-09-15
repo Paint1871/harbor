@@ -60,7 +60,6 @@ Known gaps, in short:
 - Dictation `begin` / `end` are unimplemented and no speech engine ships yet.
 - The updater cannot authorize an install: `minisign.pub` is a placeholder.
 - Several Settings rows are explanatory copy rather than wired controls.
-- On Linux the window uses an overlay title bar instead of native decorations.
 
 The standing list is in [docs/status.md](docs/status.md).
 
