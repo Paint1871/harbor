@@ -709,7 +709,17 @@ pub fn default_profile_name() -> String {
     harbor_core::commands::default_profile_name()
 }
 
+/// Live bell events default on. Only an explicit JSON `false` silences them;
+/// the inbox row is still recorded either way.
+fn should_emit_notification(enabled: Option<&Value>) -> bool {
+    !matches!(enabled, Some(Value::Bool(false)))
+}
+
 /// Records an event and tells the renderer, so the bell updates without polling.
+///
+/// `notifications_enabled` defaults on. An explicit `false` still writes the
+/// inbox row (history on next open) but skips the live event so the badge
+/// stays quiet.
 pub async fn notify(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -719,7 +729,13 @@ pub async fn notify(
     target: harbor_core::notifications::Target,
 ) {
     if let Ok(row) = harbor_core::notifications::record(pool, kind, title, body, target).await {
-        let _ = app.emit("notification", row);
+        let enabled = harbor_core::settings::get(pool, "notifications_enabled")
+            .await
+            .ok()
+            .flatten();
+        if should_emit_notification(enabled.as_ref()) {
+            let _ = app.emit("notification", row);
+        }
     }
 }
 
@@ -1052,6 +1068,16 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn live_notification_skips_emit_only_when_explicitly_disabled() {
+        use serde_json::json;
+        assert!(super::should_emit_notification(None));
+        assert!(super::should_emit_notification(Some(&json!(true))));
+        assert!(super::should_emit_notification(Some(&json!(null))));
+        assert!(super::should_emit_notification(Some(&json!("false"))));
+        assert!(!super::should_emit_notification(Some(&json!(false))));
+    }
+
     fn handler_commands() -> Vec<String> {
         let source = include_str!("ipc.rs");
         let body = source
