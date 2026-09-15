@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button } from "@harbor/ui/Button";
 import { Card } from "@harbor/ui/Card";
 
@@ -8,6 +9,26 @@ export interface PermissionRequest {
   command?: string;
   options: { optionId: string; kind: string; name: string }[];
   sessionRef?: string;
+}
+
+export function permissionShortcut(
+  eventKey: string,
+  options: { kind: string; optionId: string }[],
+): { optionId: string | null; cancelled: boolean } | null {
+  if (eventKey === "Enter" || eventKey === "a" || eventKey === "A") {
+    const once = options.find((option) => option.kind === "allow_once");
+    const allow = once ?? options.find((option) => option.kind.startsWith("allow"));
+    return allow ? { optionId: allow.optionId, cancelled: false } : null;
+  }
+  if (eventKey === "Escape" || eventKey === "n" || eventKey === "d") {
+    const reject = options.find((option) => option.kind === "reject_once");
+    return reject ? { optionId: reject.optionId, cancelled: false } : { optionId: null, cancelled: true };
+  }
+  return null;
+}
+
+function permissionTargetIsField(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 }
 
 export function parsePermissionEvent(payload: unknown): PermissionRequest | null {
@@ -49,6 +70,20 @@ interface PermissionCardProps {
 }
 
 export function PermissionCard({ request, onResolve }: PermissionCardProps) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const stealFromComposer = event.key === "Enter" || event.key === "Escape";
+      if (permissionTargetIsField(event.target) && !stealFromComposer) return;
+      const result = permissionShortcut(event.key, request.options);
+      if (!result) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onResolve(result.optionId, result.cancelled);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [onResolve, request.options]);
+
   return (
     <Card className="harbor-permission">
       <h3>{request.title}</h3>
