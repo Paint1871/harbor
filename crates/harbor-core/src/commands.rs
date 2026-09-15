@@ -363,6 +363,10 @@ pub async fn notifications_mark_read(pool: &SqlitePool) -> Result<(), Error> {
     crate::notifications::mark_read(pool).await
 }
 
+pub async fn notifications_clear(pool: &SqlitePool) -> Result<(), Error> {
+    crate::notifications::clear(pool).await
+}
+
 pub async fn face_preview(
     pool: &SqlitePool,
     agent_id: String,

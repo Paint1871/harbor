@@ -77,6 +77,12 @@ export function Inbox({ open, onClose }: InboxProps) {
     if (open) void call("notifications_mark_read").catch(() => undefined);
   }, [open, events.length]);
 
+  function clearInbox() {
+    void call("notifications_clear")
+      .then(() => setEvents([]))
+      .catch(() => undefined);
+  }
+
   function go(event: Notification) {
     if (!chrome) return;
     const mode = asMode(event.mode);
@@ -105,6 +111,16 @@ export function Inbox({ open, onClose }: InboxProps) {
         <div className="harbor-inbox-heading">
           <h2>Inbox</h2>
           <span className="harbor-eyebrow">Events</span>
+          <button
+            type="button"
+            className="harbor-inbox-clear"
+            aria-label="Clear inbox"
+            disabled={events.length === 0}
+            hidden={events.length === 0}
+            onClick={clearInbox}
+          >
+            Clear
+          </button>
         </div>
         <div className="harbor-inbox-filters" role="group" aria-label="Filter events">
           {KIND_FILTERS.map((filter) => (

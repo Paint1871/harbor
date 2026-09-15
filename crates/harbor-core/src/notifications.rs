@@ -4,7 +4,7 @@
 //! finishes, fails, or needs an answer is recorded here with enough of a target
 //! to navigate back to it.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -167,6 +167,13 @@ pub async fn mark_read(pool: &SqlitePool) -> Result<(), Error> {
     Ok(())
 }
 
+pub async fn clear(pool: &SqlitePool) -> Result<(), Error> {
+    sqlx::query("DELETE FROM notifications")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,14 +240,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn clear_removes_every_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+
+        record(
+            &pool,
+            "terminal-exit",
+            "Claude Code stopped",
+            "exit code 1",
+            Target::code("ws-1", "term-2"),
+        )
+        .await
+        .unwrap();
+        record(
+            &pool,
+            "permission",
+            "Codex needs permission",
+            "Write src/main.rs",
+            Target::session("chat", "thread-9"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(list(&pool).await.unwrap().len(), 2);
+        assert_eq!(unread_count(&pool).await.unwrap(), 2);
+
+        clear(&pool).await.unwrap();
+        assert!(list(&pool).await.unwrap().is_empty());
+        assert_eq!(unread_count(&pool).await.unwrap(), 0);
+    }
+
+    #[tokio::test]
     async fn a_row_without_a_title_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
-        assert!(
-            record(&pool, "test", "   ", "body", Target::default())
-                .await
-                .is_err()
-        );
+        assert!(record(&pool, "test", "   ", "body", Target::default())
+            .await
+            .is_err());
         assert_eq!(unread_count(&pool).await.unwrap(), 0);
     }
 }

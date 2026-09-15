@@ -1,6 +1,5 @@
 use crate::acp_host::AcpRegistry;
 use crate::security::ExecutableAllowlist;
-use harbor_core::SqlitePool;
 use harbor_core::icons::EngineIcon;
 use harbor_core::types::{
     AgentChat, AgentRecord, ChatMessage, ContentPart, CreateAgent, DetectedEngine, FileDiff,
@@ -8,7 +7,8 @@ use harbor_core::types::{
     PluginRow, SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup,
     WorkspaceTab,
 };
-use serde_json::{Value, json};
+use harbor_core::SqlitePool;
+use serde_json::{json, Value};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -806,6 +806,13 @@ pub async fn notifications_mark_read(pool: State<'_, SqlitePool>) -> Result<(), 
 }
 
 #[tauri::command]
+pub async fn notifications_clear(pool: State<'_, SqlitePool>) -> Result<(), String> {
+    harbor_core::commands::notifications_clear(&pool)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
 pub async fn face_preview(
     pool: State<'_, SqlitePool>,
     agent_id: String,
@@ -1137,6 +1144,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         session_watch,
         notifications_unread_count,
         notifications_mark_read,
+        notifications_clear,
         face_preview,
         acp_permission_resolve,
         plugin_list,
