@@ -19,9 +19,15 @@ interface ThreadListProps {
 export function ThreadList({ threads, activeId, onSelect, onPin, onRename, onDelete }: ThreadListProps) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const visible = !needle
+    ? threads
+    : threads.filter((thread) => thread.title.toLowerCase().includes(needle) || thread.engineId.toLowerCase().includes(needle));
 
   return <div className="harbor-thread-list">
-    {threads.map((thread) => <div className="harbor-thread-row" key={thread.id}>
+    <label className="harbor-destination-search harbor-thread-search">Search threads<input aria-label="Search threads" value={query} placeholder="Find a thread" onChange={(event) => setQuery(event.target.value)} /></label>
+    {visible.length ? visible.map((thread) => <div className="harbor-thread-row" key={thread.id}>
       {renaming === thread.id
         ? <input className="harbor-chat-tab-rename" aria-label={`Rename ${thread.title}`} autoFocus defaultValue={thread.title} maxLength={60}
             onBlur={(event) => {
@@ -53,6 +59,6 @@ export function ThreadList({ threads, activeId, onSelect, onPin, onRename, onDel
             <button type="button" className="harbor-pin" aria-label={`${thread.pinned ? "Unpin" : "Pin"} ${thread.title}`}
               aria-pressed={thread.pinned} onClick={() => onPin(thread.id, !thread.pinned)}>{thread.pinned ? "Unpin" : "Pin"}</button>
           </>}
-    </div>)}
+    </div>) : needle ? <p className="harbor-muted">No threads match “{query}”.</p> : null}
   </div>;
 }
