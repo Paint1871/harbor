@@ -20,6 +20,7 @@ interface AgentPageProps {
   pendingChatId?: string | null;
   onPendingChatConsumed?: () => void;
   onAgentChange?: (agent: AgentRecord) => void;
+  onDeleted?: (id: string) => void;
   onOpenSkills?: () => void;
   onOpenPlugins?: () => void;
 }
@@ -29,6 +30,7 @@ export function AgentPage({
   pendingChatId,
   onPendingChatConsumed,
   onAgentChange,
+  onDeleted,
   onOpenSkills,
   onOpenPlugins,
 }: AgentPageProps) {
@@ -151,6 +153,7 @@ export function AgentPage({
             agent={agent}
             chats={chat.chats}
             onAgentChange={onAgentChange}
+            onDeleted={onDeleted}
             onOpenChat={(chatId) => {
               chat.setActiveId(chatId);
               setTab("chats");

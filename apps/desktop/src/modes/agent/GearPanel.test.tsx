@@ -112,3 +112,34 @@ it("removes a visible fact while a filter is active", async () => {
   expect(screen.getByText("No facts match “commit”.")).toBeTruthy();
   expect(screen.queryByText("Prefers tests before merge")).toBeNull();
 });
+
+it("asks before deleting a teammate, then removes it through the host", async () => {
+  const onDeleted = vi.fn();
+  render(<GearPanel agent={agent} onDeleted={onDeleted} />);
+  const remove = await screen.findByRole("button", { name: "Delete Release manager" });
+  expect(remove.textContent).toBe("Delete teammate");
+
+  fireEvent.click(remove);
+  expect(mocks.call).not.toHaveBeenCalledWith("agent_delete", expect.anything());
+  expect(remove.textContent).toBe("Delete?");
+
+  fireEvent.click(remove);
+  await waitFor(() => expect(mocks.call).toHaveBeenCalledWith("agent_delete", { id: "agent-1" }));
+  await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("agent-1"));
+});
+
+it("keeps the teammate and shows the gear error when delete fails", async () => {
+  const onDeleted = vi.fn();
+  mocks.call.mockImplementation((command: string) => {
+    if (command === "agent_delete") return Promise.reject(new Error("nope"));
+    if (command === "memory_list") return Promise.resolve(memories);
+    return Promise.resolve([]);
+  });
+  render(<GearPanel agent={agent} onDeleted={onDeleted} />);
+  const remove = await screen.findByRole("button", { name: "Delete Release manager" });
+  fireEvent.click(remove);
+  fireEvent.click(remove);
+  expect(await screen.findByRole("alert")).toBeTruthy();
+  expect(screen.getByRole("alert").textContent).toMatch(/could not be deleted/);
+  expect(onDeleted).not.toHaveBeenCalled();
+});
