@@ -87,6 +87,7 @@ fn main() {
             "updater_check",
             "updater_install",
             "git_diff",
+            "open_external_url",
             "engine_usage",
             "usage_bridge_status",
             "usage_bridge_connect",
