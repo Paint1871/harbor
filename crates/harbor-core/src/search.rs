@@ -82,7 +82,7 @@ mod tests {
                 name: "Ada".into(),
                 brief: String::new(),
                 engine_id: "opencode".into(),
-                face_index: 0,
+                face_index: None,
                 home_path: None,
             },
         )
@@ -94,7 +94,7 @@ mod tests {
                 name: "Other".into(),
                 brief: String::new(),
                 engine_id: "opencode".into(),
-                face_index: 0,
+                face_index: None,
                 home_path: None,
             },
         )

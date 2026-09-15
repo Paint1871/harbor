@@ -817,7 +817,7 @@ mod tests {
                 name: "Mate".into(),
                 brief: "brief".into(),
                 engine_id: "opencode".into(),
-                face_index: 0,
+                face_index: None,
                 home_path: None,
             },
         )

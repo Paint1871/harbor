@@ -59,7 +59,7 @@ export function AgentRail({ agents, selectedId, onSelect, onNew, onPin }: AgentR
         <RailRow
           label={agent.name}
           description={description}
-          leading={<Face name={agent.name} index={agent.faceIndex} />}
+          leading={<Face name={agent.name} index={agent.faceIndex} id={agent.id} />}
           trailing={trailing || undefined}
           selected={selectedId === agent.id}
           onClick={() => {

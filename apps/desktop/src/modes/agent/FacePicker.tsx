@@ -2,7 +2,7 @@ import { Face } from "./Face";
 
 interface FacePickerProps {
   name: string;
-  value: number;
+  value?: number;
   onChange: (index: number) => void;
 }
 
@@ -13,7 +13,7 @@ export function FacePicker({ name, value, onChange }: FacePickerProps) {
         <button
           key={index}
           type="button"
-          aria-selected={index === value}
+          aria-selected={value != null && index === value}
           onClick={() => onChange(index)}
         >
           <Face name={name} index={index} />

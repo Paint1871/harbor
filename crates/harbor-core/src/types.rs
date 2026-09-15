@@ -133,8 +133,9 @@ pub struct CreateAgent {
     pub name: String,
     pub brief: String,
     pub engine_id: String,
+    /// Atlas slot 0..=63. Omitted on create so core can hash the new agent id.
     #[serde(default)]
-    pub face_index: i32,
+    pub face_index: Option<i32>,
     #[serde(default)]
     pub home_path: Option<String>,
 }
