@@ -800,7 +800,48 @@ button, input, textarea, select {
 }
 .harbor-changes pre { overflow: auto; font-family: var(--harbor-font-mono); font-size: var(--harbor-text-xs); }
 .harbor-changes article { margin-top: 12px; }
-.harbor-changes h3 { margin: 0 0 6px; font-size: var(--harbor-text-sm); font-weight: 500; }
+.harbor-changes h3 { margin: 0; font-size: var(--harbor-text-sm); font-weight: 500; }
+.harbor-changes-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 6px;
+}
+.harbor-changes-copy {
+  appearance: none;
+  width: fit-content;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--harbor-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.harbor-changes-copy:hover,
+.harbor-changes-copy:focus-visible { color: var(--harbor-text); }
+.harbor-changes-find {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--harbor-muted);
+  font-size: var(--harbor-text-xs);
+}
+.harbor-changes-find input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--harbor-hairline);
+  border-radius: var(--harbor-radius-control);
+  background: var(--harbor-field);
+  color: var(--harbor-text);
+  font: inherit;
+}
 .harbor-pin { border: 0; background: transparent; color: var(--harbor-muted); cursor: pointer; }
 .harbor-muted { color: var(--harbor-muted); font-size: var(--harbor-text-xs); }
 .harbor-permission { margin: var(--harbor-space-3); }
