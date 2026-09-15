@@ -15,10 +15,16 @@ import { PermissionCard } from "./PermissionCard";
 import { useAcpThread } from "./useAcpThread";
 import { AppRail } from "../../chrome/AppRail";
 import { Transcript } from "../../chrome/Transcript";
-import { useChrome } from "../../chrome/chrome-context";
+import { useChrome, type OpenSessionTarget } from "../../chrome/chrome-context";
 import { AddWorkspace } from "../../workspaces/AddWorkspace";
 
-export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
+export function ChatMode({
+  railOpen = true,
+  onSessionSelectRegister,
+}: {
+  railOpen?: boolean;
+  onSessionSelectRegister?: (handler: (target: OpenSessionTarget) => void) => void;
+}) {
   const { mode, setDestination, registerNewThread } = useChrome();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -39,6 +45,12 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
   const [optionsBusy, setOptionsBusy] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
   const createLock = useRef(false);
+  const listsRef = useRef(lists);
+  const otherRef = useRef(other);
+  const workspacesRef = useRef(workspaces);
+  listsRef.current = lists;
+  otherRef.current = other;
+  workspacesRef.current = workspaces;
   const acp = useAcpThread(active?.id ?? null);
   const workspace = workspaces.find((item) => item.id === workspaceId);
   const ready = engines.filter((engine) => engine.status === "ready" && engine.supportsChat);
@@ -74,6 +86,77 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     void reload();
     void checkEngines();
   }, [checkEngines, mode, reload]);
+
+  const openChatSession = useCallback(async (target: OpenSessionTarget) => {
+    const sessionRef = target.sessionRef?.trim();
+    if (!sessionRef) return;
+    const pick = (items: ThreadRecord[] | undefined) => items?.find((item) => item.id === sessionRef);
+
+    async function loadFolder(id: string): Promise<ThreadRecord[]> {
+      const cached = listsRef.current[id];
+      if (cached?.some((item) => item.id === sessionRef)) return cached;
+      const items = await call("thread_list", { workspaceId: id });
+      setLists((current) => ({ ...current, [id]: items }));
+      return items;
+    }
+
+    try {
+      if (target.workspaceId) {
+        setWorkspaceId(target.workspaceId);
+        const thread = pick(await loadFolder(target.workspaceId));
+        if (thread) setActive(thread);
+        return;
+      }
+
+      const fromOther = pick(otherRef.current);
+      if (fromOther) {
+        setWorkspaceId(null);
+        setActive(fromOther);
+        return;
+      }
+
+      for (const [id, items] of Object.entries(listsRef.current)) {
+        const thread = pick(items);
+        if (thread) {
+          setWorkspaceId(id);
+          setActive(thread);
+          return;
+        }
+      }
+
+      const rest = otherRef.current.length
+        ? otherRef.current
+        : await call("thread_list", { workspaceId: null });
+      if (rest !== otherRef.current) setOther(rest);
+      const unscoped = pick(rest);
+      if (unscoped) {
+        setWorkspaceId(null);
+        setActive(unscoped);
+        return;
+      }
+
+      const folders = workspacesRef.current.length
+        ? workspacesRef.current
+        : await call("workspace_list");
+      if (!workspacesRef.current.length) setWorkspaces(folders);
+      for (const folder of folders) {
+        const thread = pick(await loadFolder(folder.id));
+        if (thread) {
+          setWorkspaceId(folder.id);
+          setActive(thread);
+          return;
+        }
+      }
+    } catch {
+      setError("That conversation could not be opened. Please try again.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!onSessionSelectRegister) return;
+    onSessionSelectRegister((target) => { void openChatSession(target); });
+    return () => onSessionSelectRegister(() => undefined);
+  }, [onSessionSelectRegister, openChatSession]);
 
   useEffect(() => {
     if (!active || acp.configOptions.length) return;

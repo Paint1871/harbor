@@ -24,6 +24,7 @@ const chrome: ChromeValue = {
   destination: "routines",
   setDestination: () => undefined,
   onModeChange: () => undefined,
+  onOpenSession: () => undefined,
   onThemeChange: () => undefined,
   onSettings: () => undefined,
   onTidy: () => undefined,

@@ -1340,10 +1340,37 @@ button, input, textarea, select {
 .harbor-inbox li[data-kind="permission"] .harbor-inbox-kind { color: var(--harbor-needs-you); }
 .harbor-inbox header {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 6px 8px 8px;
+}
+.harbor-inbox-heading {
+  display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px 8px;
+}
+.harbor-inbox-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.harbor-inbox-filters button {
+  border: 0;
+  background: transparent;
+  color: var(--harbor-muted);
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--harbor-label-tracking);
+}
+.harbor-inbox-filters button[aria-pressed="true"] {
+  color: var(--harbor-text);
+  background: var(--harbor-raised);
 }
 .harbor-inbox h2 {
   margin: 0;

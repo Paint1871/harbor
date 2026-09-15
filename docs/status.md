@@ -3,7 +3,7 @@
 Harbor 0.1.0 is a development target, not a published release. This page lists
 what is unfinished so contributors do not have to rediscover it.
 
-Last reviewed 2026-09-09.
+Last reviewed 2026-09-15.
 
 ## Release gates that have not been run
 
@@ -27,8 +27,9 @@ Last reviewed 2026-09-09.
 - **Faces.** The face slot is `faceIndex % 64`, not a stable hash of the agent
   id. `face_preview` is typed as `{ pngB64 }` while core returns an SVG data URL.
 - **ACP extras.** `mcp_servers` is always empty in `SpawnSpec` so plugin tokens
-  never reach an engine. Agent `home_path` is written as `""` on create; the
-  ACP cwd falls back to a granted place or a temp directory.
+  never reach an engine. Agent `home_path` is stored on create when the builder
+  picks a folder; otherwise the ACP cwd still falls back to a granted place or a
+  temp directory.
 
 ## What is built
 

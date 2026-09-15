@@ -17,7 +17,7 @@ function asLine(id: string, role: ChatMessage["role"], text: string): ChatMessag
   return { id, role, text };
 }
 
-export function useAgentChat(agentId: string) {
+export function useAgentChat(agentId: string, preferredChatId?: string | null) {
   const [chats, setChats] = useState<AgentChat[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [history, setHistory] = useState<Record<string, ChatMessage[]>>({});
@@ -32,15 +32,20 @@ export function useAgentChat(agentId: string) {
   const pending = useRef(new Set<string>());
   const requests = useRef(new Map<string, number>());
   const activeRef = useRef<string | null>(null);
+  const chatsRef = useRef(chats);
+  const preferredRef = useRef(preferredChatId ?? null);
   activeRef.current = activeId;
+  chatsRef.current = chats;
+  preferredRef.current = preferredChatId ?? null;
 
   const reloadList = useCallback(async (selectId?: string | null) => {
     setLoading(true);
     try {
       const listed = await call("agent_chat_list", { agentId });
       setChats(listed);
+      const want = selectId ?? preferredRef.current;
       setActiveId((current) => {
-        if (selectId && listed.some((chat) => chat.id === selectId)) return selectId;
+        if (want && listed.some((chat) => chat.id === want)) return want;
         if (current && listed.some((chat) => chat.id === current)) return current;
         return listed[0]?.id ?? null;
       });
@@ -151,6 +156,21 @@ export function useAgentChat(agentId: string) {
       disposed = true;
       for (const stop of stops) stop();
     };
+  }, [agentId]);
+
+  const selectChat = useCallback(async (chatId: string) => {
+    try {
+      let listed = chatsRef.current;
+      if (!listed.some((item) => item.id === chatId)) {
+        listed = await call("agent_chat_list", { agentId });
+        setChats(listed);
+      }
+      if (!listed.some((item) => item.id === chatId)) return false;
+      setActiveId(chatId);
+      return true;
+    } catch {
+      return false;
+    }
   }, [agentId]);
 
   const createChat = useCallback(async () => {
@@ -323,6 +343,7 @@ export function useAgentChat(agentId: string) {
       void reloadList();
       if (activeRef.current) void loadHistory(activeRef.current);
     },
+    selectChat,
     createChat,
     renameChat,
     deleteChat,

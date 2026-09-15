@@ -55,6 +55,7 @@ const chromeStub: ChromeValue = {
   destination: "mode",
   setDestination: () => undefined,
   onModeChange: () => undefined,
+  onOpenSession: () => undefined,
   onThemeChange: () => undefined,
   onSettings: () => undefined,
   onTidy: () => undefined,

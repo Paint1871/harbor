@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "../ipc";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@harbor/ui/Button";
@@ -8,15 +8,24 @@ import { AppRail } from "../chrome/AppRail";
 import { AgentRail } from "./agent/AgentRail";
 import { AgentPage } from "./agent/AgentPage";
 import { NewAgent } from "./agent/NewAgent";
-import { useChrome } from "../chrome/chrome-context";
+import { useChrome, type OpenSessionTarget } from "../chrome/chrome-context";
 
-export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
+export function AgentMode({
+  railOpen = true,
+  onSessionSelectRegister,
+}: {
+  railOpen?: boolean;
+  onSessionSelectRegister?: (handler: (target: OpenSessionTarget) => void) => void;
+}) {
   const { setDestination } = useChrome();
   const [agents, setAgents] = useState<AgentRecord[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [pendingChatId, setPendingChatId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const agentsRef = useRef(agents);
+  agentsRef.current = agents;
 
   const reload = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
@@ -33,6 +42,34 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const openAgentSession = useCallback(async (target: OpenSessionTarget) => {
+    const sessionRef = target.sessionRef?.trim();
+    if (!sessionRef) return;
+    try {
+      let roster = agentsRef.current;
+      if (!roster.length) {
+        roster = await call("agent_list");
+        setAgents(roster);
+      }
+      for (const item of roster) {
+        const chats = await call("agent_chat_list", { agentId: item.id });
+        if (chats.some((chat) => chat.id === sessionRef)) {
+          setPendingChatId(sessionRef);
+          setSelected(item.id);
+          return;
+        }
+      }
+    } catch {
+      // Leave the current agent selected.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!onSessionSelectRegister) return;
+    onSessionSelectRegister((target) => { void openAgentSession(target); });
+    return () => onSessionSelectRegister(() => undefined);
+  }, [onSessionSelectRegister, openAgentSession]);
 
   useEffect(() => {
     let disposed = false;
@@ -71,6 +108,8 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
         {agent ? (
           <AgentPage
             agent={agent}
+            pendingChatId={pendingChatId}
+            onPendingChatConsumed={() => setPendingChatId(null)}
             onAgentChange={(updated) => {
               setAgents((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
             }}
