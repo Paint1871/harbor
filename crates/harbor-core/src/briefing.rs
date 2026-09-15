@@ -126,7 +126,7 @@ mod tests {
                 name: "Ada".into(),
                 brief: "Review diffs".into(),
                 engine_id: "opencode".into(),
-                face_index: 0,
+                face_index: None,
                 home_path: None,
             },
         )

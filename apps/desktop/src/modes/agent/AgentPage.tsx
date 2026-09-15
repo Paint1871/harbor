@@ -119,7 +119,7 @@ export function AgentPage({
   return (
     <div className="harbor-agent-page">
       <header className="harbor-agent-header">
-        <Face name={agent.name} index={agent.faceIndex} />
+        <Face name={agent.name} index={agent.faceIndex} id={agent.id} />
         <div className="harbor-agent-heading">
           <h2>{agent.name}</h2>
           <p>Powered by {engineLabel}</p>

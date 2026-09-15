@@ -15,6 +15,20 @@ fn now() -> i64 {
         .unwrap_or_default()
 }
 
+const FACE_SLOT_COUNT: u32 = 64;
+const FNV_OFFSET: u32 = 0x811c_9dc5;
+const FNV_PRIME: u32 = 0x0100_0193;
+
+/// Stable atlas slot 0..=63 from an agent id (FNV-1a 32-bit over UTF-8 bytes).
+pub fn face_slot_for_id(agent_id: &str) -> i32 {
+    let mut hash = FNV_OFFSET;
+    for byte in agent_id.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    (hash % FACE_SLOT_COUNT) as i32
+}
+
 type AgentRow = (
     String,
     String,
@@ -120,6 +134,7 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
         _ => String::new(),
     };
     let id = Uuid::now_v7().to_string();
+    let face_index = input.face_index.unwrap_or_else(|| face_slot_for_id(&id));
     let ts = now();
     sqlx::query(
         "INSERT INTO agents (id, name, brief, engine_id, face_index, home_path, messaging, created_at, updated_at)
@@ -129,7 +144,7 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
     .bind(&name)
     .bind(&input.brief)
     .bind(&input.engine_id)
-    .bind(input.face_index)
+    .bind(face_index)
     .bind(&home_path)
     .bind(ts)
     .execute(pool)
@@ -140,7 +155,7 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
         name,
         brief: input.brief,
         engine_id: input.engine_id,
-        face_index: input.face_index,
+        face_index,
         pinned: false,
         home_path,
         messaging: true,
@@ -261,7 +276,7 @@ pub async fn draft_with_ai(pool: &SqlitePool, hint: String) -> Result<CreateAgen
         name,
         brief,
         engine_id: DEFAULT_ENGINE.into(),
-        face_index: 0,
+        face_index: None,
         home_path: None,
     })
 }
@@ -382,7 +397,7 @@ mod tests {
             name: name.into(),
             brief: "brief".into(),
             engine_id: "opencode".into(),
-            face_index: 3,
+            face_index: Some(3),
             home_path: None,
         }
     }
@@ -466,7 +481,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(first.engine_id, "opencode");
-        assert_eq!(first.face_index, 0);
+        assert_eq!(first.face_index, None);
         assert!(first.name.chars().count() <= 40 && !first.name.is_empty());
         assert!(first.brief.contains("payments"));
         create(&pool, first.clone()).await.unwrap();
@@ -562,7 +577,7 @@ mod tests {
                 name: "HasHome".into(),
                 brief: "brief".into(),
                 engine_id: "opencode".into(),
-                face_index: 3,
+                face_index: Some(3),
                 home_path: Some(home.display().to_string()),
             },
         )
@@ -576,5 +591,60 @@ mod tests {
             .find(|agent| agent.name == "HasHome")
             .expect("created agent");
         assert_eq!(stored.home_path, with.home_path);
+    }
+
+    #[test]
+    fn face_slot_for_id_is_stable_and_in_range() {
+        let slot = face_slot_for_id("0193a1c2-7b8d-7e0f-b123-456789abcdef");
+        assert_eq!(
+            slot,
+            face_slot_for_id("0193a1c2-7b8d-7e0f-b123-456789abcdef")
+        );
+        assert!((0..=63).contains(&slot));
+        let slots: std::collections::HashSet<i32> = (0..64)
+            .map(|i| face_slot_for_id(&format!("agent-{i}")))
+            .collect();
+        assert!(
+            slots.len() > 1,
+            "different ids should usually map to different slots"
+        );
+        for i in 0..200 {
+            assert!((0..=63).contains(&face_slot_for_id(&format!("agent-{i}"))));
+        }
+    }
+
+    #[tokio::test]
+    async fn create_without_face_index_persists_hashed_slot() {
+        let (_dir, pool) = pool().await;
+        let created = create(
+            &pool,
+            CreateAgent {
+                name: "Hashed".into(),
+                brief: "brief".into(),
+                engine_id: "opencode".into(),
+                face_index: None,
+                home_path: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(created.face_index, face_slot_for_id(&created.id));
+        assert!((0..=63).contains(&created.face_index));
+        let listed = list(&pool).await.unwrap();
+        assert_eq!(listed[0].face_index, face_slot_for_id(&created.id));
+
+        let picked = create(
+            &pool,
+            CreateAgent {
+                name: "Picked".into(),
+                brief: "brief".into(),
+                engine_id: "opencode".into(),
+                face_index: Some(0),
+                home_path: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(picked.face_index, 0);
     }
 }

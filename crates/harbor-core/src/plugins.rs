@@ -386,7 +386,7 @@ mod tests {
                 name: "Plug".into(),
                 brief: String::new(),
                 engine_id: "opencode".into(),
-                face_index: 0,
+                face_index: None,
                 home_path: None,
             },
         )

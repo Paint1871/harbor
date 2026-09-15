@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "../../ipc";
 import { Button } from "@harbor/ui/Button";
-import type { DetectedEngine } from "@harbor/schema/commands";
+import type { CreateAgent, DetectedEngine } from "@harbor/schema/commands";
 import { FacePicker } from "./FacePicker";
 import { settingsGet } from "../../settings";
 
 interface NewAgentProps {
-  onCreate: (input: { name: string; brief: string; engineId: string; faceIndex: number; homePath?: string }) => Promise<void>;
+  onCreate: (input: CreateAgent) => Promise<void>;
   onClose: () => void;
 }
 
@@ -15,7 +15,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
   const [name, setName] = useState("");
   const [brief, setBrief] = useState("");
   const [engineId, setEngineId] = useState("");
-  const [faceIndex, setFaceIndex] = useState(0);
+  const [faceIndex, setFaceIndex] = useState<number | undefined>(undefined);
   const [homePath, setHomePath] = useState("");
   const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,13 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
         if (disabled || !selectedEngine) return;
         setSaving(true);
         setError(null);
-        void onCreate({ name: name.trim(), brief: brief.trim(), engineId: selectedEngine.id, faceIndex, homePath: homePath || undefined })
+        void onCreate({
+          name: name.trim(),
+          brief: brief.trim(),
+          engineId: selectedEngine.id,
+          ...(faceIndex !== undefined ? { faceIndex } : {}),
+          homePath: homePath || undefined,
+        })
           .catch(() => setError("Your agent could not be created. Your draft is saved here. Please try again."))
           .finally(() => setSaving(false));
       }}>

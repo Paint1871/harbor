@@ -1,20 +1,22 @@
 import atlasUrl from "../../../../../assets/faces/atlas.webp";
+import { faceSlot, wrapFaceSlot } from "./faceSlot";
 
 interface FaceProps {
   name: string;
-  index: number;
+  index?: number;
+  id?: string;
 }
 
 const GRID = 8;
 
-export function Face({ name, index }: FaceProps) {
+export function Face({ name, index, id }: FaceProps) {
   const initials = name
     .split(/\s+/)
     .map((part) => part[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  const slot = ((index % 64) + 64) % 64;
+  const slot = index != null ? wrapFaceSlot(index) : id ? faceSlot(id) : 0;
   const col = slot % GRID;
   const row = Math.floor(slot / GRID);
   return (
