@@ -3963,7 +3963,8 @@ button, input, textarea, select {
 .harbor-dashboard-header h1 { margin: 0 0 4px; font-size: 25px; font-weight: 550; letter-spacing: -0.04em; line-height: 1.15; }
 .harbor-dashboard-header p { margin: 0; color: var(--harbor-muted); font-size: 14px; }
 .harbor-dashboard-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 26px; }
-.harbor-dashboard-metric { display: flex; flex-direction: column; min-height: 116px; padding: 16px 18px; border: 1px solid var(--harbor-hairline); border-radius: 13px; background: var(--harbor-raised); }
+.harbor-dashboard-metric { display: flex; flex-direction: column; min-height: 116px; padding: 16px 18px; border: 1px solid var(--harbor-hairline); border-radius: 13px; background: var(--harbor-raised); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.harbor-dashboard-metric:hover { background: color-mix(in srgb, var(--harbor-text) 4%, transparent); }
 .harbor-dashboard-metric > span { color: var(--harbor-muted); font-size: 14px; }
 .harbor-dashboard-metric strong { margin-top: 9px; color: var(--harbor-text); font-size: 30px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; }
 .harbor-dashboard-metric small { margin-top: 7px; color: var(--harbor-muted); font-size: 12px; }

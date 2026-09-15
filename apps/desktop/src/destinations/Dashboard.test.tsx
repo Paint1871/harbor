@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Dashboard } from "./Dashboard";
 import { ChromeProvider, type ChromeValue } from "../chrome/chrome-context";
@@ -7,7 +7,7 @@ import { ChromeProvider, type ChromeValue } from "../chrome/chrome-context";
 const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 
-const chrome: ChromeValue = {
+const chrome = (over: Partial<ChromeValue> = {}): ChromeValue => ({
   mode: "agent",
   theme: "black",
   profileName: "Ada",
@@ -22,7 +22,8 @@ const chrome: ChromeValue = {
   registerNewThread: () => undefined,
   registerNewAgentChat: () => undefined,
   registerCodeWorkspace: () => undefined,
-};
+  ...over,
+});
 
 describe("Dashboard", () => {
   beforeEach(() => {
@@ -37,7 +38,7 @@ describe("Dashboard", () => {
       return Promise.resolve([]);
     });
     render(
-      <ChromeProvider value={chrome}>
+      <ChromeProvider value={chrome()}>
         <Dashboard />
       </ChromeProvider>,
     );
@@ -45,5 +46,31 @@ describe("Dashboard", () => {
     expect(screen.getByText("Agents")).toBeTruthy();
     expect(screen.queryByText("Credits")).toBeNull();
     expect(screen.getByText(/No threads yet/)).toBeTruthy();
+  });
+
+  it("opens the chat thread a row came from", async () => {
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "agent_list") return Promise.resolve([]);
+      if (command === "workspace_list") return Promise.resolve([]);
+      if (command === "thread_list") {
+        return Promise.resolve([
+          { id: "thread-1", workspaceId: "ws-1", engineId: "opencode", title: "Launch", pinned: false, unread: true },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    const onOpenSession = vi.fn();
+    render(
+      <ChromeProvider value={chrome({ onOpenSession })}>
+        <Dashboard />
+      </ChromeProvider>,
+    );
+    await waitFor(() => expect(screen.getByText("Launch")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Launch/ }));
+    expect(onOpenSession).toHaveBeenCalledWith({
+      mode: "chat",
+      sessionRef: "thread-1",
+      workspaceId: "ws-1",
+    });
   });
 });
