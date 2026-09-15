@@ -17,8 +17,8 @@ Last reviewed 2026-09-15.
 - **Dictation.** `dictation_begin` / `dictation_end` are unimplemented.
   `harbor_speech::engine_available()` is `false`. There is no silent cloud
   fallback; that is intentional.
-- **Settings.** Startup mode and Recheck still need tighter wiring as live
-  chrome controls. UI zoom, default shell, desktop notifications, notification
+- **Settings.** Recheck engines is a live host action. UI zoom, startup mode,
+  default shell (including PowerShell/cmd), desktop notifications, notification
   sound, and per-kind notification filters honor their stored values.
 - **Voice.** Dictation and a title-bar mute orb are not shipped. Welcome has a
   decorative orbit; hold-to-talk is a no-op.
