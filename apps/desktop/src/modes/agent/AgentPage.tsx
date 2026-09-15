@@ -308,6 +308,9 @@ export function AgentPage({
                     setMailError(null);
                     setDraft((current) => current.replace(/(?:^|\s)@[^\s]*$/, (chunk) => `${chunk.startsWith(" ") ? " " : ""}@${to.name} `));
                   }}
+                  onCancel={() => {
+                    setDraft((current) => current.replace(/(?:^|\s)@[^\s]*$/, (chunk) => (chunk.startsWith(" ") ? " " : "")));
+                  }}
                 />
               ) : null}
               <Composer
@@ -334,6 +337,7 @@ export function AgentPage({
                 }}
                 textareaProps={{
                   onKeyDown: (event) => {
+                    if (event.defaultPrevented) return;
                     if (event.key === "Escape" && chat.sending) {
                       event.preventDefault();
                       void chat.cancel();
