@@ -1945,7 +1945,8 @@ button, input, textarea, select {
   min-width: 0;
 }
 .harbor-thread-list > .harbor-muted,
-.harbor-roster > .harbor-muted { margin: 0; padding: 4px 10px 8px; }
+.harbor-roster > .harbor-muted,
+.harbor-rail-section > .harbor-muted { margin: 0; padding: 4px 10px 8px; }
 .harbor-thread-row { display: flex; align-items: center; gap: 4px; }
 .harbor-thread-row > .harbor-rail-row { flex: 1; min-width: 0; }
 .harbor-thread-row > .harbor-pin { padding: 8px 4px; font: inherit; font-size: 10px; }
