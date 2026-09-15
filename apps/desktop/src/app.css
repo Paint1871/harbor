@@ -1935,17 +1935,20 @@ button, input, textarea, select {
 .harbor-thread-section { border-top: 1px solid var(--harbor-hairline); margin-top: 16px; padding-top: 10px; }
 .harbor-thread-section > h2 { padding: 0 10px 8px; }
 .harbor-thread-list .harbor-thread-search,
-.harbor-rail-section .harbor-thread-search {
+.harbor-rail-section .harbor-thread-search,
+.harbor-chat-rail .harbor-thread-search {
   min-width: 0;
   margin: 0 10px 8px;
 }
 .harbor-thread-list .harbor-thread-search input,
-.harbor-rail-section .harbor-thread-search input {
+.harbor-rail-section .harbor-thread-search input,
+.harbor-chat-rail .harbor-thread-search input {
   width: 100%;
   min-width: 0;
 }
 .harbor-thread-list > .harbor-muted,
-.harbor-roster > .harbor-muted { margin: 0; padding: 4px 10px 8px; }
+.harbor-roster > .harbor-muted,
+.harbor-chat-rail > .harbor-muted { margin: 0; padding: 4px 10px 8px; }
 .harbor-thread-row { display: flex; align-items: center; gap: 4px; }
 .harbor-thread-row > .harbor-rail-row { flex: 1; min-width: 0; }
 .harbor-thread-row > .harbor-pin { padding: 8px 4px; font: inherit; font-size: 10px; }
