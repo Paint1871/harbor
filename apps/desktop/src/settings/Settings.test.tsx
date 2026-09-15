@@ -45,3 +45,45 @@ describe("Settings UI zoom", () => {
     });
   });
 });
+
+describe("Settings default shell", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+    mocks.invoke.mockImplementation((command: string, args?: { key?: string }) => {
+      if (command === "settings_get") return Promise.resolve(null);
+      if (command === "settings_set") return Promise.resolve();
+      if (command === "engines_detect") return Promise.resolve([]);
+      if (command === "usage_bridge_status") return Promise.resolve({ connected: false, chained: false });
+      return Promise.resolve(null);
+    });
+  });
+
+  it("offers PowerShell and Command Prompt with the unix shells", async () => {
+    render(
+      <Settings
+        theme="black"
+        onThemeChange={() => undefined}
+        onClose={() => undefined}
+        onShowWelcome={() => undefined}
+      />,
+    );
+
+    const select = await screen.findByRole("combobox", { name: "Default shell" });
+    const options = Array.from((select as HTMLSelectElement).options);
+    expect(options.map((option) => option.value)).toEqual(["system", "zsh", "bash", "powershell", "cmd"]);
+    expect(options.map((option) => option.textContent)).toEqual([
+      "System default",
+      "zsh",
+      "bash",
+      "PowerShell",
+      "Command Prompt",
+    ]);
+
+    fireEvent.change(select, { target: { value: "cmd" } });
+    await waitFor(() => {
+      expect(mocks.invoke).toHaveBeenCalledWith("settings_set", { key: "default_shell", value: "cmd" });
+    });
+  });
+});

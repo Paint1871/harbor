@@ -49,13 +49,34 @@ fn b64_decode(input: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-#[cfg(unix)]
-fn shell_from_preference(preference: Option<&str>) -> Option<PathBuf> {
+/// Map a Settings `default_shell` value to a launch path for `os`.
+/// `os` is a `std::env::consts::OS` value so tests can cover Windows on macOS CI.
+fn shell_path_for(preference: &str, os: &str) -> Option<PathBuf> {
     match preference {
-        Some("zsh") => Some(PathBuf::from("/bin/zsh")),
-        Some("bash") => Some(PathBuf::from("/bin/bash")),
+        "zsh" if os != "windows" => Some(PathBuf::from("/bin/zsh")),
+        "bash" if os != "windows" => Some(PathBuf::from("/bin/bash")),
+        "powershell" if os == "windows" => Some(windows_shell_candidate(&[
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            r"C:\Program Files\PowerShell\7\pwsh.exe",
+        ])),
+        "cmd" if os == "windows" => {
+            Some(windows_shell_candidate(&[r"C:\Windows\System32\cmd.exe"]))
+        }
         _ => None,
     }
+}
+
+fn windows_shell_candidate(paths: &[&str]) -> PathBuf {
+    paths
+        .iter()
+        .map(PathBuf::from)
+        .find(|path| path.is_file())
+        .or_else(|| paths.first().map(PathBuf::from))
+        .expect("at least one shell candidate")
+}
+
+fn shell_from_preference(preference: Option<&str>) -> Option<PathBuf> {
+    shell_path_for(preference?, std::env::consts::OS)
 }
 
 #[cfg(unix)]
@@ -138,18 +159,9 @@ pub async fn pty_spawn(
     let configured_shell = match shell {
         Some(path) => PathBuf::from(path),
         None => {
-            #[cfg(unix)]
             if let Some(path) = shell_from_preference(saved_shell.as_deref()) {
                 path
             } else {
-                shells
-                    .first()
-                    .cloned()
-                    .ok_or_else(|| "no login shell is granted".to_string())?
-            }
-            #[cfg(not(unix))]
-            {
-                let _ = saved_shell;
                 shells
                     .first()
                     .cloned()
@@ -325,4 +337,84 @@ pub fn pty_resume(registry: State<PtyRegistry>, pane_id: String) -> Result<(), S
         pty.resume().map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file_name(path: &Path) -> String {
+        path.to_string_lossy()
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+    }
+
+    #[test]
+    fn shell_path_for_unix_zsh_and_bash() {
+        for os in ["macos", "linux"] {
+            assert_eq!(shell_path_for("zsh", os), Some(PathBuf::from("/bin/zsh")));
+            assert_eq!(shell_path_for("bash", os), Some(PathBuf::from("/bin/bash")));
+        }
+    }
+
+    #[test]
+    fn shell_path_for_windows_powershell_and_cmd() {
+        let powershell = shell_path_for("powershell", "windows").expect("powershell");
+        let name = file_name(&powershell);
+        assert!(
+            name == "powershell.exe" || name == "pwsh.exe" || name == "pwsh",
+            "{powershell:?}"
+        );
+        let cmd = shell_path_for("cmd", "windows").expect("cmd");
+        assert_eq!(file_name(&cmd), "cmd.exe");
+    }
+
+    #[test]
+    fn shell_path_for_system_unknown_and_cross_os_are_none() {
+        assert_eq!(shell_path_for("system", "windows"), None);
+        assert_eq!(shell_path_for("system", "macos"), None);
+        assert_eq!(shell_path_for("zsh", "windows"), None);
+        assert_eq!(shell_path_for("bash", "windows"), None);
+        assert_eq!(shell_path_for("powershell", "macos"), None);
+        assert_eq!(shell_path_for("cmd", "linux"), None);
+        assert_eq!(shell_path_for("fish", "linux"), None);
+    }
+
+    #[test]
+    fn shell_from_preference_system_and_none_are_none() {
+        assert_eq!(shell_from_preference(Some("system")), None);
+        assert_eq!(shell_from_preference(None), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shell_from_preference_unix_zsh_and_bash() {
+        assert_eq!(
+            shell_from_preference(Some("zsh")),
+            Some(PathBuf::from("/bin/zsh"))
+        );
+        assert_eq!(
+            shell_from_preference(Some("bash")),
+            Some(PathBuf::from("/bin/bash"))
+        );
+        assert_eq!(shell_from_preference(Some("powershell")), None);
+        assert_eq!(shell_from_preference(Some("cmd")), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn shell_from_preference_windows_powershell() {
+        let powershell = shell_from_preference(Some("powershell")).expect("powershell");
+        let name = file_name(&powershell);
+        assert!(
+            name == "powershell.exe" || name == "pwsh.exe" || name == "pwsh",
+            "{powershell:?}"
+        );
+        let cmd = shell_from_preference(Some("cmd")).expect("cmd");
+        assert_eq!(file_name(&cmd), "cmd.exe");
+        assert_eq!(shell_from_preference(Some("zsh")), None);
+        assert_eq!(shell_from_preference(Some("bash")), None);
+    }
 }
