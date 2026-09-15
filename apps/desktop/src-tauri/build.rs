@@ -72,6 +72,7 @@ fn main() {
             "notifications_list",
             "notifications_unread_count",
             "notifications_mark_read",
+            "notifications_clear",
             "plugin_list",
             "plugin_connect",
             "plugin_configure",

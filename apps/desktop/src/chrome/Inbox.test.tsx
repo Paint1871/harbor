@@ -54,6 +54,20 @@ describe("Inbox", () => {
     render(<Inbox open />);
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("notifications_list"));
     expect(screen.getByText(/Nothing yet/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Clear inbox" })).toBeNull();
+  });
+
+  it("clears recorded events from the host and the panel", async () => {
+    mocks.invoke.mockImplementation((command: string) =>
+      command === "notifications_list" ? Promise.resolve([row]) : Promise.resolve(),
+    );
+    render(<Inbox open />);
+    await waitFor(() => expect(screen.getByText("Codex stopped")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear inbox" }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("notifications_clear"));
+    await waitFor(() => expect(screen.getByText(/Nothing yet/)).toBeTruthy());
+    expect(screen.queryByText("Codex stopped")).toBeNull();
   });
 
   it("marks rows read when opened and jumps to the pane the event came from", async () => {

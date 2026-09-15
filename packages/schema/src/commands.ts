@@ -331,6 +331,7 @@ export interface HarborCommands {
   mail_send: { args: { fromAgentId: string; toAgentId: string; body: string }; returns: void };
   notifications_list: { args: undefined; returns: Notification[] };
   notifications_mark_read: { args: undefined; returns: void };
+  notifications_clear: { args: undefined; returns: void };
   notifications_unread_count: { args: undefined; returns: number };
   /** A data URL for the generated face, not the raw PNG bytes. */
   face_preview: { args: { agentId: string; faceIndex: number }; returns: string };

@@ -98,6 +98,7 @@
     "allow-notifications-list",
     "allow-notifications-unread-count",
     "allow-notifications-mark-read",
+    "allow-notifications-clear",
     "allow-dictation-begin",
     "allow-dictation-end",
     "allow-dictation-devices",
