@@ -4,6 +4,7 @@ import { Button } from "@harbor/ui/Button";
 import type { AgentRecord } from "@harbor/schema/commands";
 import { settingsGet, settingsSet } from "../settings";
 import { useChrome } from "../chrome/chrome-context";
+import { routineMatchesQuery } from "./routineMatchesQuery";
 
 type Frequency = "weekdays" | "weekly" | "manual";
 
@@ -37,9 +38,10 @@ function readRoutines(value: unknown): Routine[] {
 }
 
 export function Routines() {
-  const { onModeChange } = useChrome();
+  const { onOpenSession, setDestination } = useChrome();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [brief, setBrief] = useState("");
@@ -70,6 +72,10 @@ export function Routines() {
 
   const activeCount = routines.filter((routine) => routine.enabled).length;
   const agentName = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.name])), [agents]);
+  const visible = useMemo(
+    () => routines.filter((routine) => routineMatchesQuery(routine, query)),
+    [query, routines],
+  );
 
   function resetForm() {
     setName("");
@@ -103,8 +109,8 @@ export function Routines() {
       const chat = await call("agent_chat_create", { agentId: routine.agentId });
       await settingsSet("pending_agent_prompt", routine.brief);
       setNotice(`Started a new chat with ${agentName.get(routine.agentId) ?? "your teammate"}.`);
-      onModeChange("agent");
-      void chat;
+      onOpenSession?.({ mode: "agent", sessionRef: chat.id });
+      setDestination("mode");
     } catch (reason) {
       setNotice(`Could not start this routine. ${String(reason)}`);
     } finally {
@@ -120,9 +126,12 @@ export function Routines() {
           <h1>Routines</h1>
           <p>Give a teammate a repeatable brief. Runs stay on this device while Harbor is open.</p>
         </div>
-        <Button variant="primary" onClick={() => { setNotice(null); setOpen(true); }}>
-          New routine <span aria-hidden="true">+</span>
-        </Button>
+        <div className="harbor-routines-heading-tools">
+          <label className="harbor-destination-search">Search routines<input aria-label="Search routines" value={query} placeholder="Find a routine" onChange={(event) => setQuery(event.target.value)} /></label>
+          <Button variant="primary" onClick={() => { setNotice(null); setOpen(true); }}>
+            New routine <span aria-hidden="true">+</span>
+          </Button>
+        </div>
       </header>
 
       <div className="harbor-destination-stats" aria-label="Routine summary">
@@ -151,22 +160,26 @@ export function Routines() {
       ) : null}
 
       {routines.length ? (
-        <div className="harbor-routine-list">
-          {routines.map((routine) => (
-            <article key={routine.id} className="harbor-routine-card" data-enabled={routine.enabled}>
-              <div className="harbor-routine-card-main">
-                <div className="harbor-routine-card-top"><span className="harbor-routine-icon" aria-hidden="true">↻</span><span className="harbor-chip">{FREQUENCIES.find((item) => item.value === routine.frequency)?.label}</span><span className="harbor-routine-agent">{agentName.get(routine.agentId) ?? "Missing agent"}</span></div>
-                <h2>{routine.name}</h2>
-                <p>{routine.brief}</p>
-              </div>
-              <div className="harbor-routine-card-actions">
-                <label className="harbor-routine-toggle"><input type="checkbox" checked={routine.enabled} onChange={(event) => persist(routines.map((item) => item.id === routine.id ? { ...item, enabled: event.target.checked } : item))} /><span>{routine.enabled ? "On" : "Off"}</span></label>
-                <Button variant="ghost" disabled={!routine.enabled || running === routine.id} onClick={() => void runRoutine(routine)}>{running === routine.id ? "Starting…" : "Run now"}</Button>
-                <Button variant="ghost" onClick={() => persist(routines.filter((item) => item.id !== routine.id))}>Remove</Button>
-              </div>
-            </article>
-          ))}
-        </div>
+        visible.length ? (
+          <div className="harbor-routine-list">
+            {visible.map((routine) => (
+              <article key={routine.id} className="harbor-routine-card" data-enabled={routine.enabled}>
+                <div className="harbor-routine-card-main">
+                  <div className="harbor-routine-card-top"><span className="harbor-routine-icon" aria-hidden="true">↻</span><span className="harbor-chip">{FREQUENCIES.find((item) => item.value === routine.frequency)?.label}</span><span className="harbor-routine-agent">{agentName.get(routine.agentId) ?? "Missing agent"}</span></div>
+                  <h2>{routine.name}</h2>
+                  <p>{routine.brief}</p>
+                </div>
+                <div className="harbor-routine-card-actions">
+                  <label className="harbor-routine-toggle"><input type="checkbox" checked={routine.enabled} onChange={(event) => persist(routines.map((item) => item.id === routine.id ? { ...item, enabled: event.target.checked } : item))} /><span>{routine.enabled ? "On" : "Off"}</span></label>
+                  <Button variant="ghost" disabled={!routine.enabled || running === routine.id} onClick={() => void runRoutine(routine)}>{running === routine.id ? "Starting…" : "Run now"}</Button>
+                  <Button variant="ghost" onClick={() => persist(routines.filter((item) => item.id !== routine.id))}>Remove</Button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="harbor-muted">No routines match “{query}”.</p>
+        )
       ) : (
         <div className="harbor-routines-empty">
           <div className="harbor-routines-empty-mark" aria-hidden="true">↻</div>

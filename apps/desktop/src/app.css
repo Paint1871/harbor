@@ -2724,6 +2724,16 @@ button, input, textarea, select {
   flex: 0 0 auto;
   margin-top: 6px;
 }
+.harbor-routines-heading-tools {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+.harbor-routines-heading-tools > .harbor-button {
+  flex: 0 0 auto;
+  margin-top: 6px;
+}
 .harbor-destination-stats {
   display: flex;
   align-items: center;
@@ -3131,6 +3141,8 @@ button, input, textarea, select {
 @media (max-width: 680px) {
   .harbor-destination-heading { flex-direction: column; gap: 14px; }
   .harbor-destination-heading > .harbor-button { margin-top: 0; }
+  .harbor-routines-heading-tools { width: 100%; flex-direction: column; align-items: stretch; }
+  .harbor-routines-heading-tools > .harbor-button { margin-top: 0; }
   .harbor-destination-search,
   .harbor-destination-search input { width: 100%; min-width: 0; }
   .harbor-routine-form-grid { grid-template-columns: 1fr; gap: 0; }
