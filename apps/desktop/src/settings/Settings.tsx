@@ -5,6 +5,7 @@ import { Segmented } from "@harbor/ui/Segmented";
 import type { BridgeStatus, DetectedEngine } from "@harbor/schema/commands";
 import type { Theme } from "@harbor/ui/theme";
 import { settingsGet, settingsSet } from "./api";
+import { applyUiZoom, parseUiZoomPercent, UI_ZOOM_PERCENTS } from "./ui-zoom";
 
 const PAGES = [
   { value: "general", label: "General" },
@@ -165,7 +166,7 @@ export function Settings({
       settingsGet("local_profile_name"),
     ]).then(([zoom, startup, shell, notify, sound, handsFree, speech, cloudUrl, paused, memory, engine, name]) => {
       if (!active) return;
-      setUiZoom(valueString(zoom, "100"));
+      setUiZoom(String(parseUiZoomPercent(zoom)));
       setStartupMode(valueString(startup, "last"));
       setDefaultShell(valueString(shell, "system"));
       setNotifications(valueBoolean(notify, true));
@@ -252,7 +253,7 @@ export function Settings({
                   <Segmented label="Appearance" value={theme} options={[{ value: "black", label: "Black" }, { value: "light", label: "Light" }]} onValueChange={(value) => { onThemeChange(value); void save("appearance", value); }} />
                 </SettingRow>
                 <SettingRow label="UI zoom" description="Adjust the reading size without changing your display settings.">
-                  <Select label="UI zoom" value={uiZoom} options={["90", "100", "110", "125"].map((value) => ({ value, label: `${value}%` }))} onChange={(value) => { setUiZoom(value); void save("ui_zoom", value); }} />
+                  <Select label="UI zoom" value={uiZoom} options={UI_ZOOM_PERCENTS.map((value) => ({ value: String(value), label: `${value}%` }))} onChange={(value) => { setUiZoom(value); applyUiZoom(value); void save("ui_zoom", value); }} />
                 </SettingRow>
                 <SettingRow label="Startup" description="Choose where Harbor opens after you launch it.">
                   <Select label="Startup" value={startupMode} options={[{ value: "last", label: "Last workspace" }, { value: "welcome", label: "Welcome" }, { value: "agent", label: "Agent mode" }]} onChange={(value) => { setStartupMode(value); void save("startup_mode", value); }} />
