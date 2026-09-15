@@ -4,6 +4,7 @@ import { ThemeProvider } from "@harbor/ui/ThemeProvider";
 import type { Theme } from "@harbor/ui/theme";
 import { DesktopShell } from "./chrome/DesktopShell";
 import { settingsGet, settingsSet } from "./settings";
+import { applyUiZoom } from "./settings/ui-zoom";
 import { WelcomeScreen } from "./welcome/WelcomeScreen";
 
 type StartupMode = "last" | "welcome" | "agent";
@@ -25,7 +26,9 @@ export function App() {
       settingsGet("reduce_motion"),
       settingsGet("startup_mode"),
       settingsGet("last_mode"),
-    ]).then(([onboardedValue, name, appearance, reduceMotionValue, startupValue, lastModeValue]) => {
+      settingsGet("ui_zoom"),
+    ]).then(([onboardedValue, name, appearance, reduceMotionValue, startupValue, lastModeValue, uiZoomValue]) => {
+      applyUiZoom(uiZoomValue);
       setOnboarded(onboardedValue === true);
       if (typeof name === "string" && name.trim()) {
         setProfileName(name);
