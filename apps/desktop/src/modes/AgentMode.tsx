@@ -113,6 +113,11 @@ export function AgentMode({
             onAgentChange={(updated) => {
               setAgents((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
             }}
+            onDeleted={(id) => {
+              const remaining = agentsRef.current.filter((item) => item.id !== id);
+              setAgents(remaining);
+              setSelected(remaining[0]?.id ?? null);
+            }}
             onOpenSkills={() => setDestination("skills")}
             onOpenPlugins={() => setDestination("plugins")}
           />

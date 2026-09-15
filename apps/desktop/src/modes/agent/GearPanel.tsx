@@ -9,6 +9,7 @@ interface GearPanelProps {
   agent: AgentRecord;
   chats?: AgentChat[];
   onAgentChange?: (agent: AgentRecord) => void;
+  onDeleted?: (id: string) => void;
   onOpenChat?: (chatId: string) => void;
   onOpenSkills?: () => void;
   onOpenPlugins?: () => void;
@@ -32,7 +33,7 @@ function recency(createdAt: number): string {
   return `${Math.floor(delta / 86400)}d`;
 }
 
-export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpenSkills, onOpenPlugins }: GearPanelProps) {
+export function GearPanel({ agent, chats = [], onAgentChange, onDeleted, onOpenChat, onOpenSkills, onOpenPlugins }: GearPanelProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [fact, setFact] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
@@ -45,6 +46,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
   const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [query, setQuery] = useState("");
   const [memoryQuery, setMemoryQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -59,6 +61,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setMessaging(agent.messaging !== false);
     setHomePath(agent.homePath ?? "");
     setError(null);
+    setConfirmingDelete(false);
     setQuery("");
     setMemoryQuery("");
     setHits([]);
@@ -188,6 +191,25 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     } catch {
       setPluginGrants((current) => ({ ...current, [pluginId]: !enabled }));
       setError("Plugin access could not be updated. Please try again.");
+    }
+  }
+
+  async function deleteTeammate() {
+    if (busy) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setConfirmingDelete(false);
+    setBusy(true);
+    setError(null);
+    try {
+      await call("agent_delete", { id: agent.id });
+      onDeleted?.(agent.id);
+    } catch {
+      setError("That teammate could not be deleted. Please try again.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -338,6 +360,17 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
         </form>
         <label className="harbor-face-label">Choose a face</label>
         <FacePicker name={name || agent.name} value={faceIndex} onChange={(index) => void chooseFace(index)} />
+        <div className="harbor-gear-subsection">
+          <Button
+            variant="ghost"
+            disabled={busy}
+            data-confirm={confirmingDelete}
+            aria-label={`Delete ${agent.name}`}
+            onClick={() => void deleteTeammate()}
+          >
+            {confirmingDelete ? "Delete?" : "Delete teammate"}
+          </Button>
+        </div>
       </section>
       {error ? <p className="harbor-inline-error" role="alert">{error}</p> : null}
     </aside>

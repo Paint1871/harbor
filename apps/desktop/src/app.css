@@ -2311,6 +2311,14 @@ button, input, textarea, select {
 .harbor-gear-engine { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; color: var(--harbor-muted); font-size: var(--harbor-text-sm); }
 .harbor-gear-engine strong { color: var(--harbor-text); font-family: var(--harbor-font-mono); font-size: 11px; font-weight: 500; }
 .harbor-face-label { display: block; margin-bottom: 8px; color: var(--harbor-muted); font-size: 11px; }
+.harbor-gear .harbor-button[data-confirm="true"] {
+  background: color-mix(in srgb, var(--harbor-accent-error) 18%, transparent);
+  color: var(--harbor-accent-error);
+}
+.harbor-gear .harbor-button[data-confirm="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--harbor-accent-error) 28%, transparent);
+  color: var(--harbor-accent-error);
+}
 .harbor-gear .harbor-inline-error { grid-column: 1 / -1; margin: 0; }
 
 /* Settings pages. */
