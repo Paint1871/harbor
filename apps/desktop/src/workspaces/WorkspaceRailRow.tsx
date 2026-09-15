@@ -3,7 +3,7 @@ import { call } from "../ipc";
 import { RailRow } from "@harbor/ui/RailRow";
 import type { Workspace } from "@harbor/schema/commands";
 
-export function workspaceName(workspace: Workspace): string {
+export function workspaceName(workspace: Pick<Workspace, "title" | "folder">): string {
   if (workspace.title) return workspace.title;
   return workspace.folder.split(/[\\/]/).filter(Boolean).pop() ?? "Workspace";
 }
