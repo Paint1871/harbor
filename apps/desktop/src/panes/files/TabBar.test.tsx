@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { TabBar } from "./TabBar";
+import { TabBar, tabCopyPath } from "./TabBar";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 it("shows the basename, full path tooltip, and a dirty mark", () => {
   const onSelect = vi.fn();
@@ -33,4 +37,20 @@ it("shows the basename, full path tooltip, and a dirty mark", () => {
   fireEvent.click(python.querySelector(".harbor-tab-close")!);
   expect(onClose).toHaveBeenCalledWith("C:\\project\\app.py");
   expect(onSelect).not.toHaveBeenCalled();
+});
+
+it("copies the stored path through the clipboard API using tabCopyPath", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { clipboard: { writeText } });
+  const path = "/Users/ada/src/main.rs";
+  const onSelect = vi.fn();
+  const onClose = vi.fn();
+  render(<TabBar files={[path]} active={path} onSelect={onSelect} onClose={onClose} />);
+
+  fireEvent.click(screen.getByRole("button", { name: `Copy path ${path}` }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(tabCopyPath(path)));
+  expect(writeText).toHaveBeenCalledTimes(1);
+  expect(onSelect).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
 });
