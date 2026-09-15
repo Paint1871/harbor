@@ -1982,6 +1982,34 @@ button, input, textarea, select {
   min-width: 0;
   margin: 0 10px 8px;
 }
+.harbor-thread-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin: 0 10px 8px;
+}
+.harbor-thread-list .harbor-thread-filters .harbor-thread-search {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.harbor-thread-unread {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--harbor-muted);
+  padding: 9px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--harbor-label-tracking);
+}
+.harbor-thread-unread[aria-pressed="true"] {
+  color: var(--harbor-text);
+  background: var(--harbor-raised);
+}
 .harbor-thread-list .harbor-thread-search input,
 .harbor-rail-section .harbor-thread-search input,
 .harbor-chat-rail .harbor-thread-search input {
