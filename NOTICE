@@ -4,3 +4,7 @@ Copyright 2026 Harbor contributors
 Licensed under the Apache License, Version 2.0.
 Harbor hosts independently installed coding engines. Those engines are not
 included in this distribution and retain their own licenses and terms.
+
+This distribution includes Inter, Copyright 2016 The Inter Project Authors
+(https://github.com/rsms/inter), licensed under the SIL Open Font License 1.1.
+See packages/ui/src/fonts/LICENSE.txt.

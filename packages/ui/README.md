@@ -6,8 +6,9 @@ Consumers compile the TypeScript source with Vite.
 
 Import `@harbor/ui/tokens.css` followed by `@harbor/ui/primitives.css` once at
 the application entry point. Tokens are shared across Black and Light; surfaces,
-text, borders, and glow intensity change with appearance. Font stacks use local
-fallbacks and make no font-service requests.
+text, borders, and glow intensity change with appearance. Inter is bundled as a
+variable woff2. The stack falls back to system UI fonts and makes no font-service
+requests.
 
 Use one `ThemeProvider` at the application root. Its `theme` and `reduceMotion`
 props are controlled by the host; persistence belongs to SQLite settings. With

@@ -26,7 +26,6 @@ Last reviewed 2026-09-09.
   decorative orbit; hold-to-talk is a no-op.
 - **Faces.** The face slot is `faceIndex % 64`, not a stable hash of the agent
   id. `face_preview` is typed as `{ pngB64 }` while core returns an SVG data URL.
-- **Fonts.** Inter is referenced via `local()` only; no webfont is bundled.
 - **ACP extras.** `mcp_servers` is always empty in `SpawnSpec` so plugin tokens
   never reach an engine. Agent `home_path` is written as `""` on create; the
   ACP cwd falls back to a granted place or a temp directory.

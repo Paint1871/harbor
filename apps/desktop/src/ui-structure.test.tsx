@@ -164,6 +164,21 @@ describe("shipped Harbor chrome and mode trees", () => {
     expect(composer).toContain('placeholder="Ask anything..."');
   });
 
+  it("bundles Inter as a local @font-face, not a font service", () => {
+    const tokens = readFileSync(resolve(repo, "packages/ui/src/tokens.css"), "utf8");
+    expect(tokens).toContain("@font-face");
+    expect(tokens).toContain("Inter");
+    expect(tokens).toContain("font-display: swap");
+    expect(tokens).toContain("./fonts/inter-latin-wght-normal.woff2");
+    expect(tokens).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
+
+    const font = readFileSync(resolve(repo, "packages/ui/src/fonts/inter-latin-wght-normal.woff2"));
+    expect(font.subarray(0, 4).toString("ascii")).toBe("wOF2");
+
+    const license = readFileSync(resolve(repo, "packages/ui/src/fonts/LICENSE.txt"), "utf8");
+    expect(license).toContain("SIL OPEN FONT LICENSE");
+  });
+
   it("sizes the stage panels by the flex line, not by a full-height rule", () => {
     const css = readFileSync(resolve(repo, "apps/desktop/src/app.css"), "utf8");
     // .harbor-stage-panel carries an 8px margin. Any panel that also sets
