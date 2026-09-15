@@ -143,3 +143,64 @@ describe("Settings default shell", () => {
     });
   });
 });
+
+describe("Settings search", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mockIpc();
+  });
+
+  function renderSettings(initialPage?: "general" | "notifications") {
+    render(
+      <Settings
+        theme="black"
+        initialPage={initialPage}
+        onThemeChange={() => undefined}
+        onClose={() => undefined}
+        onShowWelcome={() => undefined}
+      />,
+    );
+  }
+
+  function searchPages() {
+    return Array.from(document.querySelectorAll(".harbor-settings-search-group .harbor-eyebrow"), (node) => node.textContent);
+  }
+
+  it("finds Default shell from any page and restores the current page when cleared", async () => {
+    renderSettings("notifications");
+
+    expect(await screen.findByRole("switch", { name: "Mail" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Default shell" })).toBeNull();
+
+    const field = screen.getByRole("textbox", { name: "Search settings" });
+    expect(field.getAttribute("placeholder")).toBe("Find a setting");
+
+    fireEvent.change(field, { target: { value: "shell" } });
+    expect(screen.getByRole("combobox", { name: "Default shell" })).toBeTruthy();
+    expect(searchPages()).toEqual(["General"]);
+    expect(screen.queryByRole("switch", { name: "Mail" })).toBeNull();
+    expect(screen.queryByText("Appearance")).toBeNull();
+    expect(screen.queryByText("Make Harbor feel like your desk. Every preference is stored on this machine.")).toBeNull();
+
+    fireEvent.change(field, { target: { value: "" } });
+    expect(await screen.findByRole("switch", { name: "Mail" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Default shell" })).toBeNull();
+  });
+
+  it("finds Mail across pages and reports when nothing matches", async () => {
+    renderSettings();
+
+    const field = screen.getByRole("textbox", { name: "Search settings" });
+    fireEvent.change(field, { target: { value: "Mail" } });
+
+    expect(await screen.findByRole("switch", { name: "Mail" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Pause agent mail" })).toBeTruthy();
+    expect(searchPages()).toEqual(["Notifications", "Agents"]);
+    expect(screen.queryByRole("combobox", { name: "Default shell" })).toBeNull();
+
+    fireEvent.change(field, { target: { value: "xyzzy" } });
+    expect(screen.getByText("No settings match “xyzzy”.")).toBeTruthy();
+    expect(screen.queryByRole("switch", { name: "Mail" })).toBeNull();
+  });
+});
