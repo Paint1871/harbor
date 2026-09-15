@@ -3,6 +3,7 @@ import { call } from "../../ipc";
 import { Button } from "@harbor/ui/Button";
 import type { AgentChat, AgentRecord, DetectedEngine, Memory, Place, PluginRow, SearchHit } from "@harbor/schema/commands";
 import { FacePicker } from "./FacePicker";
+import { memoryMatchesQuery } from "./memoryMatchesQuery";
 
 interface GearPanelProps {
   agent: AgentRecord;
@@ -45,6 +46,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [memoryQuery, setMemoryQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [plugins, setPlugins] = useState<PluginRow[]>([FALLBACK_PLUGIN]);
   const [pluginGrants, setPluginGrants] = useState<Record<string, boolean>>({});
@@ -58,6 +60,7 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     setHomePath(agent.homePath ?? "");
     setError(null);
     setQuery("");
+    setMemoryQuery("");
     setHits([]);
     void call("memory_list", { agentId: agent.id })
       .then(setMemories)
@@ -202,6 +205,8 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
     }
   }
 
+  const visibleMemories = memories.filter((item) => memoryMatchesQuery(item.body, memoryQuery));
+
   return (
     <aside className="harbor-gear" aria-label="Agent gear">
       <div className="harbor-gear-intro">
@@ -244,12 +249,20 @@ export function GearPanel({ agent, chats = [], onAgentChange, onOpenChat, onOpen
           <span className="harbor-chip">Facts</span>
         </div>
         <p className="harbor-muted">Facts only — never secrets.</p>
-        {memories.length ? (
+        <div className="harbor-gear-form harbor-memory-search">
+          <label>
+            Search memory
+            <input value={memoryQuery} placeholder="Find a fact" onChange={(event) => setMemoryQuery(event.target.value)} />
+          </label>
+        </div>
+        {visibleMemories.length ? (
           <div className="harbor-gear-list harbor-memory-list">
-            {memories.map((item) => (
+            {visibleMemories.map((item) => (
               <div key={item.id} className="harbor-gear-list-row"><span>{item.body}</span><Button variant="ghost" onClick={() => void removeMemory(item.id)}>Remove</Button></div>
             ))}
           </div>
+        ) : memoryQuery.trim() ? (
+          <p className="harbor-muted">No facts match “{memoryQuery}”.</p>
         ) : <p className="harbor-muted">No remembered facts yet.</p>}
         <form className="harbor-gear-form" onSubmit={(event) => { event.preventDefault(); void addMemory(); }}>
           <label>

@@ -2191,6 +2191,7 @@ button, input, textarea, select {
 .harbor-home-picker { display: flex; gap: 8px; align-items: center; }
 .harbor-home-picker input { flex: 1; min-width: 0; }
 .harbor-memory-list { max-height: 150px; overflow: auto; }
+.harbor-memory-search { margin: 0 0 12px; }
 .harbor-path { direction: ltr; text-align: left; }
 .harbor-check-row { display: flex; align-items: flex-start; gap: 9px; color: var(--harbor-text); font-size: var(--harbor-text-sm); cursor: pointer; }
 .harbor-check-row input { margin: 3px 0 0; accent-color: var(--harbor-accent-think); }
