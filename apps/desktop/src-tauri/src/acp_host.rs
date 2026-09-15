@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use harbor_acp::session::{AcpHostSession, ConfigOption, ResumeKind};
-use harbor_acp::spawn::SpawnSpec;
+use harbor_acp::spawn::{SpawnSpec, plugin_mcp_servers};
 use harbor_acp::transport::write_message;
 use harbor_acp::{PermissionHook, permission_outcome};
 use harbor_core::SqlitePool;
@@ -372,7 +372,9 @@ fn get_or_connect(
         command: granted.display().to_string(),
         args,
         cwd: ctx.cwd.clone(),
-        mcp_servers: vec![],
+        mcp_servers: std::env::current_exe()
+            .map(|path| plugin_mcp_servers(&path.to_string_lossy(), key))
+            .unwrap_or_default(),
     };
     let mut session = AcpHostSession::connect(spec.clone()).map_err(|error| error.to_string())?;
     session.set_permission_hook(hook);
@@ -784,6 +786,36 @@ mod tests {
 
     use super::*;
     use harbor_core::types::CreateAgent;
+
+    fn looks_tokenish(value: &str) -> bool {
+        harbor_plugins::keyring::looks_like_github_user_token(value)
+            || value.starts_with("ghp_")
+            || value.starts_with("github_pat_")
+            || value.starts_with("sk-")
+            || value.contains("Bearer ")
+    }
+
+    #[test]
+    fn live_spawn_spec_includes_harbor_plugins_mcp_without_tokens() {
+        let servers = plugin_mcp_servers("/usr/bin/harbor", "thread-abc");
+        assert_eq!(servers.len(), 1);
+        let server = &servers[0];
+        assert_eq!(server.name, "harbor-plugins");
+        assert_eq!(server.command, "/usr/bin/harbor");
+        assert_eq!(server.args, ["mcp-plugins", "--session", "thread-abc"]);
+        let encoded = serde_json::to_value(server).unwrap();
+        assert!(encoded["env"].is_array());
+        assert!(!encoded["env"].is_object());
+        assert_eq!(encoded["env"].as_array().unwrap().len(), 1);
+        assert_eq!(encoded["env"][0]["name"], "HARBOR_PLUGIN_SESSION");
+        assert_eq!(encoded["env"][0]["value"], "thread-abc");
+        for env in &server.env {
+            assert!(!env.name.to_ascii_uppercase().contains("TOKEN"));
+            assert!(!looks_tokenish(&env.value), "{}", env.value);
+        }
+        assert!(!looks_tokenish(&encoded.to_string()));
+        assert!(plugin_mcp_servers("", "thread-abc").is_empty());
+    }
 
     #[test]
     fn extracts_only_visible_assistant_chunks_from_v1_updates() {

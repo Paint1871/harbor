@@ -10,7 +10,7 @@ pub use session::{
     ConfigOption, ConfigSource, ConfigValue, InitializeCaps, ResumeKind, parse_config_options,
     resume_or_new, set_option_call,
 };
-pub use spawn::{McpServer, SpawnSpec};
+pub use spawn::{McpServer, SpawnSpec, plugin_mcp_servers};
 pub use transport::PermissionHook;
 
 #[derive(Debug, thiserror::Error)]
