@@ -1987,7 +1987,11 @@ button, input, textarea, select {
 .harbor-chat-transcript > * { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
 .harbor-chat-main > .harbor-chat-transcript { padding: 24px clamp(20px, 4vw, 56px); }
 .harbor-chat-main > .harbor-composer { margin: 12px clamp(16px, 3vw, 40px) 18px; }
-.harbor-chat-main .harbor-bubble-user { align-self: flex-end; max-width: 72%; }
+.harbor-chat-main .harbor-transcript-item:has(> .harbor-bubble-user) {
+  align-self: flex-end;
+  max-width: 72%;
+  align-items: flex-end;
+}
 .harbor-chat-start > small { max-width: 100%; overflow-wrap: anywhere; }
 
 @media (max-width: 1000px) {
@@ -2401,6 +2405,24 @@ button, input, textarea, select {
 .harbor-chat-transcript > * { display: flex; flex-direction: column; gap: 5px; }
 .harbor-transcript-line::before { content: attr(data-role); color: var(--harbor-muted); font-size: 10px; font-weight: 600; letter-spacing: var(--harbor-label-tracking); text-transform: uppercase; }
 .harbor-bubble-user::before { color: color-mix(in srgb, var(--harbor-accent-think) 80%, var(--harbor-text)); }
+.harbor-transcript-copy {
+  appearance: none;
+  align-self: flex-start;
+  width: fit-content;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--harbor-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.harbor-transcript-copy:hover,
+.harbor-transcript-copy:focus-visible { color: var(--harbor-text); }
+.harbor-chat-main .harbor-transcript-item:has(> .harbor-bubble-user) .harbor-transcript-copy { align-self: flex-end; }
 .harbor-plugin-note { max-width: 560px; margin-top: 20px; padding: 15px 16px; border: 1px solid var(--harbor-hairline); border-radius: var(--harbor-radius-control); background: var(--harbor-well); }
 .harbor-plugin-note p { margin: 7px 0 0; color: var(--harbor-muted); font-size: var(--harbor-text-sm); line-height: 1.55; }
 .harbor-approval > h3 { margin: 5px 0 8px; font-size: 15px; font-weight: 550; }
