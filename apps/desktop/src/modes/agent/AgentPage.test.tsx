@@ -276,6 +276,9 @@ const chrome: ChromeValue = {
   onSettings: () => undefined,
   onTidy: () => undefined,
   registerTidy: () => undefined,
+  registerNewThread: () => undefined,
+  registerNewAgentChat: () => undefined,
+  registerCodeWorkspace: () => undefined,
 };
 
 it("shows the last line and Needs you on the roster", () => {
@@ -395,4 +398,16 @@ it("offers the skill catalog in the agent's own Skills tab", async () => {
   fireEvent.click(screen.getAllByRole("button", { name: "Use in this chat" })[0]!);
   const composer = await screen.findByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
   expect(composer.value).toMatch(/^Review the current change carefully/);
+});
+
+it("creates a chat from the registered shortcut handler", async () => {
+  const registerNewAgentChat = vi.fn();
+  render(
+    <ChromeProvider value={{ ...chrome, registerNewAgentChat }}>
+      <AgentPage agent={agent} />
+    </ChromeProvider>,
+  );
+  await waitFor(() => expect(registerNewAgentChat).toHaveBeenCalled());
+  registerNewAgentChat.mock.calls.at(-1)?.[0]();
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("agent_chat_create", { agentId: "agent-1" }));
 });

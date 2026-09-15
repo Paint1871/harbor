@@ -136,7 +136,7 @@ export function CodeMode({
   railOpen?: boolean;
   onPaneSelectRegister?: (handler: (workspaceId: string, paneId: string) => void) => void;
 }) {
-  const { registerTidy, setDestination } = useChrome();
+  const { registerTidy, registerCodeWorkspace, setDestination } = useChrome();
   const [layout, setLayout] = useState<PaneLayout>(DEFAULT_LAYOUT);
   const [focused, setFocused] = useState<string | null>("term");
   const [layoutError, setLayoutError] = useState<string | null>(null);
@@ -332,6 +332,11 @@ export function CodeMode({
       setLayout((current) => tidyCodeLayout(current, panesRef.current));
     });
   }, [registerTidy]);
+
+  useEffect(() => {
+    registerCodeWorkspace(() => activeWorkspaceIdRef.current);
+    return () => registerCodeWorkspace(() => null);
+  }, [registerCodeWorkspace]);
 
   useEffect(() => {
     void (async () => {

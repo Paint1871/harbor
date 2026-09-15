@@ -28,6 +28,9 @@ const chrome: ChromeValue = {
   onSettings: () => undefined,
   onTidy: () => undefined,
   registerTidy: () => undefined,
+  registerNewThread: () => undefined,
+  registerNewAgentChat: () => undefined,
+  registerCodeWorkspace: () => undefined,
 };
 
 beforeEach(() => {

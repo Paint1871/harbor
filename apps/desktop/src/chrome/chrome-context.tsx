@@ -16,6 +16,9 @@ export interface ChromeValue {
   onSettings: () => void;
   onTidy: () => void;
   registerTidy: (handler: () => void) => void;
+  registerNewThread: (handler: (workspaceId?: string | null) => void) => void;
+  registerNewAgentChat: (handler: () => void) => void;
+  registerCodeWorkspace: (handler: () => string | null) => void;
 }
 
 const ChromeContext = createContext<ChromeValue | null>(null);
