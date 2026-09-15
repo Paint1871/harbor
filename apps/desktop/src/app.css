@@ -1,10 +1,3 @@
-@font-face {
-  font-family: "Inter";
-  src: local("Inter Variable"), local("Inter"), local("Inter Tight");
-  font-display: swap;
-  font-weight: 100 900;
-}
-
 *,
 *::before,
 *::after { box-sizing: border-box; }
