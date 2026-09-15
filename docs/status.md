@@ -24,10 +24,10 @@ Last reviewed 2026-09-15.
   decorative orbit; hold-to-talk is a no-op.
 - **Faces.** The face slot is `faceIndex % 64`, not a stable hash of the agent
   id. `face_preview` is typed as `{ pngB64 }` while core returns an SVG data URL.
-- **ACP extras.** `mcp_servers` is always empty in `SpawnSpec` so plugin tokens
-  never reach an engine. Agent `home_path` is stored on create when the builder
+- **ACP extras.** Agent `home_path` is stored on create when the builder
   picks a folder; otherwise the ACP cwd still falls back to a granted place or a
-  temp directory.
+  temp directory. Live ACP spawns attach a `harbor-plugins` stdio MCP sidecar;
+  plugin tokens stay in that process and never enter the engine environment.
 
 ## What is built
 

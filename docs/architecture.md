@@ -10,6 +10,7 @@ harbor (Tauri host)
 ├── renderer (React, no shell of its own)
 ├── PTY children (allowlisted executables only)
 └── ACP children (coding CLIs on PATH, stdio JSON-RPC)
+    └── harbor mcp-plugins (stdio MCP sidecar, spawned by the engine)
 ```
 
 The renderer cannot spawn processes. File access is limited to host-granted

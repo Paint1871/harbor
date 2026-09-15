@@ -46,6 +46,11 @@ pub fn run() {
     if std::env::args().nth(1).as_deref() == Some("usage-bridge") {
         std::process::exit(usage_bridge::run(&usage_dir()));
     }
+    // Engines spawn `harbor mcp-plugins --session <id>` as a stdio MCP sidecar.
+    // Tokens stay in this process (keyring); they never enter the engine env.
+    if std::env::args().nth(1).as_deref() == Some("mcp-plugins") {
+        std::process::exit(harbor_plugins::mcp::run());
+    }
 
     let data_root = application_data_root();
     crash::install(&data_root);
