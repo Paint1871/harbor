@@ -127,6 +127,7 @@ mod tests {
                 brief: "Review diffs".into(),
                 engine_id: "opencode".into(),
                 face_index: 0,
+                home_path: None,
             },
         )
         .await

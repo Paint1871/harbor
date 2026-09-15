@@ -105,15 +105,16 @@ export function AgentMode({ railOpen = true }: { railOpen?: boolean }) {
           onClose={() => setCreating(false)}
           onCreate={async (input) => {
             const created = await call("agent_create", {
-              input: { name: input.name, brief: input.brief, engineId: input.engineId, faceIndex: input.faceIndex },
+              input: {
+                name: input.name,
+                brief: input.brief,
+                engineId: input.engineId,
+                faceIndex: input.faceIndex,
+                homePath: input.homePath,
+              },
             });
-            let record = created;
-            if (input.homePath) {
-              await call("agent_update", { input: { id: created.id, homePath: input.homePath } });
-              record = { ...created, homePath: input.homePath };
-            }
-            setAgents((current) => [...current, record]);
-            setSelected(record.id);
+            setAgents((current) => [...current, created]);
+            setSelected(created.id);
             setCreating(false);
           }}
         />

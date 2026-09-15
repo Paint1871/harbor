@@ -296,6 +296,7 @@ mod tests {
                 brief: "b".into(),
                 engine_id: "opencode".into(),
                 face_index: 0,
+                home_path: None,
             },
         )
         .await

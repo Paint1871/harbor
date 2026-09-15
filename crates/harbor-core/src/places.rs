@@ -114,6 +114,7 @@ mod tests {
                 brief: String::new(),
                 engine_id: "opencode".into(),
                 face_index: 0,
+                home_path: None,
             },
         )
         .await
