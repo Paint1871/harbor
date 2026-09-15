@@ -17,13 +17,13 @@ Last reviewed 2026-09-15.
 - **Dictation.** `dictation_begin` / `dictation_end` are unimplemented.
   `harbor_speech::engine_available()` is `false`. There is no silent cloud
   fallback; that is intentional.
-- **Settings.** Several rows (startup mode, shell, Recheck, per-kind
-  notification filters) are still explanatory copy rather than wired controls.
-  UI zoom, desktop notifications, and notification sound honor their stored values.
+- **Settings.** Startup mode and Recheck still need tighter wiring as live
+  chrome controls. UI zoom, default shell, desktop notifications, notification
+  sound, and per-kind notification filters honor their stored values.
 - **Voice.** Dictation and a title-bar mute orb are not shipped. Welcome has a
   decorative orbit; hold-to-talk is a no-op.
-- **Faces.** The face slot is `faceIndex % 64`, not a stable hash of the agent
-  id. `face_preview` is typed as `{ pngB64 }` while core returns an SVG data URL.
+- **Faces.** `face_preview` returns an SVG data URL. New agents get a stable
+  atlas slot from a hash of the agent id unless the builder picks a face.
 - **ACP extras.** Agent `home_path` is stored on create when the builder
   picks a folder; otherwise the ACP cwd still falls back to a granted place or a
   temp directory. Live ACP spawns attach a `harbor-plugins` stdio MCP sidecar;

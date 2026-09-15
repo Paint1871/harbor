@@ -5,6 +5,12 @@ import { Segmented } from "@harbor/ui/Segmented";
 import type { BridgeStatus, DetectedEngine } from "@harbor/schema/commands";
 import type { Theme } from "@harbor/ui/theme";
 import { settingsGet, settingsSet } from "./api";
+import {
+  NOTIFICATION_KINDS,
+  parseNotificationKinds,
+  toggleNotificationKind,
+  type NotificationKindId,
+} from "./notification-kinds";
 import { applyUiZoom, parseUiZoomPercent, UI_ZOOM_PERCENTS } from "./ui-zoom";
 
 const PAGES = [
@@ -94,6 +100,36 @@ function valueString(value: unknown, fallback: string): string {
 
 function valueBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function NotificationKindToggles({ save }: { save: (key: string, value: unknown) => Promise<void> }) {
+  const [kinds, setKinds] = useState<NotificationKindId[]>(() => parseNotificationKinds(null));
+
+  useEffect(() => {
+    let active = true;
+    void settingsGet("notification_kinds").then((value) => {
+      if (active) setKinds(parseNotificationKinds(value));
+    });
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <>
+      {NOTIFICATION_KINDS.map((kind) => (
+        <Toggle
+          key={kind.id}
+          label={kind.label}
+          description={kind.description}
+          checked={kinds.includes(kind.id)}
+          onChange={(value) => {
+            const next = toggleNotificationKind(kinds, kind.id, value);
+            setKinds(next);
+            void save("notification_kinds", next);
+          }}
+        />
+      ))}
+    </>
+  );
 }
 
 export function Settings({
@@ -293,8 +329,8 @@ export function Settings({
               <div className="harbor-settings-list">
                 <Toggle label="Desktop notifications" description="Show prompt, permission, question, complete, and fail events." checked={notifications} onChange={(value) => { setNotifications(value); void save("notifications_enabled", value); }} />
                 <Toggle label="Notification sound" description="Play a quiet sound for events while Harbor is in the background." checked={notificationSound} onChange={(value) => { setNotificationSound(value); void save("notification_sound", value); }} />
+                <NotificationKindToggles save={save} />
               </div>
-              <div className="harbor-settings-callout"><span className="harbor-live-dot" data-on="true" /><span><strong>Event types</strong><small>Prompt · Permission · Question · Complete · Fail</small></span></div>
             </>
           ) : null}
 

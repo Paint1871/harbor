@@ -723,6 +723,10 @@ fn should_emit_notification(enabled: Option<&Value>) -> bool {
 
 /// Records an event and tells the renderer, so the bell updates without polling.
 ///
+/// `notification_kinds` is an optional JSON array of enabled kind ids. A missing
+/// setting enables every kind; a kind outside the list is neither recorded nor
+/// emitted.
+///
 /// `notifications_enabled` defaults on. An explicit `false` still writes the
 /// inbox row (history on next open) but skips the live event so the badge
 /// stays quiet.
@@ -734,6 +738,13 @@ pub async fn notify(
     body: &str,
     target: harbor_core::notifications::Target,
 ) {
+    let kinds = harbor_core::settings::get(pool, "notification_kinds")
+        .await
+        .ok()
+        .flatten();
+    if !harbor_core::notifications::kind_allowed(kinds, kind) {
+        return;
+    }
     if let Ok(row) = harbor_core::notifications::record(pool, kind, title, body, target).await {
         let enabled = harbor_core::settings::get(pool, "notifications_enabled")
             .await
@@ -1082,6 +1093,32 @@ mod tests {
         assert!(super::should_emit_notification(Some(&json!(null))));
         assert!(super::should_emit_notification(Some(&json!("false"))));
         assert!(!super::should_emit_notification(Some(&json!(false))));
+    }
+
+    #[test]
+    fn kind_filter_defaults_to_all_and_honors_an_explicit_list() {
+        use harbor_core::notifications::kind_allowed;
+        use serde_json::json;
+
+        assert!(kind_allowed(None, "permission"));
+        assert!(kind_allowed(Some(json!(null)), "mail"));
+        assert!(kind_allowed(Some(json!(true)), "terminal-exit"));
+        assert!(kind_allowed(Some(json!("mail")), "mail"));
+        assert!(kind_allowed(Some(json!(["mail"])), "mail"));
+        assert!(!kind_allowed(Some(json!(["mail"])), "permission"));
+        assert!(!kind_allowed(Some(json!([])), "turn-finished"));
+        assert!(kind_allowed(
+            Some(json!(["turn-cancelled", "turn-refused", "turn-stopped"])),
+            "turn-stopped"
+        ));
+        assert!(!kind_allowed(
+            Some(json!(["turn-cancelled"])),
+            "turn-stopped"
+        ));
+        assert!(!kind_allowed(
+            Some(json!([1, true, {"kind": "mail"}])),
+            "mail"
+        ));
     }
 
     fn handler_commands() -> Vec<String> {

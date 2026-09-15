@@ -45,3 +45,75 @@ describe("Settings UI zoom", () => {
     });
   });
 });
+
+describe("Settings notification kinds", () => {
+  afterEach(() => cleanup());
+
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+    mocks.invoke.mockImplementation((command: string, args?: { key?: string; value?: unknown }) => {
+      if (command === "settings_get") return Promise.resolve(null);
+      if (command === "settings_set") return Promise.resolve();
+      if (command === "engines_detect") return Promise.resolve([]);
+      if (command === "usage_bridge_status") return Promise.resolve({ connected: false, chained: false });
+      return Promise.resolve(null);
+    });
+  });
+
+  it("saves the updated allow-list when a kind is toggled off", async () => {
+    render(
+      <Settings
+        theme="black"
+        initialPage="notifications"
+        onThemeChange={() => undefined}
+        onClose={() => undefined}
+        onShowWelcome={() => undefined}
+      />,
+    );
+
+    const mail = await screen.findByRole("switch", { name: "Mail" });
+    await waitFor(() => expect(mail.getAttribute("aria-checked")).toBe("true"));
+    fireEvent.click(mail);
+    await waitFor(() => {
+      expect(mocks.invoke).toHaveBeenCalledWith("settings_set", {
+        key: "notification_kinds",
+        value: [
+          "permission",
+          "terminal-exit",
+          "turn-finished",
+          "turn-cancelled",
+          "turn-refused",
+          "turn-stopped",
+        ],
+      });
+    });
+  });
+
+  it("loads a stored allow-list", async () => {
+    mocks.invoke.mockImplementation((command: string, args?: { key?: string }) => {
+      if (command === "settings_get" && args?.key === "notification_kinds") {
+        return Promise.resolve(["mail"]);
+      }
+      if (command === "settings_get") return Promise.resolve(null);
+      if (command === "settings_set") return Promise.resolve();
+      if (command === "engines_detect") return Promise.resolve([]);
+      if (command === "usage_bridge_status") return Promise.resolve({ connected: false, chained: false });
+      return Promise.resolve(null);
+    });
+
+    render(
+      <Settings
+        theme="black"
+        initialPage="notifications"
+        onThemeChange={() => undefined}
+        onClose={() => undefined}
+        onShowWelcome={() => undefined}
+      />,
+    );
+
+    const mail = await screen.findByRole("switch", { name: "Mail" });
+    const needsYou = screen.getByRole("switch", { name: "Needs you" });
+    await waitFor(() => expect(mail.getAttribute("aria-checked")).toBe("true"));
+    await waitFor(() => expect(needsYou.getAttribute("aria-checked")).toBe("false"));
+  });
+});
