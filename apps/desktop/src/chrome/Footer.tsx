@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
 import { settingsSet } from "../settings";
@@ -8,7 +8,29 @@ import { UsageStrip } from "./UsageStrip";
 export function Footer() {
   const { profileName, theme, onThemeChange, onSettings } = useChrome();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const appearanceRef = useRef<HTMLDivElement>(null);
   const initial = profileName.trim().charAt(0).toUpperCase() || "L";
+
+  useEffect(() => {
+    if (!appearanceOpen) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!appearanceRef.current?.contains(event.target as Node)) setAppearanceOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      event.preventDefault();
+      setAppearanceOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    // Capture on window so this menu closes before DesktopShell handles Escape for Settings.
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [appearanceOpen]);
+
   return (
     <footer className="harbor-footer">
       <UsageStrip />
@@ -23,7 +45,7 @@ export function Footer() {
           </span>
         </div>
         <div className="harbor-footer-account-actions">
-          <div className="harbor-footer-appearance">
+          <div className="harbor-footer-appearance" ref={appearanceRef}>
             <Button
               size="icon"
               variant="ghost"
