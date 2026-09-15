@@ -41,6 +41,7 @@
     "allow-acp-permission-resolve",
     "allow-session-watch",
     "allow-git-diff",
+    "allow-open-external-url",
     "allow-engine-usage",
     "allow-usage-bridge-status",
     "allow-usage-bridge-connect",

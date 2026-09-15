@@ -10,6 +10,7 @@ use harbor_core::types::{
 };
 use serde_json::{Value, json};
 use std::path::Path;
+use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_fs::FsExt;
@@ -989,6 +990,82 @@ pub async fn git_diff(
         .map_err(map_err)
 }
 
+/// Only http(s) URLs leave the host through the system URL handler. The
+/// renderer never gets `shell:` permissions.
+fn allowed_external_url(url: &str) -> Option<&str> {
+    let url = url.trim();
+    if url.is_empty()
+        || url
+            .bytes()
+            .any(|b| b.is_ascii_control() || b.is_ascii_whitespace() || b == b'"')
+    {
+        return None;
+    }
+    let rest = if url
+        .get(..8)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+    {
+        &url[8..]
+    } else if url
+        .get(..7)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("http://"))
+    {
+        &url[7..]
+    } else {
+        return None;
+    };
+    if rest.is_empty() || rest.starts_with('/') {
+        return None;
+    }
+    Some(url)
+}
+
+fn open_in_system_browser(url: &str) -> Result<(), String> {
+    let status = system_open_command(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("could not open the system browser".into())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn system_open_command(url: &str) -> Command {
+    let mut command = Command::new("open");
+    command.arg(url);
+    command
+}
+
+#[cfg(target_os = "linux")]
+fn system_open_command(url: &str) -> Command {
+    let mut command = Command::new("xdg-open");
+    command.arg(url);
+    command
+}
+
+#[cfg(windows)]
+fn system_open_command(url: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    let mut command = Command::new("cmd");
+    command.arg("/c");
+    // `start` treats the first quoted token as a window title; wrap the URL
+    // so cmd does not split on `&` in a query string.
+    command.raw_arg(format!("start \"\" \"{url}\""));
+    command
+}
+
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    let url = allowed_external_url(&url)
+        .ok_or("only http and https URLs can open in the system browser")?;
+    open_in_system_browser(url)
+}
+
 pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         settings_get,
@@ -1077,6 +1154,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         updater_check,
         updater_install,
         git_diff,
+        open_external_url,
         engine_usage,
         usage_bridge_status,
         usage_bridge_connect
@@ -1085,6 +1163,16 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn allowed_external_url_accepts_http_and_https_only() {
+        assert_eq!(
+            super::allowed_external_url("https://example.com"),
+            Some("https://example.com")
+        );
+        assert_eq!(super::allowed_external_url("file:///etc/passwd"), None);
+        assert_eq!(super::allowed_external_url("javascript:alert(1)"), None);
+    }
+
     #[test]
     fn live_notification_skips_emit_only_when_explicitly_disabled() {
         use serde_json::json;

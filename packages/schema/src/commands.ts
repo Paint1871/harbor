@@ -287,6 +287,7 @@ export interface HarborCommands {
   fs_write: { args: { workspaceId: string; path: string; contents: string }; returns: void };
   fs_list: { args: { workspaceId: string; path: string }; returns: FsEntry[] };
   git_diff: { args: { workspaceId: string }; returns: FileDiff[] };
+  open_external_url: { args: { url: string }; returns: void };
 
   thread_list: { args: { workspaceId: string | null }; returns: ThreadRecord[] };
   thread_history: { args: { id: string }; returns: ChatMessage[] };

@@ -1,4 +1,5 @@
-import { useEffect, useRef, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { call } from "../ipc";
 import { PaneHeader } from "./PaneHeader";
 
 const DEFAULT_URL = "http://localhost:3000/pricing";
@@ -48,6 +49,7 @@ export function BrowserPane({ state, onStateChange, focused, expanded = false, o
   const { draft, url, history, historyIndex, frameKey, status } = state;
   const onStateChangeRef = useRef(onStateChange);
   onStateChangeRef.current = onStateChange;
+  const [openError, setOpenError] = useState<string | null>(null);
 
   useEffect(() => {
     onStateChangeRef.current((current) => ({ ...current, status: "loading" }));
@@ -76,6 +78,13 @@ export function BrowserPane({ state, onStateChange, focused, expanded = false, o
     onStateChange((current) => ({ ...current, historyIndex: nextIndex, url: nextUrl, draft: displayUrl(nextUrl), status: "loading" }));
   }
 
+  function openInSystemBrowser() {
+    setOpenError(null);
+    void call("open_external_url", { url }).catch(() => {
+      setOpenError("Could not open in system browser");
+    });
+  }
+
   return (
     <section className="harbor-pane harbor-browser-pane" data-focused={focused} onClick={onFocus} aria-label="localhost:3000">
       <PaneHeader
@@ -89,7 +98,12 @@ export function BrowserPane({ state, onStateChange, focused, expanded = false, o
             <form onSubmit={navigate}>
               <input aria-label="Preview URL" value={draft} onChange={(event) => onStateChange((current) => ({ ...current, draft: event.target.value }))} />
             </form>
-            <span className="harbor-browser-status harbor-sr-only" data-status={status} role="status">{status === "ready" ? "Live" : status === "offline" ? "Offline" : "Loading"}</span>
+            <button type="button" className="harbor-browser-open" aria-label="Open in system browser" title="Open in system browser" onClick={openInSystemBrowser}>
+              Open in system browser
+            </button>
+            <span className={openError ? "harbor-browser-status" : "harbor-browser-status harbor-sr-only"} data-status={openError ? "offline" : status} role="status">
+              {openError ?? (status === "ready" ? "Live" : status === "offline" ? "Offline" : "Loading")}
+            </span>
           </div>
         }
         expanded={expanded}

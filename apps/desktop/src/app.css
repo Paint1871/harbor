@@ -4218,6 +4218,13 @@ button, input, textarea, select {
 .harbor-browser-toolbar-inline > button:hover:not(:disabled) { color: var(--harbor-text); background: var(--harbor-raised); }
 .harbor-browser-toolbar > button:disabled,
 .harbor-browser-toolbar-inline > button:disabled { opacity: .35; cursor: default; }
+.harbor-browser-toolbar > button.harbor-browser-open,
+.harbor-browser-toolbar-inline > button.harbor-browser-open {
+  width: auto;
+  padding: 0 7px;
+  font-size: 9px;
+  white-space: nowrap;
+}
 .harbor-browser-toolbar form,
 .harbor-browser-toolbar-inline form { flex: 1; min-width: 0; }
 .harbor-browser-toolbar input,
