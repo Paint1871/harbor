@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { call } from "../ipc";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@harbor/ui/Button";
+import { settingsGet } from "../settings";
+import { playNotificationBeep, shouldPlayNotificationSound } from "./notificationBeep";
 
 interface BellButtonProps {
   onClick: () => void;
@@ -11,9 +13,15 @@ interface BellButtonProps {
 
 export function BellButton({ onClick, suppressed = false }: BellButtonProps) {
   const [unread, setUnread] = useState(0);
+  const soundEnabled = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    const cacheSound = () => {
+      void settingsGet("notification_sound").then((value) => {
+        if (!cancelled) soundEnabled.current = value === true;
+      });
+    };
     const read = () => {
       void call("notifications_unread_count")
         .then((count) => {
@@ -21,9 +29,20 @@ export function BellButton({ onClick, suppressed = false }: BellButtonProps) {
         })
         .catch(() => undefined);
     };
+    const onNotification = () => {
+      read();
+      void settingsGet("notification_sound").then((value) => {
+        if (cancelled) return;
+        soundEnabled.current = value === true;
+        if (shouldPlayNotificationSound(document.hidden, soundEnabled.current)) {
+          playNotificationBeep();
+        }
+      });
+    };
+    cacheSound();
     read();
     // The host pushes each new row, so the count never waits on a poll.
-    const stop = listen("notification", read).catch(() => undefined);
+    const stop = listen("notification", onNotification).catch(() => undefined);
     return () => {
       cancelled = true;
       void stop.then((off) => (typeof off === "function" ? off() : undefined));
