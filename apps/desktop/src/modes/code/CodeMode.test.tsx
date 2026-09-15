@@ -35,6 +35,9 @@ const chrome: ChromeValue = {
   onSettings: () => undefined,
   onTidy: () => undefined,
   registerTidy: () => undefined,
+  registerNewThread: () => undefined,
+  registerNewAgentChat: () => undefined,
+  registerCodeWorkspace: () => undefined,
 };
 
 const workspace = { id: "ws-1", folder: "/tmp/project", title: "Project", pinned: false };
@@ -166,4 +169,17 @@ it("nests a workspace's panes under it and collapses them on a second click", as
 
   fireEvent.click(screen.getByRole("button", { name: /Project/ }));
   await waitFor(() => expect(screen.getByRole("button", { name: "Claude Code pane 1" })).toBeTruthy());
+});
+
+it("registers the active workspace for Chat shortcuts", async () => {
+  const registerCodeWorkspace = vi.fn();
+  render(
+    <ChromeProvider value={{ ...chrome, registerCodeWorkspace }}>
+      <CodeMode />
+    </ChromeProvider>,
+  );
+  await screen.findByRole("button", { name: /Project/ });
+  await waitFor(() => expect(registerCodeWorkspace).toHaveBeenCalled());
+  const getter = registerCodeWorkspace.mock.calls.at(-1)?.[0] as () => string | null;
+  expect(getter()).toBe("ws-1");
 });

@@ -16,6 +16,7 @@ import { Routines } from "../destinations/Routines";
 import { Skills } from "../destinations/Skills";
 import { AppRail } from "./AppRail";
 import { DestinationWorkspaceRail } from "./DestinationWorkspaceRail";
+import { interpretShortcut } from "./shortcuts";
 
 type SettingsPage = "general" | "notifications" | "voice" | "agents" | "account";
 
@@ -47,11 +48,57 @@ export function DesktopShell({
   const [inboxOpen, setInboxOpen] = useState(false);
   const [destination, setDestination] = useState<Destination>("mode");
   const tidyHandler = useRef<() => void>(() => undefined);
+  const newThreadHandler = useRef<(workspaceId?: string | null) => void>(() => undefined);
+  const newAgentChatHandler = useRef<() => void>(() => undefined);
+  const codeWorkspaceHandler = useRef<() => string | null>(() => null);
   const codePaneSelectHandler = useRef<(workspaceId: string, paneId: string) => void>(() => undefined);
+  const modeRef = useRef(mode);
+  const settingsOpenRef = useRef(settingsOpen);
+  const inboxOpenRef = useRef(inboxOpen);
+  modeRef.current = mode;
+  settingsOpenRef.current = settingsOpen;
+  inboxOpenRef.current = inboxOpen;
 
   useEffect(() => {
     void settingsSet("last_mode", mode);
   }, [mode]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = interpretShortcut(event);
+      if (!action) return;
+      if (action === "escape") {
+        if (settingsOpenRef.current) {
+          event.preventDefault();
+          setSettingsOpen(false);
+        } else if (inboxOpenRef.current) {
+          event.preventDefault();
+          setInboxOpen(false);
+        }
+        return;
+      }
+      event.preventDefault();
+      if (action === "settings") {
+        setSettingsPage("general");
+        setSettingsOpen(true);
+        return;
+      }
+      if (action === "new-thread") {
+        const current = modeRef.current;
+        if (current === "chat") newThreadHandler.current();
+        else if (current === "agent") newAgentChatHandler.current();
+        return;
+      }
+      if (action === "new-chat-thread" && modeRef.current === "code") {
+        const workspaceId = codeWorkspaceHandler.current();
+        setMode("chat");
+        setDestination("mode");
+        newThreadHandler.current(workspaceId);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const chrome = useMemo(
     () => ({
@@ -71,6 +118,15 @@ export function DesktopShell({
       onTidy: () => tidyHandler.current(),
       registerTidy: (handler: () => void) => {
         tidyHandler.current = handler;
+      },
+      registerNewThread: (handler: (workspaceId?: string | null) => void) => {
+        newThreadHandler.current = handler;
+      },
+      registerNewAgentChat: (handler: () => void) => {
+        newAgentChatHandler.current = handler;
+      },
+      registerCodeWorkspace: (handler: () => string | null) => {
+        codeWorkspaceHandler.current = handler;
       },
     }),
     [destination, mode, onThemeChange, profileName, theme],

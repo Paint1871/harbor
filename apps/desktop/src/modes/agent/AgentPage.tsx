@@ -24,6 +24,8 @@ interface AgentPageProps {
 
 export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }: AgentPageProps) {
   const chrome = useOptionalChrome();
+  const registerNewAgentChat = chrome?.registerNewAgentChat;
+  const setDestination = chrome?.setDestination;
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<"chats" | "skills" | "settings">("chats");
   const [configChoice, setConfigChoice] = useState<Record<string, Record<string, string>>>({});
@@ -71,6 +73,14 @@ export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }:
     // Agent view remains mounted behind them; refresh when the view returns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id, chrome?.destination]);
+  useEffect(() => {
+    if (!registerNewAgentChat) return;
+    registerNewAgentChat(() => {
+      setDestination?.("mode");
+      setTab("chats");
+      void chat.createChat();
+    });
+  }, [chat.createChat, registerNewAgentChat, setDestination]);
   const [optionsBusy, setOptionsBusy] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);

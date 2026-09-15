@@ -19,7 +19,7 @@ import { useChrome } from "../../chrome/chrome-context";
 import { AddWorkspace } from "../../workspaces/AddWorkspace";
 
 export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
-  const { mode, setDestination } = useChrome();
+  const { mode, setDestination, registerNewThread } = useChrome();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [lists, setLists] = useState<Record<string, ThreadRecord[]>>({});
@@ -99,20 +99,36 @@ export function ChatMode({ railOpen = true }: { railOpen?: boolean }) {
     return () => { disposed = true; };
   }, [workspaceId, acp.turn]);
 
-  async function newThread() {
+  async function newThread(preferredWorkspaceId?: string | null) {
     setDestination("mode");
-    if (!workspace) { setAdding(true); return; }
-    if (!engine || createLock.current) return;
+    if (preferredWorkspaceId) setWorkspaceId(preferredWorkspaceId);
+    const id = preferredWorkspaceId ?? workspace?.id ?? null;
+    if (!id) { setAdding(true); return; }
+    if (createLock.current) return;
     createLock.current = true;
     setCreating(true);
     setError(null);
     try {
-      const thread = await call("thread_create", { workspaceId: workspace.id, engineId: engine.id });
-      setLists((current) => ({ ...current, [workspace.id]: [thread, ...(current[workspace.id] ?? [])] }));
+      let chosen = engine;
+      if (!chosen) {
+        const detected = await call("engines_detect");
+        setEngines(detected);
+        const readyEngines = detected.filter((item) => item.status === "ready" && item.supportsChat);
+        chosen = readyEngines.find((item) => item.id === engineId) ?? readyEngines[0];
+      }
+      if (!chosen) return;
+      const thread = await call("thread_create", { workspaceId: id, engineId: chosen.id });
+      setLists((current) => ({ ...current, [id]: [thread, ...(current[id] ?? [])] }));
       setActive(thread);
     } catch { setError("The thread could not be created. Your folder is still open. Please try again."); }
     finally { setCreating(false); createLock.current = false; }
   }
+
+  const newThreadRef = useRef(newThread);
+  newThreadRef.current = newThread;
+  useEffect(() => {
+    registerNewThread((workspaceId) => { void newThreadRef.current(workspaceId); });
+  }, [registerNewThread]);
 
   async function installAdapter(engineId: string) {
     setInstalling(engineId);

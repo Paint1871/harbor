@@ -19,6 +19,9 @@ const chrome = (over: Partial<ChromeValue> = {}): ChromeValue => ({
   onSettings: () => undefined,
   onTidy: () => undefined,
   registerTidy: () => undefined,
+  registerNewThread: () => undefined,
+  registerNewAgentChat: () => undefined,
+  registerCodeWorkspace: () => undefined,
   ...over,
 });
 
