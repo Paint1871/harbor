@@ -4,6 +4,7 @@ import { Tree } from "./Tree";
 import { Editor } from "./Editor";
 import { TabBar } from "./TabBar";
 import { PaneHeader } from "../PaneHeader";
+import { confirmCloseDirtyTab } from "./helpers";
 
 interface FilesPaneProps {
   workspaceId?: string;
@@ -31,12 +32,27 @@ export function FilesPane({ workspaceId: givenId, focused, onFocus, expanded = f
   const workspaceId = givenId ?? fallbackWorkspaceId;
   const [open, setOpen] = useState<string[]>([]);
   const [active, setActive] = useState<string | undefined>();
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
   const [width, setWidth] = useState(220);
 
+  function setPathDirty(path: string, isDirty: boolean) {
+    setDirty((current) => {
+      if (Boolean(current[path]) === isDirty) return current;
+      if (!isDirty) {
+        const next = { ...current };
+        delete next[path];
+        return next;
+      }
+      return { ...current, [path]: true };
+    });
+  }
+
   function closeTab(path: string) {
+    if (!confirmCloseDirtyTab(Boolean(dirty[path]), (message) => window.confirm(message))) return;
     const index = open.indexOf(path);
     const next = open.filter((item) => item !== path);
     setOpen(next);
+    setPathDirty(path, false);
     if (active === path) {
       setActive(next[Math.max(0, index - 1)]);
     }
@@ -65,8 +81,14 @@ export function FilesPane({ workspaceId: givenId, focused, onFocus, expanded = f
           />
         </div>
         <div className="harbor-files-editor">
-          <TabBar files={open} active={active} onSelect={setActive} onClose={closeTab} />
-          <Editor path={active} workspaceId={workspaceId} />
+          <TabBar
+            files={open}
+            active={active}
+            dirty={Object.keys(dirty).filter((path) => dirty[path])}
+            onSelect={setActive}
+            onClose={closeTab}
+          />
+          <Editor path={active} workspaceId={workspaceId} onDirtyChange={setPathDirty} />
         </div>
       </div>
     </section>
