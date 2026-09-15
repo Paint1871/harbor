@@ -69,9 +69,12 @@ fn main_and_overlay_match_pr03_geometry() {
     assert_eq!(main["backgroundColor"], "#0B0B0C");
     assert_eq!(
         main["decorations"], true,
-        "Linux uses native window decorations"
+        "Linux native decorations stay true in the manifest"
     );
-    assert_eq!(main["titleBarStyle"], "Overlay");
+    assert_eq!(
+        main["titleBarStyle"], "Overlay",
+        "Overlay remains for macOS in the JSON manifest"
+    );
 
     let overlay = window(&config, "overlay");
     assert_eq!(overlay["visible"], false);
@@ -88,6 +91,39 @@ fn main_and_overlay_match_pr03_geometry() {
         icons
             .iter()
             .any(|icon| icon.as_str() == Some("icons/icon.png"))
+    );
+}
+
+#[test]
+fn linux_keeps_native_decorations_windows_stays_frameless() {
+    assert!(
+        super::linux_uses_native_decorations(),
+        "Linux policy is native decorations plus an in-content toolbar"
+    );
+
+    let config = read_json("tauri.conf.json");
+    let main = window(&config, "main");
+    assert_eq!(main["decorations"], true);
+    assert_eq!(main["titleBarStyle"], "Overlay");
+
+    let lib = fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap();
+    assert!(
+        lib.contains("#[cfg(windows)]"),
+        "Windows still turns decorations off at runtime"
+    );
+    assert!(lib.contains("set_decorations(false)"));
+    assert!(
+        lib.contains("#[cfg(target_os = \"linux\")]"),
+        "Linux-specific window setup must exist"
+    );
+    assert!(lib.contains("linux_uses_native_decorations()"));
+    assert!(
+        lib.contains("set_decorations(true)"),
+        "Linux must keep native decorations enabled"
+    );
+    assert!(
+        lib.contains("TitleBarStyle::Visible"),
+        "Linux must not keep Overlay client chrome"
     );
 }
 

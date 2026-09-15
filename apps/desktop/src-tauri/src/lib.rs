@@ -32,6 +32,14 @@ pub fn usage_dir() -> PathBuf {
     application_data_root().join("usage")
 }
 
+/// Linux keeps GTK/native window decorations. Harbor's title bar is an
+/// in-content toolbar under those buttons, not overlay client chrome.
+/// Overlay in `tauri.conf.json` stays for macOS; Windows still turns
+/// decorations off at runtime.
+pub fn linux_uses_native_decorations() -> bool {
+    true
+}
+
 pub fn run() {
     // Claude Code runs `harbor usage-bridge` as a status-line command many
     // times a session; it must answer on stdout and exit, never open a window.
@@ -58,6 +66,14 @@ pub fn run() {
             #[cfg(windows)]
             if let Some(main) = app.get_webview_window("main") {
                 main.set_decorations(false)?;
+            }
+            #[cfg(target_os = "linux")]
+            if linux_uses_native_decorations() {
+                if let Some(main) = app.get_webview_window("main") {
+                    main.set_decorations(true)?;
+                    // Overlay in the JSON manifest is macOS client chrome.
+                    main.set_title_bar_style(tauri::TitleBarStyle::Visible)?;
+                }
             }
             // No workspace roots or engine processes are opened on cold start.
             // Adapters Harbor installs live beside the database, never globally.

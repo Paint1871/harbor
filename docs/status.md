@@ -17,8 +17,6 @@ Last reviewed 2026-09-15.
 - **Dictation.** `dictation_begin` / `dictation_end` are unimplemented.
   `harbor_speech::engine_available()` is `false`. There is no silent cloud
   fallback; that is intentional.
-- **Linux title bar.** `tauri.conf.json` sets `titleBarStyle: Overlay` on every
-  platform. Linux should use native decorations plus an in-content toolbar.
 - **Settings.** Several rows (startup mode, shell, Recheck, per-kind
   notification filters) are still explanatory copy rather than wired controls.
   UI zoom, desktop notifications, and notification sound honor their stored values.

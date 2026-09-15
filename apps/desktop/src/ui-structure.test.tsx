@@ -112,8 +112,15 @@ describe("shipped Harbor chrome and mode trees", () => {
     expect(shell).not.toContain("harbor-orb-seat");
     expect(shell).not.toContain('aria-label="Voice"');
     // The sidebar toggle sits on the side it controls, before the mode switch.
-    const titlebar = shell.slice(shell.indexOf("harbor-titlebar-start"), shell.indexOf("harbor-titlebar-end"));
+    const titlebarStart = shell.indexOf("harbor-titlebar");
+    const titlebar = shell.slice(titlebarStart, shell.indexOf("</header>", titlebarStart));
     expect(titlebar).toContain("Hide sidebar");
+    // jsdom's userAgent is not Windows/macOS, so Linux in-content chrome is the default.
+    expect(shell).toContain('data-platform="linux"');
+    expect(titlebar).toContain('data-chrome="in-content"');
+    expect(titlebar).not.toContain('aria-label="Minimize"');
+    expect(titlebar).not.toContain('aria-label="Maximize"');
+    expect(titlebar).not.toContain('aria-label="Close"');
 
     const agentTree = wrap(
       createElement(
@@ -221,6 +228,13 @@ describe("shipped Harbor chrome and mode trees", () => {
 
     // Rail icons are SVG on one grid; glyph metrics used to need !important.
     expect(css).not.toMatch(/\.harbor-pane-row-icon[^{]*\{[^}]*!important/);
+
+    // Linux toolbar sits under native decorations; only macOS pads for traffic lights.
+    expect(css).toContain(
+      '.harbor-app[data-platform="macos"] .harbor-titlebar { padding-left: 78px; }',
+    );
+    expect(css).not.toMatch(/data-platform="linux"[^}]*78px/);
+    expect(css).toContain('.harbor-titlebar[data-chrome="in-content"]');
   });
 
   it("keeps the destination rail mounted for the shared sidebar animation", () => {
