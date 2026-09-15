@@ -6,6 +6,7 @@ import { DisclosureIcon, PaneIcon, type PaneIconKind } from "./icons";
 import { EngineMark } from "./EngineMark";
 import type { RestoredPane, Workspace, WorkspaceTab } from "@harbor/schema/commands";
 import { AddWorkspace } from "../workspaces/AddWorkspace";
+import { WorkspaceRailList } from "../workspaces/WorkspaceRailList";
 import { useChrome } from "./chrome-context";
 
 function paneName(pane: RestoredPane, index: number): string {
@@ -82,54 +83,56 @@ export function DestinationWorkspaceRail() {
               <span aria-hidden="true">+</span>
             </Button>
           </div>
-          {workspaces.length ? workspaces.map((workspace) => {
-            const tab = tabs.find((item) => item.workspaceId === workspace.id);
-            const terminals = tab?.panes.filter((pane) => pane.kind === "terminal") ?? [];
-            const expanded = expandedWorkspaceId === workspace.id;
-            const firstPane = tab ? orderedPanes(tab.panes)[0] : undefined;
-            return (
-              <div className="harbor-destination-workspace" key={workspace.id}>
-                <WorkspaceRailRow
-                  workspace={workspace}
-                  leading={<DisclosureIcon open={expanded} />}
-                  selected={expanded}
-                  onSelect={() => {
-                    setExpandedWorkspaceId(workspace.id);
-                    if (firstPane && onCodePaneSelect) onCodePaneSelect(workspace.id, firstPane.id);
-                    else onModeChange("code");
-                  }}
-                  onRenamed={(updated) =>
-                    setWorkspaces((rows) => rows.map((row) => (row.id === updated.id ? updated : row)))
-                  }
-                  onRemoved={(id) => {
-                    const rest = workspaces.filter((row) => row.id !== id);
-                    setWorkspaces(rest);
-                    setTabs((rows) => rows.filter((row) => row.workspaceId !== id));
-                    setExpandedWorkspaceId((current) => (current === id ? rest[0]?.id ?? null : current));
-                  }}
-                />
-                {expanded && tab?.panes.length ? (
-                  <ul className="harbor-destination-pane-rows" aria-label={`${workspaceName(workspace)} panes`}>
-                    {orderedPanes(tab.panes).map((pane, index) => {
-                      const terminalIndex = terminals.indexOf(pane);
-                      return (
-                        <li key={pane.id}>
-                          <button type="button" onClick={() => {
-                            setExpandedWorkspaceId(workspace.id);
-                            if (onCodePaneSelect) onCodePaneSelect(workspace.id, pane.id);
-                            else onModeChange("code");
-                          }}>
-                            <span className="harbor-pane-row-icon">{pane.kind === "terminal" ? <EngineMark engineId={pane.engineId} label={paneName(pane, terminalIndex < 0 ? index : terminalIndex)} size={13} /> : <PaneIcon kind={paneIconKind(pane, terminalIndex < 0 ? index : terminalIndex)} />}</span>
-                            {paneName(pane, terminalIndex < 0 ? index : terminalIndex)}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : null}
-              </div>
-            );
-          }) : <p className="harbor-rail-empty">Add a folder to start coding.</p>}
+          <WorkspaceRailList workspaces={workspaces} empty={<p className="harbor-rail-empty">Add a folder to start coding.</p>}>
+            {(workspace) => {
+              const tab = tabs.find((item) => item.workspaceId === workspace.id);
+              const terminals = tab?.panes.filter((pane) => pane.kind === "terminal") ?? [];
+              const expanded = expandedWorkspaceId === workspace.id;
+              const firstPane = tab ? orderedPanes(tab.panes)[0] : undefined;
+              return (
+                <div className="harbor-destination-workspace">
+                  <WorkspaceRailRow
+                    workspace={workspace}
+                    leading={<DisclosureIcon open={expanded} />}
+                    selected={expanded}
+                    onSelect={() => {
+                      setExpandedWorkspaceId(workspace.id);
+                      if (firstPane && onCodePaneSelect) onCodePaneSelect(workspace.id, firstPane.id);
+                      else onModeChange("code");
+                    }}
+                    onRenamed={(updated) =>
+                      setWorkspaces((rows) => rows.map((row) => (row.id === updated.id ? updated : row)))
+                    }
+                    onRemoved={(id) => {
+                      const rest = workspaces.filter((row) => row.id !== id);
+                      setWorkspaces(rest);
+                      setTabs((rows) => rows.filter((row) => row.workspaceId !== id));
+                      setExpandedWorkspaceId((current) => (current === id ? rest[0]?.id ?? null : current));
+                    }}
+                  />
+                  {expanded && tab?.panes.length ? (
+                    <ul className="harbor-destination-pane-rows" aria-label={`${workspaceName(workspace)} panes`}>
+                      {orderedPanes(tab.panes).map((pane, index) => {
+                        const terminalIndex = terminals.indexOf(pane);
+                        return (
+                          <li key={pane.id}>
+                            <button type="button" onClick={() => {
+                              setExpandedWorkspaceId(workspace.id);
+                              if (onCodePaneSelect) onCodePaneSelect(workspace.id, pane.id);
+                              else onModeChange("code");
+                            }}>
+                              <span className="harbor-pane-row-icon">{pane.kind === "terminal" ? <EngineMark engineId={pane.engineId} label={paneName(pane, terminalIndex < 0 ? index : terminalIndex)} size={13} /> : <PaneIcon kind={paneIconKind(pane, terminalIndex < 0 ? index : terminalIndex)} />}</span>
+                              {paneName(pane, terminalIndex < 0 ? index : terminalIndex)}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            }}
+          </WorkspaceRailList>
         </div>
       </div>
       {addingWorkspace ? <AddWorkspace onClose={() => setAddingWorkspace(false)} onAdded={async (workspace) => {
