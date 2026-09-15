@@ -15,6 +15,7 @@ const chrome: ChromeValue = {
   destination: "skills",
   setDestination: () => undefined,
   onModeChange,
+  onOpenSession: () => undefined,
   onThemeChange: () => undefined,
   onSettings: () => undefined,
   onTidy: () => undefined,

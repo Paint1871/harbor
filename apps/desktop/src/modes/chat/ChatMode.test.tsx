@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => {
 const { invoke, emitLocal } = mocks;
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: mocks.listen }));
-const chrome: ChromeValue = { mode: "chat", theme: "black", profileName: "Local", destination: "mode", setDestination: () => {}, onModeChange: () => {}, onThemeChange: () => {}, onSettings: () => {}, onTidy: () => {}, registerTidy: () => {} };
+const chrome: ChromeValue = { mode: "chat", theme: "black", profileName: "Local", destination: "mode", setDestination: () => {}, onModeChange: () => {}, onOpenSession: () => {}, onThemeChange: () => {}, onSettings: () => {}, onTidy: () => {}, registerTidy: () => {} };
 const workspace = { id: "project", folder: "/tmp/project", title: "Project", pinned: false };
 const thread = { id: "thread", workspaceId: "project", engineId: "opencode", title: "New thread", pinned: false, unread: false };
 let stored: { id: string; role: string; text: string }[];

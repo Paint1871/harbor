@@ -4,6 +4,13 @@ import type { Mode } from "./ModeSwitch";
 
 export type Destination = "mode" | "dashboard" | "plugins" | "routines" | "skills";
 
+export type OpenSessionTarget = {
+  mode: Mode;
+  sessionRef?: string | null;
+  workspaceId?: string | null;
+  paneId?: string | null;
+};
+
 export interface ChromeValue {
   mode: Mode;
   theme: Theme;
@@ -12,6 +19,7 @@ export interface ChromeValue {
   setDestination: (destination: Destination) => void;
   onModeChange: (mode: Mode) => void;
   onCodePaneSelect?: (workspaceId: string, paneId: string) => void;
+  onOpenSession?: (target: OpenSessionTarget) => void;
   onThemeChange: (theme: Theme) => void;
   onSettings: () => void;
   onTidy: () => void;

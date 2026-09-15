@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { call } from "../../ipc";
 import { Composer } from "@harbor/ui/Composer";
 import { Button } from "@harbor/ui/Button";
@@ -17,24 +17,47 @@ import { settingsGet, settingsSet } from "../../settings";
 
 interface AgentPageProps {
   agent: AgentRecord;
+  pendingChatId?: string | null;
+  onPendingChatConsumed?: () => void;
   onAgentChange?: (agent: AgentRecord) => void;
   onOpenSkills?: () => void;
   onOpenPlugins?: () => void;
 }
 
-export function AgentPage({ agent, onAgentChange, onOpenSkills, onOpenPlugins }: AgentPageProps) {
+export function AgentPage({
+  agent,
+  pendingChatId,
+  onPendingChatConsumed,
+  onAgentChange,
+  onOpenSkills,
+  onOpenPlugins,
+}: AgentPageProps) {
   const chrome = useOptionalChrome();
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<"chats" | "skills" | "settings">("chats");
   const [configChoice, setConfigChoice] = useState<Record<string, Record<string, string>>>({});
   const [teammates, setTeammates] = useState<AgentRecord[]>([]);
   const [mailError, setMailError] = useState<string | null>(null);
-  const chat = useAgentChat(agent.id);
+  const chat = useAgentChat(agent.id, pendingChatId);
   const mention = mentionQuery(draft);
   const mentionItems = teammates
     .filter((item) => item.id !== agent.id)
     .filter((item) => !mention || item.name.toLowerCase().includes(mention.toLowerCase()))
     .map((item) => ({ id: item.id, label: item.name }));
+
+  const consumedRef = useRef(onPendingChatConsumed);
+  consumedRef.current = onPendingChatConsumed;
+
+  useEffect(() => {
+    if (!pendingChatId) return;
+    let cancelled = false;
+    void chat.selectChat(pendingChatId).then((found) => {
+      if (cancelled || !found) return;
+      setTab("chats");
+      consumedRef.current?.();
+    });
+    return () => { cancelled = true; };
+  }, [pendingChatId, agent.id, chat.selectChat]);
 
   useEffect(() => {
     if (!chat.activeId || chat.configOptions.length) return;

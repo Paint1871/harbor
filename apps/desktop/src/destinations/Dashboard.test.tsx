@@ -14,6 +14,7 @@ const chrome: ChromeValue = {
   destination: "dashboard",
   setDestination: () => undefined,
   onModeChange: () => undefined,
+  onOpenSession: () => undefined,
   onThemeChange: () => undefined,
   onSettings: () => undefined,
   onTidy: () => undefined,

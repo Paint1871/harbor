@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Theme } from "@harbor/ui/theme";
 import { Inbox } from "./Inbox";
 import { TitleBar } from "./TitleBar";
-import { ChromeProvider, type Destination } from "./chrome-context";
+import { ChromeProvider, type Destination, type OpenSessionTarget } from "./chrome-context";
 import type { Mode } from "./ModeSwitch";
 import { AgentMode } from "../modes/AgentMode";
 import { ChatMode } from "../modes/ChatMode";
@@ -48,6 +48,8 @@ export function DesktopShell({
   const [destination, setDestination] = useState<Destination>("mode");
   const tidyHandler = useRef<() => void>(() => undefined);
   const codePaneSelectHandler = useRef<(workspaceId: string, paneId: string) => void>(() => undefined);
+  const agentSessionHandler = useRef<(target: OpenSessionTarget) => void>(() => undefined);
+  const chatSessionHandler = useRef<(target: OpenSessionTarget) => void>(() => undefined);
 
   useEffect(() => {
     void settingsSet("last_mode", mode);
@@ -65,6 +67,18 @@ export function DesktopShell({
         setMode("code");
         setDestination("mode");
         codePaneSelectHandler.current(workspaceId, paneId);
+      },
+      onOpenSession: (target: OpenSessionTarget) => {
+        setMode(target.mode);
+        setDestination("mode");
+        if (target.mode === "code") {
+          if (target.workspaceId && target.paneId) {
+            codePaneSelectHandler.current(target.workspaceId, target.paneId);
+          }
+          return;
+        }
+        if (target.mode === "chat") chatSessionHandler.current(target);
+        else agentSessionHandler.current(target);
       },
       onThemeChange,
       onSettings: () => { setSettingsPage("general"); setSettingsOpen(true); },
@@ -127,7 +141,10 @@ export function DesktopShell({
                 aria-hidden={mode !== "agent"}
                 aria-label="Agent"
               >
-                <AgentMode railOpen={railOpen} />
+                <AgentMode
+                  railOpen={railOpen}
+                  onSessionSelectRegister={(handler) => { agentSessionHandler.current = handler; }}
+                />
               </section>
               <section
                 className="harbor-mode"
@@ -146,7 +163,10 @@ export function DesktopShell({
                 aria-hidden={mode !== "chat"}
                 aria-label="Chat"
               >
-                <ChatMode railOpen={railOpen} />
+                <ChatMode
+                  railOpen={railOpen}
+                  onSessionSelectRegister={(handler) => { chatSessionHandler.current = handler; }}
+                />
               </section>
             </div>
           </div>
