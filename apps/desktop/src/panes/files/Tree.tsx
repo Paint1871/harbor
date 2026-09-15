@@ -1,21 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import type { FsEntry } from "@harbor/schema/commands";
 import { filesystemError, listWorkspace } from "./fs";
+import { matchesFileQuery } from "./helpers";
 
 interface TreeProps {
   workspaceId?: string;
   onOpen: (path: string) => void;
   path?: string;
+  query?: string;
 }
 
-export function Tree({ workspaceId, onOpen, path = "" }: TreeProps) {
+export function Tree({ workspaceId, onOpen, path = "", query }: TreeProps) {
   const [entries, setEntries] = useState<FsEntry[]>([]);
   const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [filter, setFilter] = useState("");
   const autoRetryRef = useRef(false);
   const scopeRef = useRef<{ workspaceId?: string; path?: string }>({});
+  const activeQuery = query ?? filter;
+  const showSearch = query === undefined;
 
   useEffect(() => {
     if (!workspaceId) {
@@ -69,29 +74,25 @@ export function Tree({ workspaceId, onOpen, path = "" }: TreeProps) {
   }, [workspaceId, path, reloadKey]);
 
   if (!workspaceId) return <p className="harbor-muted">Add a workspace to browse files.</p>;
-  if (loading) {
-    return (
-      <div className="harbor-tree-status" role="status" aria-live="polite">
-        <span className="harbor-spinner" aria-hidden="true" />
-        <span>Reading files…</span>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="harbor-tree-error" role="alert">
-        <strong>Folder unavailable</strong>
-        <p>{error}</p>
-        <button type="button" onClick={() => {
-          autoRetryRef.current = false;
-          setReloadKey((value) => value + 1);
-        }}>Try again</button>
-      </div>
-    );
-  }
-  return (
+
+  const visible = entries.filter((entry) => matchesFileQuery(entry.name, activeQuery));
+  const listing = loading ? (
+    <div className="harbor-tree-status" role="status" aria-live="polite">
+      <span className="harbor-spinner" aria-hidden="true" />
+      <span>Reading files…</span>
+    </div>
+  ) : error ? (
+    <div className="harbor-tree-error" role="alert">
+      <strong>Folder unavailable</strong>
+      <p>{error}</p>
+      <button type="button" onClick={() => {
+        autoRetryRef.current = false;
+        setReloadKey((value) => value + 1);
+      }}>Try again</button>
+    </div>
+  ) : visible.length ? (
     <ul className="harbor-tree">
-      {entries.map((entry) => (
+      {visible.map((entry) => (
         <li key={entry.path}>
           <button
             type="button"
@@ -107,10 +108,30 @@ export function Tree({ workspaceId, onOpen, path = "" }: TreeProps) {
             {entry.name}
           </button>
           {entry.directory && openDirs[entry.path] ? (
-            <Tree workspaceId={workspaceId} onOpen={onOpen} path={entry.path} />
+            <Tree workspaceId={workspaceId} onOpen={onOpen} path={entry.path} query={activeQuery} />
           ) : null}
         </li>
       ))}
     </ul>
+  ) : activeQuery.trim() ? (
+    showSearch ? <p className="harbor-muted">No files match “{activeQuery}”.</p> : null
+  ) : (
+    <ul className="harbor-tree" />
+  );
+
+  if (!showSearch) return listing;
+  return (
+    <>
+      <label className="harbor-destination-search harbor-file-tree-search">
+        Search files
+        <input
+          aria-label="Search files"
+          value={filter}
+          placeholder="Find a file"
+          onChange={(event) => setFilter(event.target.value)}
+        />
+      </label>
+      {listing}
+    </>
   );
 }

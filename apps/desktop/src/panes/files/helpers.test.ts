@@ -4,6 +4,7 @@ import {
   DIRTY_CLOSE_MESSAGE,
   fileBasename,
   languageIdFor,
+  matchesFileQuery,
 } from "./helpers";
 
 describe("fileBasename", () => {
@@ -31,6 +32,20 @@ describe("languageIdFor", () => {
     expect(languageIdFor("src/app.js")).toBe("javascript");
     expect(languageIdFor("Makefile")).toBe("plaintext");
     expect(languageIdFor("main.go")).toBe("plaintext");
+  });
+});
+
+describe("matchesFileQuery", () => {
+  it("treats an empty or whitespace query as a match", () => {
+    expect(matchesFileQuery("main.rs", "")).toBe(true);
+    expect(matchesFileQuery("main.rs", "   ")).toBe(true);
+  });
+
+  it("matches a case-insensitive substring of the name", () => {
+    expect(matchesFileQuery("README.md", "read")).toBe(true);
+    expect(matchesFileQuery("README.md", "Me.MD")).toBe(true);
+    expect(matchesFileQuery("src", "SRC")).toBe(true);
+    expect(matchesFileQuery("main.rs", "app")).toBe(false);
   });
 });
 

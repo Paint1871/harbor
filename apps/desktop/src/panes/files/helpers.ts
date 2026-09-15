@@ -71,3 +71,9 @@ export function confirmCloseDirtyTab(
   if (!dirty) return true;
   return confirm(DIRTY_CLOSE_MESSAGE);
 }
+
+export function matchesFileQuery(name: string, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return name.toLowerCase().includes(needle);
+}
