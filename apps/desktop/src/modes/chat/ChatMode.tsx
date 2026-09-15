@@ -383,6 +383,13 @@ export function ChatMode({
                 [id]: (current[id] ?? "").replace(/(?:^|\s)@[^\s]*$/, (chunk) => `${chunk.startsWith(" ") ? " " : ""}${path} `),
               }));
             }}
+            onCancel={() => {
+              const id = active.id;
+              setDrafts((current) => ({
+                ...current,
+                [id]: (current[id] ?? "").replace(/(?:^|\s)@[^\s]*$/, (chunk) => (chunk.startsWith(" ") ? " " : "")),
+              }));
+            }}
           />
         ) : null}
         <Composer value={drafts[active.id] ?? ""} onValueChange={(value) => setDrafts((current) => ({ ...current, [active.id]: value }))}
@@ -396,6 +403,7 @@ export function ChatMode({
             });
           }} textareaProps={{
             onKeyDown: (event) => {
+              if (event.defaultPrevented) return;
               if (event.key === "Escape" && acp.sending) {
                 event.preventDefault();
                 void acp.cancel();

@@ -998,7 +998,8 @@ button, input, textarea, select {
   border-radius: 4px;
   font-size: var(--harbor-text-sm);
 }
-.harbor-tree button:hover { background: var(--harbor-raised); }
+.harbor-tree button:hover,
+.harbor-tree [role="option"][aria-selected="true"] button { background: var(--harbor-raised); }
 .harbor-tree ul { list-style: none; margin: 0; padding-left: 12px; }
 .harbor-tree-status {
   display: flex;
