@@ -1,9 +1,10 @@
-import type { DragEvent } from "react";
+import { useState, type DragEvent } from "react";
 import { Button } from "@harbor/ui/Button";
 import { RailRow } from "@harbor/ui/RailRow";
 import type { AgentRecord, AgentTrailing } from "@harbor/schema/commands";
 import { Face } from "./Face";
 import { useChrome } from "../../chrome/chrome-context";
+import { agentMatchesQuery } from "./agentMatchesQuery";
 
 interface AgentRailProps {
   agents: AgentRecord[];
@@ -32,8 +33,11 @@ function trailingLabel(trailing: AgentTrailing | undefined): string {
 
 export function AgentRail({ agents, selectedId, onSelect, onNew, onPin }: AgentRailProps) {
   const { setDestination } = useChrome();
-  const pinned = agents.filter((agent) => agent.pinned);
-  const rest = agents.filter((agent) => !agent.pinned);
+  const [query, setQuery] = useState("");
+  const visible = agents.filter((agent) => agentMatchesQuery(agent, query));
+  const pinned = visible.filter((agent) => agent.pinned);
+  const rest = visible.filter((agent) => !agent.pinned);
+  const needle = query.trim();
 
   function dropPin(event: DragEvent, pinned: boolean) {
     event.preventDefault();
@@ -98,31 +102,38 @@ export function AgentRail({ agents, selectedId, onSelect, onNew, onPin }: AgentR
           <span className="harbor-sr-only">New Agent</span>
         </Button>
       </div>
+      <label className="harbor-destination-search harbor-thread-search">Search agents<input aria-label="Search agents" value={query} placeholder="Find a teammate" onChange={(event) => setQuery(event.target.value)} /></label>
       <div className="harbor-roster" aria-label="Agent roster">
-        {pinned.length > 0 || (onPin && agents.length > 0) ? (
-          <div
-            className="harbor-pin-band"
-            data-empty={pinned.length === 0}
-            onDragOver={(event) => {
-              if (!onPin) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-            }}
-            onDrop={(event) => dropPin(event, true)}
-          >
-            {pinned.length ? pinned.map(row) : <p className="harbor-muted">Drag a teammate here to pin.</p>}
-          </div>
-        ) : null}
-        <div
-          onDragOver={(event) => {
-            if (!onPin) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-          }}
-          onDrop={(event) => dropPin(event, false)}
-        >
-          {rest.map(row)}
-        </div>
+        {needle && visible.length === 0 ? (
+          <p className="harbor-muted">No agents match “{query}”.</p>
+        ) : (
+          <>
+            {pinned.length > 0 || (onPin && visible.length > 0) ? (
+              <div
+                className="harbor-pin-band"
+                data-empty={pinned.length === 0}
+                onDragOver={(event) => {
+                  if (!onPin) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => dropPin(event, true)}
+              >
+                {pinned.length ? pinned.map(row) : <p className="harbor-muted">Drag a teammate here to pin.</p>}
+              </div>
+            ) : null}
+            <div
+              onDragOver={(event) => {
+                if (!onPin) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(event) => dropPin(event, false)}
+            >
+              {rest.map(row)}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
