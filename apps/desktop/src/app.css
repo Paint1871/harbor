@@ -932,6 +932,14 @@ button, input, textarea, select {
 }
 .harbor-tab-dirty { flex: 0 0 auto; color: var(--harbor-text); line-height: 1; }
 .harbor-tab-close { flex: 0 0 auto; }
+.harbor-files-tree .harbor-file-tree-search {
+  min-width: 0;
+  margin: 0 0 8px;
+}
+.harbor-files-tree .harbor-file-tree-search input {
+  width: 100%;
+  min-width: 0;
+}
 .harbor-tree { list-style: none; margin: 0; padding: 0; }
 .harbor-tree button {
   border: 0;
