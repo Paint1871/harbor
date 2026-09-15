@@ -16,7 +16,7 @@ const EMPTY: Counts = { agents: [], workspaces: [], threads: [] };
  * the local database already holds. Nothing here is estimated or backfilled.
  */
 export function Dashboard() {
-  const { onModeChange } = useChrome();
+  const { onModeChange, onOpenSession } = useChrome();
   const [counts, setCounts] = useState<Counts>(EMPTY);
   const [failed, setFailed] = useState(false);
 
@@ -41,9 +41,9 @@ export function Dashboard() {
   }, []);
 
   const metrics = [
-    { label: "Agents", value: counts.agents.length, detail: "teammates on this machine" },
-    { label: "Workspaces", value: counts.workspaces.length, detail: "folders you added" },
-    { label: "Threads", value: counts.threads.length, detail: "folder-scoped chats" },
+    { label: "Agents", value: counts.agents.length, detail: "teammates on this machine", mode: "agent" as const },
+    { label: "Workspaces", value: counts.workspaces.length, detail: "folders you added", mode: "code" as const },
+    { label: "Threads", value: counts.threads.length, detail: "folder-scoped chats", mode: "chat" as const },
   ];
 
   const unread = counts.threads.filter((thread) => thread.unread);
@@ -64,11 +64,16 @@ export function Dashboard() {
 
       <div className="harbor-dashboard-metrics" aria-label="Workspace metrics">
         {metrics.map((metric) => (
-          <article className="harbor-dashboard-metric" key={metric.label}>
+          <button
+            type="button"
+            className="harbor-dashboard-metric"
+            key={metric.label}
+            onClick={() => onModeChange(metric.mode)}
+          >
             <span>{metric.label}</span>
             <strong>{metric.value}</strong>
             <small>{metric.detail}</small>
-          </article>
+          </button>
         ))}
       </div>
 
@@ -83,7 +88,13 @@ export function Dashboard() {
               key={thread.id}
               type="button"
               className="harbor-dashboard-activity-row"
-              onClick={() => onModeChange("chat")}
+              onClick={() =>
+                onOpenSession?.({
+                  mode: "chat",
+                  sessionRef: thread.id,
+                  workspaceId: thread.workspaceId,
+                })
+              }
             >
               <span className="harbor-dashboard-activity-mark" aria-hidden="true">
                 <svg width="16" height="16" viewBox="0 0 16 16">
