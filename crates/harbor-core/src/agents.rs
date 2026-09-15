@@ -115,6 +115,10 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
     if name.is_empty() {
         return Err(Error::Message("name required".into()));
     }
+    let home_path = match input.home_path.as_deref().map(str::trim) {
+        Some(path) if !path.is_empty() => crate::places::canonicalize_folder(path)?,
+        _ => String::new(),
+    };
     let id = Uuid::now_v7().to_string();
     let ts = now();
     sqlx::query(
@@ -126,7 +130,7 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
     .bind(&input.brief)
     .bind(&input.engine_id)
     .bind(input.face_index)
-    .bind("")
+    .bind(&home_path)
     .bind(ts)
     .execute(pool)
     .await
@@ -138,7 +142,7 @@ pub async fn create(pool: &SqlitePool, input: CreateAgent) -> Result<AgentRecord
         engine_id: input.engine_id,
         face_index: input.face_index,
         pinned: false,
-        home_path: String::new(),
+        home_path,
         messaging: true,
         last_line: None,
         trailing: AgentTrailing::Idle,
@@ -258,6 +262,7 @@ pub async fn draft_with_ai(pool: &SqlitePool, hint: String) -> Result<CreateAgen
         brief,
         engine_id: DEFAULT_ENGINE.into(),
         face_index: 0,
+        home_path: None,
     })
 }
 
@@ -378,6 +383,7 @@ mod tests {
             brief: "brief".into(),
             engine_id: "opencode".into(),
             face_index: 3,
+            home_path: None,
         }
     }
 
@@ -540,5 +546,35 @@ mod tests {
             .unwrap();
         let listed = list(&pool).await.unwrap();
         assert_eq!(listed[0].trailing, AgentTrailing::NeedsYou);
+    }
+
+    #[tokio::test]
+    async fn create_persists_home_path_when_set() {
+        let (_dir, pool) = pool().await;
+        let without = create(&pool, sample("NoHome")).await.unwrap();
+        assert_eq!(without.home_path, "");
+
+        let home = _dir.path().join("home");
+        std::fs::create_dir(&home).unwrap();
+        let with = create(
+            &pool,
+            CreateAgent {
+                name: "HasHome".into(),
+                brief: "brief".into(),
+                engine_id: "opencode".into(),
+                face_index: 3,
+                home_path: Some(home.display().to_string()),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(with.home_path.ends_with("home"));
+
+        let listed = list(&pool).await.unwrap();
+        let stored = listed
+            .into_iter()
+            .find(|agent| agent.name == "HasHome")
+            .expect("created agent");
+        assert_eq!(stored.home_path, with.home_path);
     }
 }

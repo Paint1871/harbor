@@ -457,12 +457,18 @@ pub async fn agent_list(
 
 #[tauri::command]
 pub async fn agent_create(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     input: CreateAgent,
 ) -> Result<AgentRecord, String> {
-    harbor_core::commands::agent_create(&pool, input)
+    let home = input.home_path.clone();
+    let agent = harbor_core::commands::agent_create(&pool, input)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    if let Some(path) = home.filter(|path| !path.trim().is_empty()) {
+        allow_workspace_directory(&app, &path);
+    }
+    Ok(agent)
 }
 
 #[tauri::command]

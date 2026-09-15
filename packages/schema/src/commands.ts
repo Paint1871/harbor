@@ -84,6 +84,7 @@ export interface CreateAgent {
   brief: string;
   engineId: string;
   faceIndex?: number;
+  homePath?: string;
 }
 
 export interface UpdateAgent {
