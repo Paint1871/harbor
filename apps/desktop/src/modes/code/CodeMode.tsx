@@ -14,6 +14,7 @@ import { EngineMark } from "../../chrome/EngineMark";
 import { useChrome } from "../../chrome/chrome-context";
 import { settingsSet } from "../../settings";
 import { AddWorkspace } from "../../workspaces/AddWorkspace";
+import { WorkspaceRailList } from "../../workspaces/WorkspaceRailList";
 import { WorkspaceRailRow } from "../../workspaces/WorkspaceRailRow";
 
 const DEFAULT_LAYOUT: PaneLayout = {
@@ -599,11 +600,15 @@ export function CodeMode({
                 <span aria-hidden="true">+</span>
               </Button>
             </div>
-            {workspaces.length ? workspaces.map((row) => {
-              const active = row.id === workspace?.id;
-              const open = active && !collapsedWorkspaces[row.id];
-              return (
-                <div className="harbor-code-workspace" key={row.id}>
+            <WorkspaceRailList
+              workspaces={workspaces}
+              empty={<p className="harbor-rail-empty">Add a folder to start coding.</p>}
+            >
+              {(row) => {
+                const active = row.id === workspace?.id;
+                const open = active && !collapsedWorkspaces[row.id];
+                return (
+                <div className="harbor-code-workspace">
                   <WorkspaceRailRow
                     className="harbor-code-workspace-row"
                     workspace={row}
@@ -720,8 +725,9 @@ export function CodeMode({
                     </ul>
                   ) : null}
                 </div>
-              );
-            }) : <p className="harbor-rail-empty">Add a folder to start coding.</p>}
+                );
+              }}
+            </WorkspaceRailList>
           </div>
       </AppRail>
       <div className="harbor-stage-panel harbor-code">
