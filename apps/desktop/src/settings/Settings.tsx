@@ -298,7 +298,7 @@ export function Settings({
                   <Select label="Language" value="english" options={[{ value: "english", label: "English" }]} onChange={() => undefined} disabled />
                 </SettingRow>
                 <SettingRow label="Default shell" description="The shell used when a new terminal pane starts.">
-                  <Select label="Default shell" value={defaultShell} options={[{ value: "system", label: "System default" }, { value: "zsh", label: "zsh" }, { value: "bash", label: "bash" }]} onChange={(value) => { setDefaultShell(value); void save("default_shell", value); }} />
+                  <Select label="Default shell" value={defaultShell} options={[{ value: "system", label: "System default" }, { value: "zsh", label: "zsh" }, { value: "bash", label: "bash" }, { value: "powershell", label: "PowerShell" }, { value: "cmd", label: "Command Prompt" }]} onChange={(value) => { setDefaultShell(value); void save("default_shell", value); }} />
                 </SettingRow>
                 <SettingRow label="Engine discovery" description={engineStatus ?? "Refresh the local engine list before starting a session."}>
                   <Button variant="ghost" disabled={rechecking} onClick={() => void recheckEngines()}>{rechecking ? "Checking…" : "Recheck engines"}</Button>
