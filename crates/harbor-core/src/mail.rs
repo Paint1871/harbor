@@ -88,19 +88,22 @@ pub async fn send(
         .execute(pool)
         .await?;
 
-    crate::notifications::record(
-        pool,
-        "mail",
-        &format!("Mail from {from_name}"),
-        body,
-        crate::notifications::Target {
-            mode: Some("agent".into()),
-            workspace_id: None,
-            pane_id: None,
-            session_ref: Some(chat.id.clone()),
-        },
-    )
-    .await?;
+    let kinds = crate::settings::get(pool, "notification_kinds").await?;
+    if crate::notifications::kind_allowed(kinds, "mail") {
+        crate::notifications::record(
+            pool,
+            "mail",
+            &format!("Mail from {from_name}"),
+            body,
+            crate::notifications::Target {
+                mode: Some("agent".into()),
+                workspace_id: None,
+                pane_id: None,
+                session_ref: Some(chat.id.clone()),
+            },
+        )
+        .await?;
+    }
     Ok(())
 }
 
@@ -217,5 +220,27 @@ mod tests {
         assert_eq!(rows[0].mode.as_deref(), Some("agent"));
         let chats = crate::chats::list(&pool, &to).await.unwrap();
         assert_eq!(rows[0].session_ref.as_deref(), Some(chats[0].id.as_str()));
+    }
+
+    #[tokio::test]
+    async fn skipped_mail_kind_still_delivers_the_message() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let from = agent(&pool, "Scout").await;
+        let to = agent(&pool, "Release manager").await;
+        crate::settings::set(&pool, "notification_kinds", &json!(["permission"]))
+            .await
+            .unwrap();
+        send(&pool, &from, &to, "handoff please").await.unwrap();
+        assert!(crate::notifications::list(&pool).await.unwrap().is_empty());
+        let chats = crate::chats::list(&pool, &to).await.unwrap();
+        assert_eq!(chats.len(), 1);
+        assert_eq!(
+            crate::chats::history(&pool, &chats[0].id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

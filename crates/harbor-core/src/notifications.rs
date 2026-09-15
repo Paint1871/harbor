@@ -17,6 +17,15 @@ fn now() -> i64 {
         .unwrap_or_default()
 }
 
+/// Whether `kind` should be recorded. A missing or non-array `notification_kinds`
+/// setting enables every kind; an explicit JSON array is the allow-list.
+pub fn kind_allowed(setting: Option<Value>, kind: &str) -> bool {
+    match setting {
+        Some(Value::Array(items)) => items.iter().any(|item| item.as_str() == Some(kind)),
+        _ => true,
+    }
+}
+
 /// Where a notification points. Every field is optional: a row is still useful
 /// when Harbor only knows the mode it came from.
 #[derive(Debug, Clone, Default)]
@@ -206,6 +215,21 @@ mod tests {
         mark_read(&pool).await.unwrap();
         assert_eq!(unread_count(&pool).await.unwrap(), 0);
         assert!(list(&pool).await.unwrap().iter().all(|row| row.read));
+    }
+
+    #[test]
+    fn kind_allowed_defaults_on_and_honors_an_explicit_list() {
+        assert!(kind_allowed(None, "permission"));
+        assert!(kind_allowed(Some(json!(null)), "mail"));
+        assert!(kind_allowed(Some(json!(true)), "terminal-exit"));
+        assert!(kind_allowed(Some(json!(["mail", "permission"])), "mail"));
+        assert!(!kind_allowed(Some(json!(["mail"])), "permission"));
+        assert!(!kind_allowed(Some(json!([])), "turn-finished"));
+        assert!(kind_allowed(
+            Some(json!(["turn-cancelled", "turn-refused"])),
+            "turn-refused"
+        ));
+        assert!(!kind_allowed(Some(json!([1, true])), "mail"));
     }
 
     #[tokio::test]

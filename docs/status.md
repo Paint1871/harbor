@@ -19,9 +19,9 @@ Last reviewed 2026-09-15.
   fallback; that is intentional.
 - **Linux title bar.** `tauri.conf.json` sets `titleBarStyle: Overlay` on every
   platform. Linux should use native decorations plus an in-content toolbar.
-- **Settings.** Several rows (startup mode, shell, Recheck, per-kind
-  notification filters) are still explanatory copy rather than wired controls.
-  UI zoom, desktop notifications, and notification sound honor their stored values.
+- **Settings.** Several rows (startup mode, shell, Recheck) are still
+  explanatory copy rather than wired controls. UI zoom, desktop notifications,
+  notification sound, and per-kind notification filters honor their stored values.
 - **Voice.** Dictation and a title-bar mute orb are not shipped. Welcome has a
   decorative orbit; hold-to-talk is a no-op.
 - **Faces.** The face slot is `faceIndex % 64`, not a stable hash of the agent
