@@ -18,6 +18,7 @@ const KIND_LABEL: Record<string, string> = {
   "turn-cancelled": "Cancelled",
   "turn-refused": "Refused",
   "turn-stopped": "Stopped",
+  routine: "Routine",
 };
 
 const KIND_FILTERS = [
@@ -26,6 +27,7 @@ const KIND_FILTERS = [
   { id: "mail", label: KIND_LABEL.mail },
   { id: "terminal-exit", label: KIND_LABEL["terminal-exit"] },
   { id: "turn-finished", label: KIND_LABEL["turn-finished"] },
+  { id: "routine", label: KIND_LABEL.routine },
 ] as const;
 
 type KindFilter = (typeof KIND_FILTERS)[number]["id"];
@@ -85,6 +87,12 @@ export function Inbox({ open, onClose }: InboxProps) {
 
   function go(event: Notification) {
     if (!chrome) return;
+    // Approvals resolve under Plugins, not in the chat that asked for them.
+    if (event.mode === "plugins") {
+      chrome.setDestination("plugins");
+      onClose?.();
+      return;
+    }
     const mode = asMode(event.mode);
     const hasSession = Boolean(event.sessionRef);
     const hasPane = Boolean(event.workspaceId && event.paneId);

@@ -121,8 +121,8 @@ it("lets a terminal pane choose a different CLI from its actions menu", async ()
     </ChromeProvider>,
   );
   await screen.findByText("Terminal paused");
-  fireEvent.click(screen.getByRole("button", { name: "More Claude Code" }));
-  fireEvent.change(screen.getByRole("combobox", { name: "CLI for Claude Code" }), { target: { value: "shell" } });
+  fireEvent.click(screen.getByRole("button", { name: "More Shell" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "CLI for Shell" }), { target: { value: "shell" } });
   await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("pane_set_engine", { id: "term-1", engineId: "shell" }));
 });
 
@@ -158,18 +158,18 @@ it("nests a workspace's panes under it and collapses them on a second click", as
     </ChromeProvider>,
   );
   // Panes are visible without a click: an opened folder shows what is in it.
-  const pane = await screen.findByRole("button", { name: "Claude Code pane 1" });
+  const pane = await screen.findByRole("button", { name: "Shell pane 1" });
   expect(pane).toBeTruthy();
   expect(screen.getByRole("button", { name: "New pane" })).toBeTruthy();
 
   const workspaceRow = screen.getByRole("button", { name: /Project/ });
   fireEvent.click(workspaceRow);
-  await waitFor(() => expect(screen.queryByRole("button", { name: "Claude Code pane 1" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Shell pane 1" })).toBeNull());
   // The workspace itself stays listed, only its contents fold away.
   expect(screen.getByRole("button", { name: /Project/ })).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: /Project/ }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Claude Code pane 1" })).toBeTruthy());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Shell pane 1" })).toBeTruthy());
 });
 
 it("registers the active workspace for Chat shortcuts", async () => {

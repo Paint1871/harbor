@@ -21,6 +21,4 @@ pub enum AcpError {
     Json(#[from] serde_json::Error),
     #[error("{0}")]
     Protocol(&'static str),
-    #[error("unimplemented: {0}")]
-    Unimplemented(&'static str),
 }

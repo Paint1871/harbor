@@ -179,26 +179,26 @@ fn capabilities_are_least_privilege() {
     }
 }
 
+/// The baked key must be a real minisign public-key file: comment row plus a
+/// base64 row that decodes to a 42-byte Ed25519 key (2-byte algorithm, 8-byte
+/// key number, 32-byte key). The placeholder format this replaced is refused
+/// by `verify_release` itself — the updater crate tests that path.
 #[test]
-fn minisign_placeholder_cannot_verify_updates() {
+fn minisign_public_key_is_real_and_parseable() {
     let text = fs::read_to_string(manifest_dir().join("minisign.pub")).unwrap();
-    assert!(text.contains("placeholder"));
-    assert!(text.contains("must never authorize an update"));
-    for line in text.lines() {
-        let line = line.trim();
-        assert!(
-            !line.to_ascii_lowercase().starts_with("untrusted comment:"),
-            "placeholder must not be a minisign public-key file"
-        );
-        assert!(
-            !(line.starts_with("RW")
-                && line.len() >= 52
-                && line
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')),
-            "placeholder must not contain a minisign key row"
-        );
-    }
+    assert!(!text.contains("placeholder"));
+    assert!(!text.contains("UNCONFIGURED"));
+    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
+    assert!(
+        lines
+            .next()
+            .is_some_and(|l| l.to_ascii_lowercase().starts_with("untrusted comment:"))
+    );
+    let key_b64 = lines.next().expect("key row");
+    assert!(key_b64.starts_with("RW"));
+    let raw = harbor_core::b64::decode(key_b64).expect("key row decodes");
+    assert_eq!(raw.len(), 42, "Ed25519 minisign public key");
+    assert!(lines.next().is_none());
 }
 
 #[test]

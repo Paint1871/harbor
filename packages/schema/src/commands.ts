@@ -117,9 +117,11 @@ export interface Place {
 }
 
 export interface SearchHit {
-  chat_id: string;
+  chatId: string;
+  /** `agent` hits open an agent chat; `thread` hits a folder thread. */
+  chatKind: string;
   prose: string;
-  created_at: number;
+  createdAt: number;
 }
 
 export interface PluginRow {
@@ -325,7 +327,10 @@ export interface HarborCommands {
   places_list: { args: { agentId: string }; returns: Place[] };
   places_grant: { args: { agentId: string; path: string }; returns: void };
   places_revoke: { args: { id: string }; returns: void };
-  session_search: { args: { agentId: string; query: string }; returns: SearchHit[] };
+  session_search: {
+    args: { agentId?: string | null; workspaceId?: string | null; query: string };
+    returns: SearchHit[];
+  };
   /** Tells the host which conversation is on screen, so its replies skip the inbox. */
   session_watch: { args: { sessionRef: string | null }; returns: void };
   mail_send: { args: { fromAgentId: string; toAgentId: string; body: string }; returns: void };
@@ -333,6 +338,19 @@ export interface HarborCommands {
   notifications_mark_read: { args: undefined; returns: void };
   notifications_clear: { args: undefined; returns: void };
   notifications_unread_count: { args: undefined; returns: number };
+  /** Local schedulers (routines) record their own inbox events through the same kind-filtered path. */
+  notification_record: {
+    args: {
+      kind: string;
+      title: string;
+      body?: string;
+      mode?: string;
+      sessionRef?: string;
+      workspaceId?: string;
+      paneId?: string;
+    };
+    returns: void;
+  };
   /** A data URL for the generated face, not the raw PNG bytes. */
   face_preview: { args: { agentId: string; faceIndex: number }; returns: string };
 
@@ -353,7 +371,10 @@ export interface HarborCommands {
   dictation_prepare_model: { args: undefined; returns: void };
 
   updater_check: { args: undefined; returns: UpdateStatus };
-  updater_install: { args: undefined; returns: void };
+  /** Returns the app-support path of the signature-verified artifact. */
+  updater_install: { args: undefined; returns: string };
+  /** Reveals a staged update in the OS file manager. Only paths inside `updates/` are accepted. */
+  updater_reveal: { args: { path: string }; returns: void };
 }
 
 export type HarborCommand = keyof HarborCommands;

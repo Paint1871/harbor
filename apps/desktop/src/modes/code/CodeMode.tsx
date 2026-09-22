@@ -161,7 +161,8 @@ export function CodeMode({
   const layoutRef = useRef(layout);
   const panesRootRef = useRef<HTMLDivElement>(null);
   const layoutActionRef = useRef(0);
-  const layoutWritesRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingLayoutRef = useRef<{ id: string; layout: PaneLayout } | null>(null);
+  const layoutWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const engineChangeRef = useRef<Record<string, number>>({});
   const userSelectedWorkspaceRef = useRef(false);
   const paneAddRef = useRef<HTMLLIElement>(null);
@@ -197,14 +198,32 @@ export function CodeMode({
     return () => document.removeEventListener("pointerdown", close);
   }, [paneAddOpen]);
 
-  const persistLayout = useCallback((id: string, next: PaneLayout) => {
-    const write = layoutWritesRef.current
-      .catch(() => undefined)
-      .then(() => call("workspace_save_layout", { tabId: id, layout: next }))
-      .then(() => undefined);
-    layoutWritesRef.current = write;
-    return write;
+  const flushLayoutWrite = useCallback(() => {
+    if (layoutWriteTimerRef.current) {
+      clearTimeout(layoutWriteTimerRef.current);
+      layoutWriteTimerRef.current = null;
+    }
+    const pending = pendingLayoutRef.current;
+    pendingLayoutRef.current = null;
+    if (!pending) return;
+    void call("workspace_save_layout", { tabId: pending.id, layout: pending.layout }).catch((reason) => {
+      setLayoutError(codeError(reason, "The pane layout could not be saved."));
+    });
   }, []);
+
+  // Dragging a split updates `layout` every pointermove; only the layout that
+  // survives a quiet moment is worth a SQLite write.
+  const persistLayout = useCallback((id: string, next: PaneLayout) => {
+    const pending = pendingLayoutRef.current;
+    if (pending && pending.id !== id) {
+      // A queued write belongs to another tab — flush it now so switching
+      // tabs never drops the layout that tab was last dragged into.
+      flushLayoutWrite();
+    }
+    pendingLayoutRef.current = { id, layout: next };
+    if (layoutWriteTimerRef.current) clearTimeout(layoutWriteTimerRef.current);
+    layoutWriteTimerRef.current = setTimeout(flushLayoutWrite, 400);
+  }, [flushLayoutWrite]);
 
   const applyTab = useCallback((tab: WorkspaceTab) => {
     ++layoutActionRef.current;
@@ -364,10 +383,11 @@ export function CodeMode({
 
   useEffect(() => {
     if (!tabId) return;
-    void persistLayout(tabId, layout).catch((reason) => {
-      setLayoutError(codeError(reason, "The pane layout could not be saved."));
-    });
+    persistLayout(tabId, layout);
   }, [layout, persistLayout, tabId]);
+
+  // A pending debounced write still lands when the mode unmounts.
+  useEffect(() => () => flushLayoutWrite(), [flushLayoutWrite]);
 
   async function closePane(paneId: string) {
     const next = dropLeaf(layoutRef.current, paneId);
@@ -474,8 +494,7 @@ export function CodeMode({
         copilot: "GitHub Copilot",
       }[pane.engineId] ?? pane.engineId;
     }
-    if (pane?.engineId === "shell") return terminalIndex === 0 ? "Shell" : "Terminal";
-    return terminalIndex === 0 ? "Claude Code" : terminalIndex === 1 ? "zsh 104×31" : "Terminal";
+    return terminalIndex === 0 ? "Shell" : "Terminal";
   }
 
   function renderPane(paneId: string): ReactNode {
@@ -587,7 +606,8 @@ export function CodeMode({
     const kind = paneKind(paneId, panes);
     if (kind !== "terminal") return kind;
     // A terminal running an engine reads as an agent seat, a bare shell does not.
-    return terminalPaneLabel(paneId) === "Claude Code" ? "agent" : "terminal";
+    const engineId = panes.find((pane) => pane.id === paneId)?.engineId;
+    return engineId && engineId !== "shell" ? "agent" : "terminal";
   };
 
   return (

@@ -240,6 +240,18 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// Display name for notifications; falls back to the id when the row is gone.
+pub async fn display_name(pool: &SqlitePool, id: &str) -> String {
+    sqlx::query_as::<_, (String,)>("SELECT name FROM agents WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+        .map(|(name,)| name)
+        .unwrap_or_else(|| id.to_string())
+}
+
 pub(crate) async fn require(pool: &SqlitePool, id: &str) -> Result<(), Error> {
     let found: Option<(String,)> = sqlx::query_as("SELECT id FROM agents WHERE id = ?1")
         .bind(id)

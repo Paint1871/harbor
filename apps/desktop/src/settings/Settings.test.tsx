@@ -84,6 +84,7 @@ describe("Settings notification kinds", () => {
           "turn-cancelled",
           "turn-refused",
           "turn-stopped",
+          "routine",
         ],
       });
     });

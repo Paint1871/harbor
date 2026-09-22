@@ -4,7 +4,7 @@
 //! finishes, fails, or needs an answer is recorded here with enough of a target
 //! to navigate back to it.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -16,6 +16,21 @@ fn now() -> i64 {
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or_default()
 }
+
+/// Every kind the host itself can raise. `notification_record` is reachable
+/// from the renderer, so kinds outside this list are refused rather than
+/// letting the webview invent inbox entries. Keep in step with
+/// `NOTIFICATION_KIND_IDS` in `apps/desktop/src/settings/notification-kinds.ts`.
+pub const KNOWN_KINDS: &[&str] = &[
+    "permission",
+    "mail",
+    "terminal-exit",
+    "turn-finished",
+    "turn-cancelled",
+    "turn-refused",
+    "turn-stopped",
+    "routine",
+];
 
 /// Whether `kind` should be recorded. A missing or non-array `notification_kinds`
 /// setting enables every kind; an explicit JSON array is the allow-list.
@@ -274,9 +289,11 @@ mod tests {
     async fn a_row_without_a_title_is_refused() {
         let dir = tempfile::tempdir().unwrap();
         let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
-        assert!(record(&pool, "test", "   ", "body", Target::default())
-            .await
-            .is_err());
+        assert!(
+            record(&pool, "test", "   ", "body", Target::default())
+                .await
+                .is_err()
+        );
         assert_eq!(unread_count(&pool).await.unwrap(), 0);
     }
 }

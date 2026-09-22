@@ -16,7 +16,14 @@ fn spec() -> SpawnSpec {
         command: "opencode".into(),
         args: vec!["acp".into()],
         cwd: "/tmp/proj".into(),
-        mcp_servers: vec![SpawnSpec::harbor_plugins("/usr/bin/harbor", "sess-1")],
+        mcp_servers: vec![SpawnSpec::harbor_plugins(
+            "/usr/bin/harbor",
+            "sess-1",
+            Some("agent-1"),
+            &["github".to_string()],
+            "/data/keyring",
+            "/data/harbor.sqlite",
+        )],
     }
 }
 

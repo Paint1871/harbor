@@ -24,6 +24,9 @@ through your own vendor accounts. Harbor gives that idea away: the source is
 public, the data is a SQLite file on your disk, and your engine credentials
 never pass through anyone's server.
 
+To clone this tree and run it locally, start at [Requirements](#requirements)
+and [Build and run](#build-and-run). There is no published installer yet.
+
 ## Three modes in one window
 
 | Mode | What it holds |
@@ -58,7 +61,9 @@ keyring rather than into any engine's environment.
 Known gaps, in short:
 
 - Dictation `begin` / `end` are unimplemented and no speech engine ships yet.
-- The updater cannot authorize an install: `minisign.pub` is a placeholder.
+- The updater verifies signed artifacts against the baked release key, but no
+  signed release has been published yet, so the install path has never run
+  end-to-end.
 - Several Settings rows are explanatory copy rather than wired controls.
 
 The standing list is in [docs/status.md](docs/status.md).
@@ -74,45 +79,190 @@ The standing list is in [docs/status.md](docs/status.md).
 
 ## Requirements
 
-- Stable Rust with rustfmt and Clippy (`rust-toolchain.toml` selects these)
-- Node.js 22.11 or newer
-- pnpm 10.9.0
-- Git and ripgrep
+Harbor is a [Tauri 2](https://v2.tauri.app/) desktop app: a Rust host plus a
+React 19 renderer. You need both toolchains to compile it. Harbor does **not**
+ship coding engines, vendor API keys, or a cloud account. Chat and Code talk to
+CLIs you install yourself.
 
-Minimum operating systems are macOS 14, Windows 10 x64, and Ubuntu 22.04.
+### Operating systems
 
-On Debian or Ubuntu, Tauri needs GTK and WebKitGTK development packages before
-anything will compile:
+| OS | Minimum |
+| --- | --- |
+| macOS | 14 (Sonoma) |
+| Windows | 10 x64 |
+| Linux | Ubuntu 22.04, or another distro with GTK 3 and WebKitGTK 4.1 |
+
+Unavailable OS features degrade rather than blocking startup. There is no
+signed installer yet, so running Harbor means building it from this tree.
+
+### Tools to compile
+
+| Tool | Version | Role |
+| --- | --- | --- |
+| **Rust** | current **stable**, with `rustfmt` and `clippy` | Native host and crates. [`rust-toolchain.toml`](rust-toolchain.toml) selects the channel and components. The workspace uses Rust edition 2024. |
+| **Node.js** | **22.11** or newer | Renderer, Vite, tests, and ACP adapter installs |
+| **pnpm** | **10.9.0** (exact; see `packageManager` in `package.json`) | JavaScript workspace |
+| **Git** | any recent | Clone the repo; the Chat changes panel also runs `git diff` at runtime |
+| **C/C++ toolchain** | platform native | Links Tauri, WebKit/WebView2, and native crates |
+
+`ripgrep` (`rg`) is required only for `pnpm check:brand`, not to launch the app.
+
+Confirm the versions:
 
 ```sh
+rustc --version
+cargo --version
+node --version    # v22.11 or newer
+pnpm --version    # 10.9.0
+git --version
+```
+
+### Install the toolchains
+
+Rust via [rustup](https://rustup.rs/). The first `cargo` invocation in this
+repo installs the toolchain and components from `rust-toolchain.toml`:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+On Windows, use the rustup installer and pick the default host
+`x86_64-pc-windows-msvc`.
+
+Node.js 22.11+ from [nodejs.org](https://nodejs.org/) or a version manager
+(`nvm`, `fnm`, `volta`). Then enable the pinned pnpm:
+
+```sh
+corepack enable
+corepack prepare pnpm@10.9.0 --activate
+```
+
+### Platform libraries
+
+**macOS.** Install the Xcode Command Line Tools (Clang, SDKs, and the linker):
+
+```sh
+xcode-select --install
+```
+
+**Windows.** Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+with the **Desktop development with C++** workload, and the
+[WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
+if it is not already present (Windows 11 usually has it).
+
+**Debian / Ubuntu.** Tauri 2 links GTK 3 and the WebKitGTK 4.1 line. Nothing in
+the workspace type-checks until these packages are installed:
+
+```sh
+sudo apt-get update
 sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
   libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev libxdo-dev \
   libssl-dev build-essential pkg-config
 ```
 
+Other distros need the same libraries under their own package names. The
+optional GitHub plugin stores tokens in the OS keyring (`libsecret` /
+GNOME Keyring / KWallet on Linux). If the keyring is locked or missing, Harbor
+falls back to a `0600` file under the app-data directory.
+
+### Runtime (optional, but needed for Chat and Code)
+
+The window opens with no engines installed. To actually talk to a coding CLI:
+
+- Install at least one engine from the catalog onto your **login-shell**
+  `PATH` (the `PATH` you get in a new terminal, not only the GUI app's
+  environment). Harbor probes `$SHELL -l` for that path.
+- Log in to that CLI with the vendor's own command (`opencode`, `claude`,
+  `codex`, and so on). Harbor never proxies those credentials.
+- Some engines (Claude Code, Codex) speak ACP through an adapter package.
+  Harbor can fetch that adapter on request via `npm`; it is stored under
+  app data, never globally, and never bundled in the repo.
+- OpenCode is the engine CI handshakes (`opencode acp`). It is the smallest
+  path to a working Chat session.
+
+The GitHub plugin is optional. Forks that enable it must register their own
+GitHub App, turn on Device Flow, and set `HARBOR_GITHUB_CLIENT_ID`. Harbor
+never ships a client secret.
+
 ## Build and run
 
-From the repository root:
+All commands below are from the **repository root** (the directory that
+contains `package.json` and `Cargo.toml`).
+
+1. Install JavaScript workspace dependencies. `--frozen-lockfile` matches CI
+   and fails if `pnpm-lock.yaml` is out of date:
+
+   ```sh
+   pnpm install --frozen-lockfile
+   ```
+
+2. Compile and open the desktop app in development. Vite serves the renderer
+   at `http://127.0.0.1:1420`; Tauri wraps it in the native window. The first
+   Rust compile downloads crates and can take several minutes:
+
+   ```sh
+   pnpm --filter @harbor/desktop tauri dev
+   ```
+
+3. On first launch you should see Welcome with no account prompt. Choose
+   **Start local**. After that, Harbor opens on the Agent rail. Data lives in
+   a local SQLite file; nothing is created in the cloud.
+
+A local unsigned bundle (not a notarized release):
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm check
+pnpm --filter @harbor/desktop tauri build
 ```
 
-Run the desktop application in development:
+On macOS the `.app` lands under `target/release/bundle/macos/`. Other
+platforms write their artifacts next to that under `target/release/bundle/`.
+Self-built binaries verify updates against the release public key baked into
+this tree, so they accept only artifacts signed with the matching secret key —
+which no public release has been signed with yet.
 
-```sh
-pnpm --filter @harbor/desktop tauri dev
-```
-
-Work on the design system in isolation:
+Work on the design system without the native host:
 
 ```sh
 pnpm --filter @harbor/ui dev
 ```
 
-Install at least one coding CLI and make sure it is on your login-shell `PATH`
-before expecting Chat or Code to talk to an engine.
+That preview is a component fixture. It never talks to an engine.
+
+### After it is running
+
+Install a coding CLI, confirm `command -v <binary>` works in a new terminal,
+then use Recheck in Harbor (or restart) so detection picks it up. Chat uses
+ACP v1 over stdio; Code opens a real PTY. Without a detected engine, both
+modes still render — they just have nobody to talk to.
+
+### Where data goes
+
+Display name `Harbor`, directory name `harbor`:
+
+| OS | App-data root |
+| --- | --- |
+| macOS | `~/Library/Application Support/harbor/` |
+| Windows | `%APPDATA%\harbor\` |
+| Linux | `$XDG_DATA_HOME/harbor/` (usually `~/.local/share/harbor/`) |
+
+The database is `harbor.sqlite` in that directory. Crash logs go to
+`logs/crash.log`. ACP adapters Harbor installs live in `adapters/`. Optional
+vendor logos from `scripts/fetch-engine-logos.sh` go in `engine-icons/`.
+
+### If the build fails
+
+- **`pnpm` is the wrong version.** The workspace pins **10.9.0**. Run
+  `corepack prepare pnpm@10.9.0 --activate` rather than a global `npm i -g pnpm`.
+- **Linux: missing WebKitGTK.** `cargo` errors about `webkit2gtk-4.1` or
+  `libgtk-3` mean the packages in [Platform libraries](#platform-libraries)
+  are not installed. A bare `cargo test` of this workspace needs them too.
+- **Windows: `link.exe` not found.** The MSVC C++ workload is missing.
+- **Engines not detected.** The CLI is on a GUI-invisible `PATH`. Install it
+  where your login shell can see it (`~/.local/bin`, Homebrew, nvm, …) and
+  restart Harbor.
+- **`pnpm install` wants to change the lockfile.** Use
+  `--frozen-lockfile` for a source checkout. Only drop that flag when you
+  intend to change dependencies.
 
 ## Checks
 

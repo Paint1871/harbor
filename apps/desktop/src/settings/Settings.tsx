@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
-import type { BridgeStatus, DetectedEngine } from "@harbor/schema/commands";
+import type { BridgeStatus, DetectedEngine, UpdateStatus } from "@harbor/schema/commands";
 import type { Theme } from "@harbor/ui/theme";
 import { settingsGet, settingsSet } from "./api";
 import {
@@ -150,15 +150,19 @@ export function Settings({
   const [mailPaused, setMailPaused] = useState(false);
   const [memoryDefault, setMemoryDefault] = useState("facts");
   const [defaultEngine, setDefaultEngine] = useState("auto");
+  const [githubClientId, setGithubClientId] = useState("");
   const [accountName, setAccountName] = useState(profileName);
   const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [rechecking, setRechecking] = useState(false);
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
-  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [bridge, setBridge] = useState<BridgeStatus | null>(null);
   const [bridgeBusy, setBridgeBusy] = useState(false);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [stagedPath, setStagedPath] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -196,7 +200,8 @@ export function Settings({
       settingsGet("default_engine"),
       settingsGet("local_profile_name"),
       settingsGet("notification_kinds"),
-    ]).then(([zoom, startup, shell, notify, sound, handsFree, speech, cloudUrl, paused, memory, engine, name, notificationKinds]) => {
+      settingsGet("github_client_id"),
+    ]).then(([zoom, startup, shell, notify, sound, handsFree, speech, cloudUrl, paused, memory, engine, name, notificationKinds, githubId]) => {
       if (!active) return;
       setUiZoom(String(parseUiZoomPercent(zoom)));
       setStartupMode(valueString(startup, "last"));
@@ -211,6 +216,7 @@ export function Settings({
       setDefaultEngine(valueString(engine, "auto"));
       setAccountName(valueString(name, profileName));
       setKinds(parseNotificationKinds(notificationKinds));
+      setGithubClientId(valueString(githubId, ""));
     });
     void call("engines_detect").then(setEngines).catch(() => setEngines([]));
     return () => { active = false; };
@@ -236,13 +242,28 @@ export function Settings({
     }
   }
 
-  async function voiceAction(command: "dictation_begin" | "dictation_end" | "dictation_prepare_model", success: string) {
-    setVoiceStatus(null);
+  async function checkUpdates() {
+    setUpdateBusy(true);
+    setUpdateError(null);
     try {
-      await call(command);
-      setVoiceStatus(success);
-    } catch {
-      setVoiceStatus("Voice is not available in this build yet. Dictation remains local to the desktop host.");
+      setUpdate(await call("updater_check"));
+    } catch (reason) {
+      setUpdate(null);
+      setUpdateError(`Update check failed. ${String(reason)}`);
+    } finally {
+      setUpdateBusy(false);
+    }
+  }
+
+  async function downloadUpdate() {
+    setUpdateBusy(true);
+    setUpdateError(null);
+    try {
+      setStagedPath(await call("updater_install"));
+    } catch (reason) {
+      setUpdateError(`Update could not be downloaded. ${String(reason)}`);
+    } finally {
+      setUpdateBusy(false);
     }
   }
 
@@ -302,6 +323,29 @@ export function Settings({
           {bridgeBusy ? "Working…" : bridge?.connected ? "Disconnect" : "Connect"}
         </Button>
       ),
+    },
+    {
+      kind: "row",
+      label: "Updates",
+      description: updateError
+        ?? (stagedPath
+          ? "Verified and staged in Harbor's app folder. Open it to replace this copy of Harbor."
+          : update?.available
+            ? `Harbor ${update.version ?? ""} is available. Downloads are verified against the release signature before they are written.`
+            : update
+              ? "Harbor is up to date."
+              : "Check for a signed Harbor release. Downloads are verified before they reach disk."),
+      control: stagedPath
+        ? <Button variant="ghost" onClick={() => void call("updater_reveal", { path: stagedPath }).catch(() => setUpdateError("The staged update could not be revealed."))}>Show in folder</Button>
+        : update?.available
+          ? <Button variant="ghost" disabled={updateBusy} onClick={() => void downloadUpdate()}>{updateBusy ? "Downloading…" : `Download ${update.version ?? "update"}`}</Button>
+          : <Button variant="ghost" disabled={updateBusy} onClick={() => void checkUpdates()}>{updateBusy ? "Checking…" : "Check for updates"}</Button>,
+    },
+    {
+      kind: "row",
+      label: "GitHub App client ID",
+      description: "Optional. Lets the GitHub connection sign in through Device Flow; without one the plugin falls back to a token.",
+      control: <input aria-label="GitHub App client ID" value={githubClientId} placeholder="Iv1.…" onChange={(event) => setGithubClientId(event.target.value)} onBlur={() => void save("github_client_id", githubClientId.trim())} />,
     },
     {
       kind: "toggle",
@@ -475,11 +519,11 @@ export function Settings({
               </div>
               <SettingsList items={voiceItems} />
               <div className="harbor-settings-actions">
-                <Button onClick={() => void voiceAction("dictation_begin", "Listening for a short test…")}>Test dictation</Button>
-                <Button variant="ghost" onClick={() => void voiceAction("dictation_end", "Dictation stopped.")}>Stop</Button>
-                <Button variant="ghost" onClick={() => void voiceAction("dictation_prepare_model", "Local model prepared.")}>Prepare Whisper model</Button>
+                <Button disabled>Test dictation</Button>
+                <Button variant="ghost" disabled>Stop</Button>
+                <Button variant="ghost" disabled>Prepare Whisper model</Button>
               </div>
-              {voiceStatus ? <p className="harbor-settings-status" role="status">{voiceStatus}</p> : null}
+              <p className="harbor-settings-status">Dictation is not in this build yet. These preferences are saved for when on-device speech lands.</p>
             </>
           ) : page === "agents" ? (
             <>

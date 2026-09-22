@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { call } from "../../ipc";
 import { RailRow } from "@harbor/ui/RailRow";
 import { Pill } from "@harbor/ui/Pill";
 import type { ThreadRecord } from "@harbor/schema/commands";
 
 interface ThreadListProps {
   threads: ThreadRecord[];
+  /** `null` lists threads that belong to no folder; the search scope follows it. */
+  workspaceId?: string | null;
   activeId: string | null;
   onSelect: (thread: ThreadRecord) => void;
   onPin: (id: string, pinned: boolean) => void;
@@ -22,14 +25,37 @@ export function threadVisible(thread: { title: string; engineId: string; unread:
 /**
  * `RailRow` is a button, so rename replaces the row rather than nesting a field
  * inside it. Delete asks once in place: a thread carries its whole transcript.
+ * Search also matches message contents via `session_search`, not only titles.
  */
-export function ThreadList({ threads, activeId, onSelect, onPin, onRename, onDelete }: ThreadListProps) {
+export function ThreadList({ threads, workspaceId = null, activeId, onSelect, onPin, onRename, onDelete }: ThreadListProps) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [contentHits, setContentHits] = useState<Set<string>>(new Set());
   const needle = query.trim();
-  const visible = threads.filter((thread) => threadVisible(thread, query, unreadOnly));
+  const visible = threads.filter((thread) => {
+    if (unreadOnly && !thread.unread) return false;
+    return threadVisible(thread, query, false) || contentHits.has(thread.id);
+  });
+
+  useEffect(() => {
+    const needle = query.trim();
+    if (needle.length < 2) {
+      setContentHits(new Set());
+      return;
+    }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void call("session_search", { workspaceId: workspaceId ?? "", query: needle })
+        .then((hits) => { if (active) setContentHits(new Set(hits.map((hit) => hit.chatId))); })
+        .catch(() => { if (active) setContentHits(new Set()); });
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, workspaceId]);
 
   return <div className="harbor-thread-list">
     <div className="harbor-thread-filters">

@@ -5,37 +5,13 @@ import type { AgentRecord } from "@harbor/schema/commands";
 import { settingsGet, settingsSet } from "../settings";
 import { useChrome } from "../chrome/chrome-context";
 import { routineMatchesQuery } from "./routineMatchesQuery";
-
-type Frequency = "weekdays" | "weekly" | "manual";
-
-interface Routine {
-  id: string;
-  name: string;
-  brief: string;
-  frequency: Frequency;
-  agentId: string;
-  enabled: boolean;
-}
+import { PENDING_PROMPT_PREFIX, ROUTINES_KEY, readRoutines, type Frequency, type Routine } from "../routines/store";
 
 const FREQUENCIES: { value: Frequency; label: string }[] = [
   { value: "weekdays", label: "Every weekday" },
   { value: "weekly", label: "Once a week" },
   { value: "manual", label: "Manual only" },
 ];
-
-function readRoutines(value: unknown): Routine[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is Routine => {
-    if (!item || typeof item !== "object") return false;
-    const row = item as Partial<Routine>;
-    return typeof row.id === "string"
-      && typeof row.name === "string"
-      && typeof row.brief === "string"
-      && (row.frequency === "weekdays" || row.frequency === "weekly" || row.frequency === "manual")
-      && typeof row.agentId === "string"
-      && typeof row.enabled === "boolean";
-  });
-}
 
 export function Routines() {
   const { onOpenSession, setDestination } = useChrome();
@@ -52,7 +28,7 @@ export function Routines() {
 
   useEffect(() => {
     let active = true;
-    void settingsGet("routines_local").then((value) => {
+    void settingsGet(ROUTINES_KEY).then((value) => {
       if (active) setRoutines(readRoutines(value));
     });
     void call("agent_list")
@@ -67,7 +43,7 @@ export function Routines() {
 
   const persist = useCallback((next: Routine[]) => {
     setRoutines(next);
-    void settingsSet("routines_local", next);
+    void settingsSet(ROUTINES_KEY, next);
   }, []);
 
   const activeCount = routines.filter((routine) => routine.enabled).length;
@@ -107,7 +83,7 @@ export function Routines() {
     setNotice(null);
     try {
       const chat = await call("agent_chat_create", { agentId: routine.agentId });
-      await settingsSet("pending_agent_prompt", routine.brief);
+      await settingsSet(`${PENDING_PROMPT_PREFIX}${chat.id}`, routine.brief);
       setNotice(`Started a new chat with ${agentName.get(routine.agentId) ?? "your teammate"}.`);
       onOpenSession?.({ mode: "agent", sessionRef: chat.id });
       setDestination("mode");

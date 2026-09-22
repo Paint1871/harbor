@@ -218,6 +218,17 @@ pub fn install_adapter(engine_id: &str) -> Result<PathBuf, String> {
         .adapter_package
         .clone()
         .ok_or_else(|| format!("{} needs no adapter", spec.display_name))?;
+    // The catalog pins an exact version and the tarball hash npm recorded at
+    // publish time. A range or a missing pin would let a later registry upload
+    // change what lands on disk; refuse rather than trust it.
+    let (name, version) = package
+        .rsplit_once('@')
+        .filter(|(name, version)| !name.is_empty() && !version.is_empty())
+        .ok_or_else(|| format!("{package} is not pinned to an exact version"))?;
+    let integrity = spec
+        .adapter_integrity
+        .clone()
+        .ok_or_else(|| format!("{package} has no pinned integrity hash"))?;
     let binary = spec
         .binaries
         .get(1)
@@ -238,6 +249,9 @@ pub fn install_adapter(engine_id: &str) -> Result<PathBuf, String> {
             &root.display().to_string(),
             "--no-audit",
             "--no-fund",
+            // The catalog adapters are pure JS; lifecycle scripts would run
+            // unverified code before the integrity check could refuse them.
+            "--ignore-scripts",
             "--loglevel",
             "error",
             &package,
@@ -251,8 +265,41 @@ pub fn install_adapter(engine_id: &str) -> Result<PathBuf, String> {
         let detail = detail.lines().next_back().unwrap_or("npm failed").trim();
         return Err(format!("{package} could not be installed. {detail}"));
     }
+    if let Err(reason) = verify_adapter_integrity(&root, name, version, &integrity) {
+        // A tarball that does not match the published hash never runs.
+        let _ = fs::remove_dir_all(root.join("node_modules").join(name));
+        return Err(reason);
+    }
     resolve_on_path(&binary, &runtime_path(), None)
         .ok_or_else(|| format!("{package} installed without a {binary} command"))
+}
+
+/// npm writes what it actually resolved into `node_modules/.package-lock.json`;
+/// the catalog's pinned version and `dist.integrity` must match it exactly.
+fn verify_adapter_integrity(
+    root: &Path,
+    name: &str,
+    version: &str,
+    integrity: &str,
+) -> Result<(), String> {
+    let lock = root.join("node_modules").join(".package-lock.json");
+    let text = fs::read_to_string(&lock)
+        .map_err(|_| format!("{name}@{version} left no install receipt to verify"))?;
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|_| "install receipt is not readable JSON".to_string())?;
+    let key = format!("node_modules/{name}");
+    let entry = json
+        .get("packages")
+        .and_then(|packages| packages.get(&key))
+        .ok_or_else(|| format!("{name}@{version} is missing from the install receipt"))?;
+    let actual_version = entry.get("version").and_then(|v| v.as_str());
+    let actual_integrity = entry.get("integrity").and_then(|v| v.as_str());
+    if actual_version != Some(version) || actual_integrity != Some(integrity) {
+        return Err(format!(
+            "{name}@{version} did not match its published integrity hash"
+        ));
+    }
+    Ok(())
 }
 
 fn detect_one(spec: &EngineSpec, search_path: &str, cwd: Option<&Path>) -> DetectedEngine {
@@ -454,7 +501,7 @@ mod tests {
         // hiding the engine as if it were not installed at all.
         assert_eq!(
             engine.adapter_package.as_deref(),
-            Some("@agentclientprotocol/claude-agent-acp@^0.75")
+            Some("@agentclientprotocol/claude-agent-acp@0.77.0")
         );
 
         // A ready engine has nothing to install.

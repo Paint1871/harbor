@@ -31,6 +31,7 @@ describe("toggleNotificationKind", () => {
       "turn-cancelled",
       "turn-refused",
       "turn-stopped",
+      "routine",
     ]);
     expect(toggleNotificationKind(["permission"], "mail", true)).toEqual([
       "permission",

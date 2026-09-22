@@ -58,7 +58,19 @@ pub async fn write(
     let contents = contents.to_string();
     run_blocking(move || {
         let resolved = resolve(&root, &path)?;
-        fs::write(resolved, contents)?;
+        if let Some(parent) = resolved.parent() {
+            fs::create_dir_all(parent)?;
+            // The create step ran against a path that was only prefix-checked;
+            // re-resolve now that every component exists so a symlink swapped
+            // in between cannot redirect the write outside the workspace.
+            harbor_paths::assert_within(&root, &resolved)
+                .map_err(|error| Error::Message(error.to_string()))?;
+        }
+        // Sibling temp file + rename: readers never observe a truncated file
+        // at the target path.
+        let tmp = resolved.with_file_name(format!(".harbor-tmp-{}", uuid::Uuid::now_v7()));
+        fs::write(&tmp, contents)?;
+        fs::rename(&tmp, &resolved)?;
         Ok(())
     })
     .await
@@ -84,6 +96,12 @@ pub async fn list(
         for entry in fs::read_dir(resolved)? {
             let entry = entry?;
             let entry_path = entry.path();
+            let name = entry.file_name();
+            // A crashed write leaves its temp sibling behind; it is not a file
+            // the builder made, so it is not listed as one.
+            if name.to_string_lossy().starts_with(".harbor-tmp-") {
+                continue;
+            }
             let link_meta = fs::symlink_metadata(&entry_path)?;
             if link_meta.file_type().is_symlink() {
                 // Skip unresolvable / out-of-root symlinks.

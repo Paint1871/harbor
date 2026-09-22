@@ -56,6 +56,9 @@ struct TurnContext {
     acp_session: Option<String>,
     kind: SessionKind,
     agent_id: Option<String>,
+    /// Released plugin ids the agent may use; the sidecar still needs a stored
+    /// credential before it advertises any tool.
+    granted_plugins: Vec<String>,
 }
 
 pub fn grant_engines(allow: &ExecutableAllowlist, engines: &[DetectedEngine]) {
@@ -152,6 +155,8 @@ async fn thread_turn_context(pool: &SqlitePool, thread_id: &str) -> Result<TurnC
         acp_session: ctx.acp_session,
         kind: SessionKind::Thread,
         agent_id: None,
+        // Folder threads belong to a workspace, not an agent — no plugin grants.
+        granted_plugins: Vec::new(),
     })
 }
 
@@ -165,6 +170,14 @@ async fn agent_turn_context(pool: &SqlitePool, chat_id: &str) -> Result<TurnCont
         .into_iter()
         .filter(|path| path != &cwd && !path.trim().is_empty())
         .collect();
+    let granted_plugins = harbor_core::plugins::list_grants(pool, &ctx.agent_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|grant| grant.enabled)
+        .map(|grant| grant.plugin_id)
+        .filter(|id| harbor_core::plugins::definition(id).is_some_and(|def| def.released))
+        .collect();
     Ok(TurnContext {
         engine_id: ctx.engine_id,
         cwd,
@@ -172,6 +185,7 @@ async fn agent_turn_context(pool: &SqlitePool, chat_id: &str) -> Result<TurnCont
         acp_session: ctx.acp_session,
         kind: SessionKind::Agent,
         agent_id: Some(ctx.agent_id),
+        granted_plugins,
     })
 }
 
@@ -373,7 +387,16 @@ fn get_or_connect(
         args,
         cwd: ctx.cwd.clone(),
         mcp_servers: std::env::current_exe()
-            .map(|path| plugin_mcp_servers(&path.to_string_lossy(), key))
+            .map(|path| {
+                plugin_mcp_servers(
+                    &path.to_string_lossy(),
+                    key,
+                    ctx.agent_id.as_deref(),
+                    &ctx.granted_plugins,
+                    &crate::plugins_host::keyring_dir().display().to_string(),
+                    &crate::database_path().display().to_string(),
+                )
+            })
             .unwrap_or_default(),
     };
     let mut session = AcpHostSession::connect(spec.clone()).map_err(|error| error.to_string())?;
@@ -797,7 +820,9 @@ mod tests {
 
     #[test]
     fn live_spawn_spec_includes_harbor_plugins_mcp_without_tokens() {
-        let servers = plugin_mcp_servers("/usr/bin/harbor", "thread-abc");
+        let granted = vec!["github".to_string()];
+        let servers =
+            plugin_mcp_servers("/usr/bin/harbor", "thread-abc", None, &granted, "/k", "/db");
         assert_eq!(servers.len(), 1);
         let server = &servers[0];
         assert_eq!(server.name, "harbor-plugins");
@@ -806,15 +831,17 @@ mod tests {
         let encoded = serde_json::to_value(server).unwrap();
         assert!(encoded["env"].is_array());
         assert!(!encoded["env"].is_object());
-        assert_eq!(encoded["env"].as_array().unwrap().len(), 1);
+        assert_eq!(encoded["env"].as_array().unwrap().len(), 3);
         assert_eq!(encoded["env"][0]["name"], "HARBOR_PLUGIN_SESSION");
         assert_eq!(encoded["env"][0]["value"], "thread-abc");
+        assert_eq!(encoded["env"][1]["name"], "HARBOR_PLUGIN_GRANTS");
+        assert_eq!(encoded["env"][1]["value"], "github");
         for env in &server.env {
             assert!(!env.name.to_ascii_uppercase().contains("TOKEN"));
             assert!(!looks_tokenish(&env.value), "{}", env.value);
         }
         assert!(!looks_tokenish(&encoded.to_string()));
-        assert!(plugin_mcp_servers("", "thread-abc").is_empty());
+        assert!(plugin_mcp_servers("", "thread-abc", None, &granted, "/k", "/db").is_empty());
     }
 
     #[test]

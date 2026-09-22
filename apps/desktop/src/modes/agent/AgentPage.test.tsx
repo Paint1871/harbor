@@ -204,7 +204,7 @@ it("lists places on open and revokes by id", async () => {
 });
 
 it("searches past chats and can open a hit", async () => {
-  const hits: SearchHit[] = [{ chat_id: "weekly", prose: "alpha rust backend", created_at: Math.floor(Date.now() / 1000) }];
+  const hits: SearchHit[] = [{ chatId: "weekly", chatKind: "agent", prose: "alpha rust backend", createdAt: Math.floor(Date.now() / 1000) }];
   invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
     if (command === "session_search") return Promise.resolve(hits);
     if (command === "memory_list" || command === "places_list" || command === "plugin_grants_list") return Promise.resolve([]);
@@ -256,6 +256,9 @@ it("completes a teammate name into the draft, and mails the handoff only when se
 
   fireEvent.change(composer, { target: { value: "@Reviewer please take the deploy" } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  // A handoff is staged for confirmation, not sent straight away.
+  expect(invoke).not.toHaveBeenCalledWith("mail_send", expect.anything());
+  fireEvent.click(await screen.findByRole("button", { name: "Send mail" }));
   await waitFor(() =>
     expect(invoke).toHaveBeenCalledWith("mail_send", {
       fromAgentId: "agent-1",

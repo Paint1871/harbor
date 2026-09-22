@@ -134,7 +134,9 @@ export function Plugins() {
   function beginConnect(row: PluginRow) {
     setDevice(null);
     setNotice(null);
-    if (details(row).authKind === "token") {
+    // GitHub's primary path is the device flow; the credential form stays
+    // available as the explicit fallback, not the other way around.
+    if (details(row).authKind === "token" && row.id !== "github") {
       setSetup(row);
       setCredential("");
       setAccountLabel(row.accountLabel ?? "");
@@ -152,6 +154,14 @@ export function Plugins() {
         return reload();
       })
       .finally(() => setBusy(null));
+  }
+
+  function openTokenForm(row: PluginRow) {
+    setDevice(null);
+    setNotice(null);
+    setSetup(row);
+    setCredential("");
+    setAccountLabel(row.accountLabel ?? "");
   }
 
   async function saveConnection() {
@@ -235,7 +245,8 @@ export function Plugins() {
           {visibleRows.length ? visibleRows.map((row) => {
             const meta = details(row);
             const connected = row.status === "connected";
-            const status = connected ? "Connected" : row.status === "connecting" ? "Connecting" : "Available";
+            const soon = row.status === "soon";
+            const status = connected ? "Connected" : row.status === "connecting" ? "Connecting" : soon ? "Soon" : "Available";
             return (
               <article className="harbor-plugin-row" data-status={row.status} key={row.id}>
                 <div className="harbor-plugin-row-main">
@@ -248,15 +259,24 @@ export function Plugins() {
                 <div className="harbor-plugin-row-side">
                   <span className="harbor-plugin-category">{meta.category}</span>
                   <span className="harbor-plugin-account">
-                    {connected ? (row.accountLabel || "Connected") : meta.authKind === "device" ? "Browser sign-in" : "Personal access token"}
+                    {connected ? (row.accountLabel || "Connected") : soon ? "Not in this build" : row.id === "github" ? "Browser sign-in or token" : meta.authKind === "device" ? "Browser sign-in" : "Personal access token"}
                   </span>
                   <span className="harbor-plugin-status" data-status={row.status}>{status}</span>
                   {connected ? (
                     <Button variant="ghost" aria-label={`Disconnect ${displayName(row)}`} disabled={busy === row.id} onClick={() => disconnect(row)}>Disconnect</Button>
+                  ) : soon ? (
+                    <Button variant="ghost" aria-label={`${displayName(row)} is not available yet`} disabled>Soon</Button>
                   ) : (
-                    <Button variant="primary" aria-label={`Connect ${displayName(row)}`} disabled={busy === row.id || row.status === "connecting"} onClick={() => beginConnect(row)}>
-                      {busy === row.id || row.status === "connecting" ? "Connecting…" : "Connect"}
-                    </Button>
+                    <>
+                      <Button variant="primary" aria-label={`Connect ${displayName(row)}`} disabled={busy === row.id || row.status === "connecting"} onClick={() => beginConnect(row)}>
+                        {busy === row.id || row.status === "connecting" ? "Connecting…" : "Connect"}
+                      </Button>
+                      {row.id === "github" ? (
+                        <Button variant="ghost" aria-label={`Connect ${displayName(row)} with a token`} disabled={busy === row.id || row.status === "connecting"} onClick={() => openTokenForm(row)}>
+                          Use a token
+                        </Button>
+                      ) : null}
+                    </>
                   )}
                 </div>
               </article>
@@ -300,7 +320,7 @@ export function Plugins() {
                       return (
                         <label key={row.id}>
                           <input
-                            aria-label={row.id === "github" ? agent.name : `${agent.name} · ${displayName(row)}`}
+                            aria-label={`${agent.name} · ${displayName(row)}`}
                             type="checkbox"
                             checked={!!grants[key]}
                             disabled={busy === key}
@@ -324,7 +344,15 @@ export function Plugins() {
         <div className="harbor-connection-approvals">
           <span className="harbor-eyebrow">PENDING</span>
           <h3>Approvals</h3>
-          {approvals.map((row) => <ApprovalCard key={row.id} id={row.id} onResolved={() => void reload()} />)}
+          {approvals.map((row) => (
+            <ApprovalCard
+              key={row.id}
+              approval={row}
+              agentName={agents.find((agent) => agent.id === row.agentId)?.name}
+              pluginName={rows.find((plugin) => plugin.id === row.pluginId)?.displayName}
+              onResolved={() => void reload()}
+            />
+          ))}
         </div>
       ) : (
         <div className="harbor-plugin-note">

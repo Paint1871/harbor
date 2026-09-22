@@ -10,17 +10,11 @@ pub enum Error {
     Migrate(#[from] sqlx::migrate::MigrateError),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
-    #[error("unimplemented: {0}")]
-    Unimplemented(&'static str),
     #[error("{0}")]
     Message(String),
 }
 
 impl Error {
-    pub fn unimplemented(name: &'static str) -> Self {
-        Self::Unimplemented(name)
-    }
-
     pub(crate) fn from_constraint(err: sqlx::Error, unique_message: &str) -> Self {
         if err
             .as_database_error()

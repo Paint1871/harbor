@@ -14,6 +14,7 @@ import { MentionList, mentionQuery } from "../../chrome/MentionList";
 import { Transcript } from "../../chrome/Transcript";
 import { useOptionalChrome } from "../../chrome/chrome-context";
 import { settingsGet, settingsSet } from "../../settings";
+import { PENDING_PROMPT_NEXT, pendingPromptKey } from "../../pending-prompt";
 
 interface AgentPageProps {
   agent: AgentRecord;
@@ -23,6 +24,32 @@ interface AgentPageProps {
   onDeleted?: (id: string) => void;
   onOpenSkills?: () => void;
   onOpenPlugins?: () => void;
+}
+
+interface PendingMail {
+  to: AgentRecord;
+  body: string;
+}
+
+/**
+ * "@Name rest…" mails the handoff to a teammate. The longest name wins so a
+ * teammate named "Bob" never swallows a message meant for "Bobby", and the
+ * character after the name must be a boundary — `@Bobby` is not `@Bob` + "by".
+ */
+export function mailTarget(value: string, teammates: AgentRecord[], selfId: string): AgentRecord | null {
+  const lower = value.toLowerCase();
+  if (!lower.startsWith("@")) return null;
+  return (
+    teammates
+      .filter((item) => item.id !== selfId)
+      .sort((a, b) => b.name.length - a.name.length)
+      .find((item) => {
+        const prefix = `@${item.name.toLowerCase()}`;
+        if (!lower.startsWith(prefix)) return false;
+        const next = lower.charAt(prefix.length);
+        return next === "" || /\s/.test(next);
+      }) ?? null
+  );
 }
 
 export function AgentPage({
@@ -42,6 +69,7 @@ export function AgentPage({
   const [configChoice, setConfigChoice] = useState<Record<string, Record<string, string>>>({});
   const [teammates, setTeammates] = useState<AgentRecord[]>([]);
   const [mailError, setMailError] = useState<string | null>(null);
+  const [pendingMail, setPendingMail] = useState<PendingMail | null>(null);
   const chat = useAgentChat(agent.id, pendingChatId);
   const mention = mentionQuery(draft);
   const mentionItems = teammates
@@ -84,13 +112,25 @@ export function AgentPage({
   }, [agent.id]);
   useEffect(() => {
     let active = true;
-    void settingsGet("pending_agent_prompt").then((value) => {
+    void settingsGet(PENDING_PROMPT_NEXT).then((value) => {
       if (!active || typeof value !== "string" || !value.trim()) return;
       setDraft(value);
-      void settingsSet("pending_agent_prompt", null);
+      void settingsSet(PENDING_PROMPT_NEXT, null);
     });
     return () => { active = false; };
   }, [agent.id, chrome?.destination]);
+  useEffect(() => {
+    const chatId = chat.activeId;
+    if (!chatId) return;
+    const key = pendingPromptKey(chatId);
+    let active = true;
+    void settingsGet(key).then((value) => {
+      if (!active || typeof value !== "string" || !value.trim()) return;
+      setDraft(value);
+      void settingsSet(key, null);
+    });
+    return () => { active = false; };
+  }, [chat.activeId]);
   useEffect(() => {
     if (chrome?.destination !== "mode") return;
     chat.reload();
@@ -299,6 +339,25 @@ export function AgentPage({
                   <span>{mailError}</span>
                 </div>
               ) : null}
+              {pendingMail ? (
+                <div className="harbor-status-banner" role="status">
+                  <span>Mail to {pendingMail.to.name}: “{pendingMail.body}”</span>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      const mail = pendingMail;
+                      setPendingMail(null);
+                      setMailError(null);
+                      void call("mail_send", { fromAgentId: agent.id, toAgentId: mail.to.id, body: mail.body })
+                        .then(() => setDraft(""))
+                        .catch((reason) => setMailError(`Mail could not be sent. ${String(reason)}`));
+                    }}
+                  >
+                    Send mail
+                  </Button>
+                  <Button variant="ghost" onClick={() => setPendingMail(null)}>Cancel</Button>
+                </div>
+              ) : null}
               {mention !== null ? (
                 <MentionList
                   label="Teammates"
@@ -320,17 +379,18 @@ export function AgentPage({
                 value={draft}
                 onValueChange={(value) => {
                   if (mailError) setMailError(null);
+                  if (pendingMail) setPendingMail(null);
                   setDraft(value);
                 }}
                 disabled={chat.historyLoading && !chat.sending}
                 onSend={(value) => {
-                  const named = teammates.find((item) => item.id !== agent.id && value.toLowerCase().startsWith(`@${item.name.toLowerCase()}`));
+                  const named = mailTarget(value, teammates, agent.id);
                   if (named) {
+                    // A handoff spends another teammate's tokens, so it is
+                    // staged for confirmation rather than sent on Enter.
                     const body = value.slice(named.name.length + 1).trim() || `Handoff from ${agent.name}`;
                     setMailError(null);
-                    void call("mail_send", { fromAgentId: agent.id, toAgentId: named.id, body })
-                      .then(() => setDraft(""))
-                      .catch((reason) => setMailError(`Mail could not be sent. ${String(reason)}`));
+                    setPendingMail({ to: named, body });
                     return;
                   }
                   setDraft("");

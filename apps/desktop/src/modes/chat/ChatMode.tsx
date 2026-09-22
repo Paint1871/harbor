@@ -346,7 +346,7 @@ export function ChatMode({
       <Button variant="primary" disabled={!!workspace && !canCreate} onClick={() => void newThread()}>{creating ? "Creating…" : "New thread"}</Button>
       <FolderRail workspaces={workspaces} otherCount={other.length} selectedId={workspaceId}
         onAddWorkspace={() => setAdding(true)} onSelect={(id) => { setDestination("mode"); setWorkspaceId(id); setActive(null); }}>
-        {threads?.length ? <ThreadList threads={threads} activeId={active?.id ?? null}
+        {threads?.length ? <ThreadList threads={threads} workspaceId={workspaceId} activeId={active?.id ?? null}
           onSelect={(thread) => { setDestination("mode"); setActive(thread); }} onPin={(id, pinned) => void pin(id, pinned)}
           onRename={(id, title) => void renameThread(id, title)} onDelete={(id) => void deleteThread(id)} />
           : <p className="harbor-rail-hint">{workspaceId && !threads ? "Loading threads…" : "Your conversations will appear here."}</p>}

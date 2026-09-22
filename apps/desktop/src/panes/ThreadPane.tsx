@@ -1,12 +1,13 @@
-import { Composer } from "@harbor/ui/Composer";
+import { Button } from "@harbor/ui/Button";
 import { PaneHeader } from "./PaneHeader";
+import { useChrome } from "../chrome/chrome-context";
 
 interface ThreadPaneProps {
   state: ThreadPaneState;
   onStateChange: (update: (current: ThreadPaneState) => ThreadPaneState) => void;
   focused: boolean;
   expanded?: boolean;
-  onFocus: () => void;
+  onFocus?: () => void;
   onExpand?: () => void;
   onSplit?: () => void;
   onClose?: () => void;
@@ -28,62 +29,30 @@ export interface ThreadPaneState {
 export function createThreadPaneState(): ThreadPaneState {
   return {
     draft: "",
-    model: "Automatic · Sonnet 5",
-    effort: "Low",
-    notice: "Ready",
-    messages: [{ role: "user", text: "Fix the failing checkout test in auth.e2e-spec.ts" }],
+    model: "",
+    effort: "",
+    notice: "",
+    messages: [],
   };
 }
 
-export function ThreadPane({ state, onStateChange, focused, expanded = false, onFocus, onExpand, onSplit, onClose }: ThreadPaneProps) {
-  const { draft, model, effort, notice, messages } = state;
-
-  function send(value: string) {
-    const text = value.trim();
-    if (!text) return;
-    onStateChange((current) => ({ ...current, messages: [...current.messages, { role: "user", text }], draft: "", notice: "Queued" }));
-    window.setTimeout(() => onStateChange((current) => ({ ...current, notice: "Ready" })), 700);
-  }
-
+/**
+ * Folder threads live in Chat mode (ACP). This pane is a doorway to them, not
+ * a second chat surface: there is no thread backend behind a Code pane, so the
+ * composer sends nothing.
+ */
+export function ThreadPane({ focused, expanded = false, onFocus, onExpand, onSplit, onClose }: ThreadPaneProps) {
+  const { onModeChange } = useChrome();
   return (
     <section className="harbor-pane harbor-thread-pane" data-focused={focused} onClick={onFocus} aria-label="Thread">
-      <PaneHeader title="Thread" live={notice === "Queued"} leading={<span className="harbor-pane-app-mark" data-kind="thread" aria-hidden="true">✣</span>} expanded={expanded} onExpand={onExpand} onSplit={onSplit} onClose={onClose} />
+      <PaneHeader title="Thread" leading={<span className="harbor-pane-app-mark" data-kind="thread" aria-hidden="true">✣</span>} expanded={expanded} onExpand={onExpand} onSplit={onSplit} onClose={onClose} />
       <div className="harbor-thread-pane-body">
-        <div className="harbor-thread-pane-history">
-          {messages.map((message, index) => (
-            <div className={`harbor-thread-pane-message harbor-thread-pane-message-${message.role}`} key={`${message.role}-${index}`}>
-              {message.text}
-            </div>
-          ))}
-          <div className="harbor-thread-pane-tool"><span aria-hidden="true">›</span><strong>+2 previous tool calls</strong></div>
-          <div className="harbor-thread-pane-tool"><span aria-hidden="true">▣</span><span>Edit <code>src/auth/auth.service.ts</code></span><span className="harbor-thread-pane-check" aria-label="Complete">✓</span></div>
-          <p className="harbor-thread-pane-summary">The refresh path re-issued a token after the session was revoked. Guard tightened.</p>
+        <div className="harbor-terminal-state" role="status">
+          <span className="harbor-terminal-state-mark" aria-hidden="true">✣</span>
+          <strong>Threads live in Chat mode</strong>
+          <p>Pick a folder there and start an ACP conversation against the same workspace.</p>
+          <Button variant="primary" onClick={() => onModeChange("chat")}>Open Chat</Button>
         </div>
-        <Composer
-          value={draft}
-          onValueChange={(value) => onStateChange((current) => ({ ...current, draft: value }))}
-          onSend={send}
-          textareaProps={{ "aria-label": "Thread message", placeholder: "Ask anything..." }}
-          controls={
-            <div className="harbor-thread-pane-controls">
-              <label>
-                <span className="harbor-thread-pane-control-icon" aria-hidden="true">⌘</span>
-                <select aria-label="Thread model" value={model} onChange={(event) => onStateChange((current) => ({ ...current, model: event.target.value }))}>
-                  <option>Automatic · Sonnet 5</option>
-                  <option>Automatic · Opus 4</option>
-                </select>
-              </label>
-              <label>
-                <span aria-hidden="true">ϟ</span>
-                <select aria-label="Thread effort" value={effort} onChange={(event) => onStateChange((current) => ({ ...current, effort: event.target.value }))}>
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>High</option>
-                </select>
-              </label>
-            </div>
-          }
-        />
       </div>
     </section>
   );

@@ -17,6 +17,7 @@ import { Skills } from "../destinations/Skills";
 import { AppRail } from "./AppRail";
 import { DestinationWorkspaceRail } from "./DestinationWorkspaceRail";
 import { interpretShortcut } from "./shortcuts";
+import { useRoutineScheduler } from "../routines/useRoutineScheduler";
 
 type SettingsPage = "general" | "notifications" | "voice" | "agents" | "account";
 
@@ -64,6 +65,8 @@ export function DesktopShell({
   useEffect(() => {
     void settingsSet("last_mode", mode);
   }, [mode]);
+
+  useRoutineScheduler();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

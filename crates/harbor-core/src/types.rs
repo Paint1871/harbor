@@ -15,6 +15,10 @@ pub struct EngineSpec {
     pub pty_args: Vec<String>,
     pub supports_terminal: bool,
     pub adapter_package: Option<String>,
+    /// npm `dist.integrity` the installed tarball must match. Install refuses
+    /// an adapter entry that does not pin one.
+    #[serde(default)]
+    pub adapter_integrity: Option<String>,
     pub min_version: Option<String>,
     pub last_handshake: Option<String>,
     pub auth_hint: String,
@@ -179,8 +183,12 @@ pub struct Place {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchHit {
     pub chat_id: String,
+    /// `agent` chats and `thread` conversations share the `chat_id` column;
+    /// the kind says which surface a hit navigates back to.
+    pub chat_kind: String,
     pub prose: String,
     pub created_at: i64,
 }

@@ -113,7 +113,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
         </fieldset>
         {error ? <p className="harbor-inline-error" role="alert">{error}</p> : null}
         <div className="harbor-dialog-actions">
-          <Button disabled={saving || drafting} onClick={() => void draftWithAi()}>{drafting ? "Drafting…" : "Create with AI"}</Button>
+          <Button disabled={saving || drafting} onClick={() => void draftWithAi()}>{drafting ? "Drafting…" : "Auto-fill"}</Button>
           <Button disabled={saving || drafting} onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="primary" disabled={disabled}>{saving ? "Creating…" : "Create agent"}</Button>
         </div>

@@ -119,15 +119,10 @@ mod tests {
         let engines = commands::engines_detect(&pool).await.unwrap();
         assert!(!engines.is_empty());
         let _agents = commands::agent_list(&pool).await.unwrap();
-        let message =
-            commands::pty_spawn(&pool, "pane".into(), "workspace".into(), 80, 24, None, None)
-                .await
-                .expect_err("unimplemented host command")
-                .to_string();
-        assert!(
-            message.contains("unimplemented"),
-            "command failed for a reason other than unimplemented: {message}"
-        );
+        let message = commands::agent_chat_history(&pool, "missing".into())
+            .await
+            .expect_err("missing chat must fail")
+            .to_string();
         assert!(
             !message.to_ascii_lowercase().contains("token")
                 && !message.to_ascii_lowercase().contains("entitlement")

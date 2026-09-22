@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@harbor/ui/Button";
 import { settingsSet } from "../settings";
+import { PENDING_PROMPT_NEXT } from "../pending-prompt";
 import { useChrome } from "../chrome/chrome-context";
 import { SKILLS } from "../skills/catalog";
 
@@ -31,7 +32,7 @@ export function Skills() {
     setBusyAction("use");
     setNotice(null);
     try {
-      await settingsSet("pending_agent_prompt", selected.brief);
+      await settingsSet(PENDING_PROMPT_NEXT, selected.brief);
       setNotice(`${selected.name} is ready in the Agent composer.`);
       onModeChange("agent");
     } catch (reason) {

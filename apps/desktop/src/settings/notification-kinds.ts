@@ -7,6 +7,7 @@ export const NOTIFICATION_KIND_IDS = [
   "turn-cancelled",
   "turn-refused",
   "turn-stopped",
+  "routine",
 ] as const;
 
 export type NotificationKindId = (typeof NOTIFICATION_KIND_IDS)[number];
@@ -23,6 +24,7 @@ export const NOTIFICATION_KINDS: {
   { id: "turn-cancelled", label: "Cancelled", description: "A turn that was cancelled." },
   { id: "turn-refused", label: "Refused", description: "The engine refused the turn." },
   { id: "turn-stopped", label: "Stopped", description: "A turn that stopped for another reason." },
+  { id: "routine", label: "Routines", description: "A scheduled routine that prepared a chat." },
 ];
 
 function isKindId(value: unknown): value is NotificationKindId {

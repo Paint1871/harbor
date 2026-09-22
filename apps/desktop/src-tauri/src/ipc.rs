@@ -1,5 +1,6 @@
 use crate::acp_host::AcpRegistry;
 use crate::security::ExecutableAllowlist;
+use harbor_core::SqlitePool;
 use harbor_core::icons::EngineIcon;
 use harbor_core::types::{
     AgentChat, AgentRecord, ChatMessage, ContentPart, CreateAgent, DetectedEngine, FileDiff,
@@ -7,8 +8,7 @@ use harbor_core::types::{
     PluginRow, SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup,
     WorkspaceTab,
 };
-use harbor_core::SqlitePool;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -31,6 +31,41 @@ fn fetch_url(url: &str) -> Result<String, String> {
                 .and_then(|response| response.text())
         })
         .map_err(|error| error.to_string())
+}
+
+/// A signed installer should be tens of megabytes, not a stream that can
+/// exhaust memory before verification ever runs.
+const MAX_ARTIFACT_BYTES: u64 = 512 * 1024 * 1024;
+
+/// Artifacts are binary; a longer budget than the metadata fetch.
+fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let response = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .and_then(|client| {
+            client
+                .get(url)
+                .header("User-Agent", "harbor")
+                .send()
+                .and_then(|response| response.error_for_status())
+        })
+        .map_err(|error| error.to_string())?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_ARTIFACT_BYTES)
+    {
+        return Err("update artifact is too large".into());
+    }
+    let mut bytes = Vec::new();
+    response
+        .take(MAX_ARTIFACT_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    if bytes.len() as u64 > MAX_ARTIFACT_BYTES {
+        return Err("update artifact is too large".into());
+    }
+    Ok(bytes)
 }
 
 #[tauri::command]
@@ -682,10 +717,11 @@ pub async fn places_revoke(pool: State<'_, SqlitePool>, id: String) -> Result<()
 #[tauri::command]
 pub async fn session_search(
     pool: State<'_, SqlitePool>,
-    agent_id: String,
+    agent_id: Option<String>,
+    workspace_id: Option<String>,
     query: String,
 ) -> Result<Vec<SearchHit>, String> {
-    harbor_core::commands::session_search(&pool, agent_id, query)
+    harbor_core::commands::session_search(&pool, agent_id, workspace_id, query)
         .await
         .map_err(map_err)
 }
@@ -810,6 +846,57 @@ pub async fn notifications_clear(pool: State<'_, SqlitePool>) -> Result<(), Stri
     harbor_core::commands::notifications_clear(&pool)
         .await
         .map_err(map_err)
+}
+
+/// Local surfaces that schedule their own work (routines) record inbox events
+/// through the same path as host-raised ones: `notification_kinds` filters
+/// them, the live emit respects `notifications_enabled`, and a bad row is an
+/// error the caller sees instead of a silent drop.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn notification_record(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    kind: String,
+    title: String,
+    body: Option<String>,
+    mode: Option<String>,
+    session_ref: Option<String>,
+    workspace_id: Option<String>,
+    pane_id: Option<String>,
+) -> Result<(), String> {
+    if !harbor_core::notifications::KNOWN_KINDS.contains(&kind.as_str()) {
+        return Err(format!("unknown notification kind: {kind}"));
+    }
+    let kinds = harbor_core::settings::get(&pool, "notification_kinds")
+        .await
+        .ok()
+        .flatten();
+    if !harbor_core::notifications::kind_allowed(kinds, &kind) {
+        return Ok(());
+    }
+    let row = harbor_core::notifications::record(
+        &pool,
+        &kind,
+        &title,
+        body.as_deref().unwrap_or(""),
+        harbor_core::notifications::Target {
+            mode,
+            workspace_id,
+            pane_id,
+            session_ref,
+        },
+    )
+    .await
+    .map_err(map_err)?;
+    let enabled = harbor_core::settings::get(&pool, "notifications_enabled")
+        .await
+        .ok()
+        .flatten();
+    if should_emit_notification(enabled.as_ref()) {
+        let _ = app.emit("notification", row);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -954,9 +1041,106 @@ pub async fn updater_check() -> Result<UpdateStatus, String> {
     })
 }
 
+/// Downloads the newer release's platform artifact and its `.minisig`, then
+/// verifies the signature against the baked key. Only a verified artifact is
+/// written, to the app-support `updates/` directory; the returned path is what
+/// a UI would reveal or hand to the OS installer.
 #[tauri::command]
-pub async fn updater_install() -> Result<(), String> {
-    Err(harbor_updater::refuse_install().to_string())
+pub async fn updater_install() -> Result<String, String> {
+    let check = tauri::async_runtime::spawn_blocking(|| {
+        harbor_updater::check_latest(fetch_url, env!("CARGO_PKG_VERSION"))
+    })
+    .await
+    .unwrap_or_else(|_| harbor_updater::UpdateCheck::unavailable());
+    if !check.available {
+        return Err("no signed update is available".into());
+    }
+    let artifact_url = check
+        .artifact_url
+        .clone()
+        .unwrap_or_else(|| "harbor-update".into());
+    let verified = tauri::async_runtime::spawn_blocking(move || {
+        harbor_updater::install_release(&check, fetch_bytes)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+
+    let name = artifact_url
+        .split('?')
+        .next()
+        .and_then(|path| path.rsplit('/').next())
+        .filter(|name| {
+            // Whitelist a portable filename: separators, drive qualifiers, and
+            // dot-only names can never reach the staged path on any OS.
+            !name.is_empty()
+                && name.chars().any(|ch| ch != '.')
+                && name
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_'))
+        })
+        .unwrap_or("harbor-update");
+    let dir = crate::application_data_root().join("updates");
+    std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    let path = dir.join(name);
+    // Temp file + rename: a crash mid-write can never leave a truncated file
+    // at the final staged path.
+    let staging = dir.join(format!(".{name}.download"));
+    std::fs::write(&staging, &verified).map_err(|error| error.to_string())?;
+    std::fs::rename(&staging, &path).map_err(|error| error.to_string())?;
+    // One staged artifact is enough; older downloads and interrupted temp
+    // files are removed once the new one is safely in place.
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let candidate = entry.path();
+            if candidate != path && candidate.is_file() {
+                let _ = std::fs::remove_file(candidate);
+            }
+        }
+    }
+    Ok(path.display().to_string())
+}
+
+/// Reveal a staged update in the OS file manager. The renderer hands back the
+/// path `updater_install` returned; anything outside `updates/` is refused so
+/// this never opens an arbitrary location.
+#[tauri::command]
+pub fn updater_reveal(path: String) -> Result<(), String> {
+    let dir = crate::application_data_root()
+        .join("updates")
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let target = Path::new(&path)
+        .canonicalize()
+        .map_err(|_| "no staged update at that path".to_string())?;
+    if !target.is_file() || !target.starts_with(&dir) {
+        return Err("path is not a staged update".into());
+    }
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg("-R").arg(&target);
+        command
+    };
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command.arg(format!("/select,{}", target.display()));
+        command
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(target.parent().unwrap_or(dir.as_path()));
+        command
+    };
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    Ok(())
 }
 
 /// Reading what a CLI already wrote is cheap and touches no network, so this
@@ -1145,6 +1329,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         notifications_unread_count,
         notifications_mark_read,
         notifications_clear,
+        notification_record,
         face_preview,
         acp_permission_resolve,
         plugin_list,
@@ -1161,6 +1346,7 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         dictation_prepare_model,
         updater_check,
         updater_install,
+        updater_reveal,
         git_diff,
         open_external_url,
         engine_usage,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-updater-reveal"
+description = "Enables the updater_reveal command without any pre-configured scope."
+commands.allow = ["updater_reveal"]
+
+[[permission]]
+identifier = "deny-updater-reveal"
+description = "Denies the updater_reveal command without any pre-configured scope."
+commands.deny = ["updater_reveal"]

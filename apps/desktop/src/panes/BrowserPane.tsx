@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { call } from "../ipc";
 import { PaneHeader } from "./PaneHeader";
 
-const DEFAULT_URL = "http://localhost:3000/pricing";
+const DEFAULT_URL = "http://localhost:3000";
 
 function displayUrl(value: string): string {
   return value.replace(/^https?:\/\//i, "");
@@ -33,7 +33,7 @@ interface BrowserPaneProps {
   onStateChange: (update: (current: BrowserPaneState) => BrowserPaneState) => void;
   focused: boolean;
   expanded?: boolean;
-  onFocus: () => void;
+  onFocus?: () => void;
   onExpand?: () => void;
   onSplit?: () => void;
   onClose?: () => void;
@@ -45,17 +45,14 @@ function normalizeUrl(value: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
 }
 
+/**
+ * An embedded browser is a post-0.1.0 pane (a wry child webview), and the app
+ * CSP forbids frames anyway (`frame-src 'none'`). This pane is the address bar
+ * plus the hand-off to the system browser — it never pretends to render a page.
+ */
 export function BrowserPane({ state, onStateChange, focused, expanded = false, onFocus, onExpand, onSplit, onClose }: BrowserPaneProps) {
-  const { draft, url, history, historyIndex, frameKey, status } = state;
-  const onStateChangeRef = useRef(onStateChange);
-  onStateChangeRef.current = onStateChange;
+  const { draft, url, history, historyIndex } = state;
   const [openError, setOpenError] = useState<string | null>(null);
-
-  useEffect(() => {
-    onStateChangeRef.current((current) => ({ ...current, status: "loading" }));
-    const timeout = window.setTimeout(() => onStateChangeRef.current((current) => current.status === "loading" ? { ...current, status: "offline" } : current), 2600);
-    return () => window.clearTimeout(timeout);
-  }, [frameKey, url]);
 
   function navigate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,8 +63,8 @@ export function BrowserPane({ state, onStateChange, focused, expanded = false, o
       url: nextUrl,
       history: [...current.history.slice(0, current.historyIndex + 1), nextUrl],
       historyIndex: current.historyIndex + 1,
-      status: "loading",
     }));
+    void openInSystemBrowser(nextUrl);
   }
 
   function moveHistory(direction: -1 | 1) {
@@ -75,18 +72,18 @@ export function BrowserPane({ state, onStateChange, focused, expanded = false, o
     if (nextIndex < 0 || nextIndex >= history.length) return;
     const nextUrl = history[nextIndex];
     if (!nextUrl) return;
-    onStateChange((current) => ({ ...current, historyIndex: nextIndex, url: nextUrl, draft: displayUrl(nextUrl), status: "loading" }));
+    onStateChange((current) => ({ ...current, historyIndex: nextIndex, url: nextUrl, draft: displayUrl(nextUrl) }));
   }
 
-  function openInSystemBrowser() {
+  function openInSystemBrowser(target = url) {
     setOpenError(null);
-    void call("open_external_url", { url }).catch(() => {
+    void call("open_external_url", { url: target }).catch(() => {
       setOpenError("Could not open in system browser");
     });
   }
 
   return (
-    <section className="harbor-pane harbor-browser-pane" data-focused={focused} onClick={onFocus} aria-label="localhost:3000">
+    <section className="harbor-pane harbor-browser-pane" data-focused={focused} onClick={onFocus} aria-label="Browser preview">
       <PaneHeader
         title="localhost:3000"
         compact
@@ -94,16 +91,13 @@ export function BrowserPane({ state, onStateChange, focused, expanded = false, o
           <div className="harbor-browser-toolbar-inline">
             <button type="button" aria-label="Back" title="Back" disabled={historyIndex === 0} onClick={() => moveHistory(-1)}>‹</button>
             <button type="button" aria-label="Forward" title="Forward" disabled={historyIndex >= history.length - 1} onClick={() => moveHistory(1)}>›</button>
-            <button type="button" aria-label="Reload preview" title="Reload preview" onClick={() => onStateChange((current) => ({ ...current, frameKey: current.frameKey + 1, status: "loading" }))}>↻</button>
             <form onSubmit={navigate}>
               <input aria-label="Preview URL" value={draft} onChange={(event) => onStateChange((current) => ({ ...current, draft: event.target.value }))} />
             </form>
-            <button type="button" className="harbor-browser-open" aria-label="Open in system browser" title="Open in system browser" onClick={openInSystemBrowser}>
+            <button type="button" className="harbor-browser-open" aria-label="Open in system browser" title="Open in system browser" onClick={() => openInSystemBrowser()}>
               Open in system browser
             </button>
-            <span className={openError ? "harbor-browser-status" : "harbor-browser-status harbor-sr-only"} data-status={openError ? "offline" : status} role="status">
-              {openError ?? (status === "ready" ? "Live" : status === "offline" ? "Offline" : "Loading")}
-            </span>
+            {openError ? <span className="harbor-browser-status" data-status="offline" role="status">{openError}</span> : null}
           </div>
         }
         expanded={expanded}
@@ -112,26 +106,11 @@ export function BrowserPane({ state, onStateChange, focused, expanded = false, o
         onClose={onClose}
       />
       <div className="harbor-browser-surface">
-        <iframe
-          key={`${url}:${frameKey}`}
-          title="Preview frame"
-          src={url}
-          sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
-          onLoad={() => onStateChange((current) => ({ ...current, status: "ready" }))}
-          aria-hidden={status !== "ready"}
-        />
-        {status !== "ready" ? (
-          <div className="harbor-browser-placeholder" role="status">
-            <div className="harbor-browser-skeleton harbor-browser-skeleton-wide" />
-            <div className="harbor-browser-skeleton harbor-browser-skeleton-medium" />
-            <div className="harbor-browser-cards">
-              <span />
-              <span data-active="true" />
-              <span />
-            </div>
-            <div className="harbor-browser-skeleton harbor-browser-skeleton-footer" />
-          </div>
-        ) : null}
+        <div className="harbor-terminal-state" role="status">
+          <span className="harbor-terminal-state-mark" aria-hidden="true">↗</span>
+          <strong>Previews open in your browser</strong>
+          <p>An embedded preview pane arrives after 0.1.0. Enter an address above and Harbor opens it in the system browser.</p>
+        </div>
       </div>
     </section>
   );

@@ -10,8 +10,7 @@ use crate::{
     types::{
         AgentChat, AgentRecord, ChatMessage, CreateAgent, DetectedEngine, FileDiff, FsEntry,
         Memory, Notification, PaneLayout, PaneState, Place, PluginApproval, PluginGrant, PluginRow,
-        SearchHit, ThreadRecord, UpdateAgent, UpdateStatus, Workspace, WorkspaceSetup,
-        WorkspaceTab,
+        SearchHit, ThreadRecord, UpdateAgent, Workspace, WorkspaceSetup, WorkspaceTab,
     },
 };
 
@@ -112,37 +111,9 @@ pub async fn pane_set_engine(
     crate::layout::set_engine(pool, &id, &engine_id).await
 }
 
-pub async fn pty_spawn(
-    _pool: &SqlitePool,
-    _pane_id: String,
-    _workspace_id: String,
-    _cols: u16,
-    _rows: u16,
-    _shell: Option<String>,
-    _engine_id: Option<String>,
-) -> Result<(), Error> {
-    Err(Error::unimplemented("pty_spawn"))
-}
-
-pub async fn pty_write_b64(_pane_id: String, _b64: String) -> Result<(), Error> {
-    Err(Error::unimplemented("pty_write_b64"))
-}
-
-pub async fn pty_resize(_pane_id: String, _cols: u16, _rows: u16) -> Result<(), Error> {
-    Err(Error::unimplemented("pty_resize"))
-}
-
-pub async fn pty_pause(_pane_id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("pty_pause"))
-}
-
-pub async fn pty_resume(_pane_id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("pty_resume"))
-}
-
-pub async fn pty_kill(_pane_id: String) -> Result<(), Error> {
-    Err(Error::unimplemented("pty_kill"))
-}
+// PTY commands live in `pty_host` (process registry, executable allowlist) and
+// dictation/updater commands live in `ipc`/`harbor-updater` — they need Tauri
+// state this crate does not carry, so there is deliberately no facade here.
 
 pub async fn fs_read(
     pool: &SqlitePool,
@@ -336,10 +307,11 @@ pub async fn places_revoke(pool: &SqlitePool, id: String) -> Result<(), Error> {
 
 pub async fn session_search(
     pool: &SqlitePool,
-    agent_id: String,
+    agent_id: Option<String>,
+    workspace_id: Option<String>,
     query: String,
 ) -> Result<Vec<SearchHit>, Error> {
-    crate::search::session_search(pool, &agent_id, &query).await
+    crate::search::session_search(pool, agent_id.as_deref(), workspace_id.as_deref(), &query).await
 }
 
 pub async fn mail_send(
@@ -435,30 +407,6 @@ pub async fn plugin_grants_list(
     agent_id: String,
 ) -> Result<Vec<PluginGrant>, Error> {
     crate::plugins::list_grants(pool, &agent_id).await
-}
-
-pub async fn dictation_begin() -> Result<(), Error> {
-    Err(Error::unimplemented("dictation_begin"))
-}
-
-pub async fn dictation_end() -> Result<(), Error> {
-    Err(Error::unimplemented("dictation_end"))
-}
-
-pub async fn dictation_devices() -> Result<Vec<Value>, Error> {
-    Err(Error::unimplemented("dictation_devices"))
-}
-
-pub async fn dictation_prepare_model() -> Result<(), Error> {
-    Err(Error::unimplemented("dictation_prepare_model"))
-}
-
-pub async fn updater_check() -> Result<UpdateStatus, Error> {
-    Err(Error::unimplemented("updater_check"))
-}
-
-pub async fn updater_install() -> Result<(), Error> {
-    Err(Error::unimplemented("updater_install"))
 }
 
 pub async fn git_diff(pool: &SqlitePool, workspace_id: String) -> Result<Vec<FileDiff>, Error> {

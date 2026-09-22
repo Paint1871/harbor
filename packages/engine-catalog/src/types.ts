@@ -31,6 +31,8 @@ export interface EngineSpec {
   ptyArgs?: string[];
   supportsTerminal: boolean;
   adapterPackage?: string | null;
+  /** npm `dist.integrity` for the pinned adapter tarball; install verifies it. */
+  adapterIntegrity?: string | null;
   minVersion?: string | null;
   lastHandshake?: string | null;
   authHint: string;

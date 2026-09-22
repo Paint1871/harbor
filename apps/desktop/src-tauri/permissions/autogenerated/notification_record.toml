@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-notification-record"
+description = "Enables the notification_record command without any pre-configured scope."
+commands.allow = ["notification_record"]
+
+[[permission]]
+identifier = "deny-notification-record"
+description = "Denies the notification_record command without any pre-configured scope."
+commands.deny = ["notification_record"]

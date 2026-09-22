@@ -257,8 +257,8 @@ export function GearPanel({ agent, chats = [], onAgentChange, onDeleted, onOpenC
         {hits.length ? (
           <div className="harbor-gear-search-results" aria-label="Search results">
             {hits.map((hit) => (
-              <button key={`${hit.chat_id}-${hit.created_at}`} type="button" onClick={() => onOpenChat?.(hit.chat_id)}>
-                <span>{hit.prose}</span><small>{recency(hit.created_at)}</small>
+              <button key={`${hit.chatId}-${hit.createdAt}`} type="button" onClick={() => onOpenChat?.(hit.chatId)}>
+                <span>{hit.prose}</span><small>{recency(hit.createdAt)}</small>
               </button>
             ))}
           </div>

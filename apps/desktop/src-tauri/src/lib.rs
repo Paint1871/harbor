@@ -32,6 +32,12 @@ pub fn usage_dir() -> PathBuf {
     application_data_root().join("usage")
 }
 
+/// The SQLite database. The plugins sidecar gets this path so it can re-check
+/// grants and record approval requests against the same store as the host.
+pub fn database_path() -> PathBuf {
+    application_data_root().join("harbor.sqlite")
+}
+
 /// Linux keeps GTK/native window decorations. Harbor's title bar is an
 /// in-content toolbar under those buttons, not overlay client chrome.
 /// Overlay in `tauri.conf.json` stays for macOS; Windows still turns
@@ -49,7 +55,7 @@ pub fn run() {
     // Engines spawn `harbor mcp-plugins --session <id>` as a stdio MCP sidecar.
     // Tokens stay in this process (keyring); they never enter the engine env.
     if std::env::args().nth(1).as_deref() == Some("mcp-plugins") {
-        std::process::exit(harbor_plugins::mcp::run());
+        std::process::exit(plugins_host::run_mcp_sidecar());
     }
 
     let data_root = application_data_root();
@@ -73,12 +79,12 @@ pub fn run() {
                 main.set_decorations(false)?;
             }
             #[cfg(target_os = "linux")]
-            if linux_uses_native_decorations() {
-                if let Some(main) = app.get_webview_window("main") {
-                    main.set_decorations(true)?;
-                    // Overlay in the JSON manifest is macOS client chrome.
-                    main.set_title_bar_style(tauri::TitleBarStyle::Visible)?;
-                }
+            if linux_uses_native_decorations()
+                && let Some(main) = app.get_webview_window("main")
+            {
+                main.set_decorations(true)?;
+                // Overlay in the JSON manifest is macOS client chrome.
+                main.set_title_bar_style(tauri::TitleBarStyle::Visible)?;
             }
             // No workspace roots or engine processes are opened on cold start.
             // Adapters Harbor installs live beside the database, never globally.
@@ -91,7 +97,7 @@ pub fn run() {
             // Optional vendor logos live beside the database, never in the bundle.
             app.manage(ipc::EngineIconDir(data_root.join("engine-icons")));
             app.manage(ipc::Watching::default());
-            let db_path = data_root.join("harbor.sqlite");
+            let db_path = database_path();
             let pool = tauri::async_runtime::block_on(harbor_core::db::open(&db_path))?;
             app.manage(pool);
             Ok(())

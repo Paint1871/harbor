@@ -36,7 +36,7 @@ it("loads a playbook into the Agent composer", async () => {
   fireEvent.click(screen.getByRole("button", { name: /Release notes/ }));
   fireEvent.click(screen.getByRole("button", { name: "Use in Agent" }));
   await waitFor(() => {
-    expect(settingsSet).toHaveBeenCalledWith("pending_agent_prompt", expect.stringContaining("release notes"));
+    expect(settingsSet).toHaveBeenCalledWith("pending_agent_prompt:next", expect.stringContaining("release notes"));
     expect(onModeChange).toHaveBeenCalledWith("agent");
   });
 });

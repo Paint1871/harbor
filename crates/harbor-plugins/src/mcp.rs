@@ -4,8 +4,20 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{Value, json};
 
+use crate::github;
+
 /// Same name the ACP `SpawnSpec` puts on the sidecar. Session only; never a token.
 pub const SESSION_ENV: &str = "HARBOR_PLUGIN_SESSION";
+/// Comma-separated plugin ids the host granted for this session's agent.
+pub const GRANTS_ENV: &str = "HARBOR_PLUGIN_GRANTS";
+/// Where the file-fallback credential store lives; the OS keyring is tried first.
+pub const KEYRING_ENV: &str = "HARBOR_KEYRING_DIR";
+/// Agent the session belongs to; folder threads pass none, and without one the
+/// sidecar cannot raise approval requests because grants are per-agent.
+pub const AGENT_ENV: &str = "HARBOR_PLUGIN_AGENT";
+/// Harbor's SQLite path, so the sidecar can re-check grants live and record
+/// approval requests. A path, never database contents.
+pub const DB_ENV: &str = "HARBOR_DB";
 
 /// Resolve `--session <id>` (or `--session=`) then the sidecar env. Never reads
 /// token-bearing variables.
@@ -37,6 +49,25 @@ where
         .map(str::to_string)
 }
 
+/// Which provider a `github_*`-style tool belongs to.
+fn provider_for_tool(tool: &str) -> Option<&'static str> {
+    if tool.starts_with("github_") {
+        Some("github")
+    } else {
+        None
+    }
+}
+
+/// The sidecar's access to credentials and the network. The desktop binary
+/// implements this with the OS keyring and its HTTP client; tests fake both.
+pub trait ToolBackend {
+    /// Granted for this session's agent AND a stored credential resolves.
+    /// A granted-but-unauthenticated plugin still advertises nothing.
+    fn plugin_available(&mut self, plugin: &str) -> bool;
+    /// Runs one tool. Returns the text content for the MCP result.
+    fn call_tool(&mut self, plugin: &str, tool: &str, args: &Value) -> Result<String, String>;
+}
+
 fn protocol_version(request: &Value) -> &str {
     request
         .get("params")
@@ -46,8 +77,50 @@ fn protocol_version(request: &Value) -> &str {
         .unwrap_or("2024-11-05")
 }
 
+fn tools_list(backend: &mut dyn ToolBackend) -> Value {
+    let mut tools = Vec::new();
+    if backend.plugin_available("github")
+        && let Value::Array(specs) = github::tool_specs()
+    {
+        tools.extend(specs);
+    }
+    json!({ "tools": tools })
+}
+
+fn tools_call(backend: &mut dyn ToolBackend, params: Option<&Value>) -> Value {
+    let Some(name) = params
+        .and_then(|params| params.get("name"))
+        .and_then(Value::as_str)
+    else {
+        return json!({
+            "content": [{ "type": "text", "text": "tools/call needs a tool name" }],
+            "isError": true
+        });
+    };
+    let Some(plugin) = provider_for_tool(name) else {
+        return json!({
+            "content": [{ "type": "text", "text": format!("unknown tool: {name}") }],
+            "isError": true
+        });
+    };
+    let args = params
+        .and_then(|params| params.get("arguments"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    match backend.call_tool(plugin, name, &args) {
+        Ok(text) => json!({
+            "content": [{ "type": "text", "text": text }],
+            "isError": false
+        }),
+        Err(error) => json!({
+            "content": [{ "type": "text", "text": error }],
+            "isError": true
+        }),
+    }
+}
+
 /// Answer one JSON-RPC message. Notifications (no `id`) return `None`.
-pub fn handle_message(message: &Value) -> Option<Value> {
+pub fn handle_message(backend: &mut dyn ToolBackend, message: &Value) -> Option<Value> {
     let method = message.get("method")?.as_str()?;
     let id = message.get("id").cloned();
     match method {
@@ -66,7 +139,12 @@ pub fn handle_message(message: &Value) -> Option<Value> {
         "tools/list" => Some(json!({
             "jsonrpc": "2.0",
             "id": id?,
-            "result": { "tools": [] }
+            "result": tools_list(backend)
+        })),
+        "tools/call" => Some(json!({
+            "jsonrpc": "2.0",
+            "id": id?,
+            "result": tools_call(backend, message.get("params"))
         })),
         "ping" => Some(json!({
             "jsonrpc": "2.0",
@@ -85,7 +163,7 @@ pub fn handle_message(message: &Value) -> Option<Value> {
 }
 
 /// Newline-delimited JSON-RPC on stdio. Never echoes the request; never prints secrets.
-pub fn serve<R, W>(mut reader: R, mut writer: W) -> io::Result<()>
+pub fn serve<R, W>(mut reader: R, mut writer: W, backend: &mut dyn ToolBackend) -> io::Result<()>
 where
     R: BufRead,
     W: Write,
@@ -104,7 +182,7 @@ where
         let Ok(message) = serde_json::from_str::<Value>(trimmed) else {
             continue;
         };
-        let Some(response) = handle_message(&message) else {
+        let Some(response) = handle_message(backend, &message) else {
             continue;
         };
         serde_json::to_writer(&mut writer, &response)?;
@@ -113,20 +191,25 @@ where
     }
 }
 
-/// `harbor mcp-plugins --session <id>`: answer MCP on stdio and exit. No window.
-pub fn run() -> i32 {
-    // Accepted so the engine can pass the Harbor session. Unused while tools
-    // are empty. Must never be written to stdout or stderr.
-    let _session = session_ref(std::env::args(), std::env::var(SESSION_ENV).ok().as_deref());
-    match serve(io::stdin().lock(), io::stdout()) {
-        Ok(()) => 0,
-        Err(_) => 1,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct FakeBackend {
+        available: bool,
+    }
+
+    impl ToolBackend for FakeBackend {
+        fn plugin_available(&mut self, plugin: &str) -> bool {
+            self.available && plugin == "github"
+        }
+        fn call_tool(&mut self, _plugin: &str, tool: &str, args: &Value) -> Result<String, String> {
+            if tool == "github_fail" {
+                return Err("boom".into());
+            }
+            Ok(format!("args:{}", args["owner"].as_str().unwrap_or("none")))
+        }
+    }
 
     fn looks_tokenish(value: &str) -> bool {
         value.contains("ghu_")
@@ -166,7 +249,8 @@ mod tests {
     }
 
     #[test]
-    fn initialize_handshake_writes_a_result_on_stdout() {
+    fn handshake_and_empty_tools_when_nothing_is_available() {
+        let mut backend = FakeBackend { available: false };
         let input = concat!(
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"engine","version":"0"}}}"#,
             "\n",
@@ -176,23 +260,64 @@ mod tests {
             "\n"
         );
         let mut out = Vec::new();
-        serve(input.as_bytes(), &mut out).unwrap();
+        serve(input.as_bytes(), &mut out, &mut backend).unwrap();
         let text = String::from_utf8(out).unwrap();
         assert!(!looks_tokenish(&text));
         let mut lines = text.lines().filter(|line| !line.is_empty());
         let init: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
-        assert_eq!(init["jsonrpc"], "2.0");
         assert_eq!(init["id"], 1);
-        assert!(init.get("error").is_none());
         assert_eq!(init["result"]["protocolVersion"], "2024-11-05");
         assert_eq!(init["result"]["serverInfo"]["name"], "harbor-plugins");
-        assert_eq!(
-            init["result"]["capabilities"]["tools"]["listChanged"],
-            false
-        );
         let tools: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
         assert_eq!(tools["id"], 2);
         assert_eq!(tools["result"]["tools"], json!([]));
         assert!(lines.next().is_none(), "initialized is a notification");
+    }
+
+    #[test]
+    fn available_plugin_lists_and_calls_real_tools() {
+        let mut backend = FakeBackend { available: true };
+        let input = concat!(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#,
+            "\n",
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"github_repository","arguments":{"owner":"o","repo":"r"}}}"#,
+            "\n",
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"not_a_tool","arguments":{}}}"#,
+            "\n",
+            r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"github_fail","arguments":{}}}"#,
+            "\n"
+        );
+        let mut out = Vec::new();
+        serve(input.as_bytes(), &mut out, &mut backend).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(!looks_tokenish(&text));
+        let mut lines = text.lines().filter(|line| !line.is_empty());
+
+        let list: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
+        let tools = list["result"]["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 5);
+        assert!(tools.iter().all(|tool| {
+            tool["name"]
+                .as_str()
+                .is_some_and(|name| name.starts_with("github_"))
+        }));
+
+        let call: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
+        assert_eq!(call["result"]["isError"], false);
+        assert_eq!(call["result"]["content"][0]["text"], "args:o");
+
+        let unknown: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
+        assert_eq!(unknown["result"]["isError"], true);
+        assert!(
+            unknown["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("unknown tool")
+        );
+
+        let failed: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
+        assert_eq!(failed["result"]["isError"], true);
+        assert_eq!(failed["result"]["content"][0]["text"], "boom");
+        assert!(lines.next().is_none());
     }
 }

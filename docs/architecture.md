@@ -29,7 +29,7 @@ roots. Each IPC command is individually allowlisted in
 | `harbor-git` | Diffs for the Chat changes panel |
 | `harbor-paths` | App-data and well-known filesystem locations |
 | `harbor-speech` | On-device dictation (stubbed in 0.1.0) |
-| `harbor-updater` | Signed-update check (placeholder key in 0.1.0) |
+| `harbor-updater` | Signed-update check (real baked key; no signed release published yet) |
 
 ## Packages
 
@@ -52,10 +52,20 @@ stay paused until the user resumes them.
 Harbor never bundles a coding engine. Detection reads the login-shell `PATH`
 against `packages/engine-catalog`. Chat is ACP v1 over stdio. Code is a PTY.
 Some engines need a small ACP adapter package; Harbor can fetch that adapter
-on request, still without bundling the engine itself.
+on request, still without bundling the engine itself. Catalog adapters pin an
+exact version plus the published `dist.integrity` hash, and the install
+verifies npm's lockfile receipt against both before the adapter can run.
 
 ## Plugins
 
 The GitHub plugin is Device Flow with no client secret. Access tokens live in
 the OS keyring. The outbound MCP proxy is how Harbor talks to GitHub; engine
 processes never receive those tokens in their environment.
+
+Grants are per-agent rows, not implied by a connection. The sidecar gets the
+granted plugin ids, the agent id, and the database path in its environment —
+never a token — and re-checks `plugin_grants` per call, so a grant toggled
+under Plugins mid-session — on or off — takes effect without a respawn. A call without a grant raises a
+`plugin_approvals` row and a `permission` inbox event; resolving it on the
+Plugins page runs `set_agent_grant`, which is the same switch as the grant
+checkboxes.

@@ -13,41 +13,7 @@ use crate::security::{ExecutableAllowlist, ExecutableKind};
 #[derive(Default)]
 pub struct PtyRegistry(Mutex<HashMap<String, LivePty>>);
 
-use harbor_core::b64::encode as b64_encode;
-
-fn b64_decode(input: &str) -> Result<Vec<u8>, String> {
-    fn val(ch: u8) -> Option<u8> {
-        match ch {
-            b'A'..=b'Z' => Some(ch - b'A'),
-            b'a'..=b'z' => Some(ch - b'a' + 26),
-            b'0'..=b'9' => Some(ch - b'0' + 52),
-            b'+' => Some(62),
-            b'/' => Some(63),
-            _ => None,
-        }
-    }
-    let filtered: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    if !filtered.len().is_multiple_of(4) {
-        return Err("invalid base64".into());
-    }
-    let mut out = Vec::new();
-    for chunk in filtered.chunks(4) {
-        let n = chunk.iter().filter(|b| **b != b'=').count();
-        let v0 = val(chunk[0]).ok_or("invalid base64")?;
-        let v1 = val(chunk[1]).ok_or("invalid base64")?;
-        let v2 = if n > 2 { val(chunk[2]).unwrap_or(0) } else { 0 };
-        let v3 = if n > 3 { val(chunk[3]).unwrap_or(0) } else { 0 };
-        let triple = ((v0 as u32) << 18) | ((v1 as u32) << 12) | ((v2 as u32) << 6) | v3 as u32;
-        out.push((triple >> 16) as u8);
-        if n > 2 {
-            out.push((triple >> 8) as u8);
-        }
-        if n > 3 {
-            out.push(triple as u8);
-        }
-    }
-    Ok(out)
-}
+use harbor_core::b64::{decode as b64_decode, encode as b64_encode};
 
 /// Map a Settings `default_shell` value to a launch path for `os`.
 /// `os` is a `std::env::consts::OS` value so tests can cover Windows on macOS CI.

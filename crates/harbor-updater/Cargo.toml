@@ -7,5 +7,6 @@ publish.workspace = true
 description = "minisign-checked Harbor updates"
 
 [dependencies]
+minisign-verify = "=0.2.5"
 serde_json = "=1.0.151"
 thiserror = "=2.0.20"
