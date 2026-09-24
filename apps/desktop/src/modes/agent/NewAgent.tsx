@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { call } from "../../ipc";
 import { Button } from "@harbor/ui/Button";
-import type { CreateAgent, DetectedEngine } from "@harbor/schema/commands";
+import type { CreateAgent, DetectedEngine, FolderPick } from "@harbor/schema/commands";
 import { FacePicker } from "./FacePicker";
 import { settingsGet } from "../../settings";
 
 interface NewAgentProps {
-  onCreate: (input: CreateAgent) => Promise<void>;
+  onCreate: (input: CreateAgent, homePickId?: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -16,7 +16,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
   const [brief, setBrief] = useState("");
   const [engineId, setEngineId] = useState("");
   const [faceIndex, setFaceIndex] = useState<number | undefined>(undefined);
-  const [homePath, setHomePath] = useState("");
+  const [homePick, setHomePick] = useState<FolderPick | null>(null);
   const [engines, setEngines] = useState<DetectedEngine[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,8 +81,7 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
           brief: brief.trim(),
           engineId: selectedEngine.id,
           ...(faceIndex !== undefined ? { faceIndex } : {}),
-          homePath: homePath || undefined,
-        })
+        }, homePick?.id)
           .catch(() => setError("Your agent could not be created. Your draft is saved here. Please try again."))
           .finally(() => setSaving(false));
       }}>
@@ -99,10 +98,10 @@ export function NewAgent({ onCreate, onClose }: NewAgentProps) {
           {!loading && !usable.length ? <div className="harbor-engine-help"><p>Install and sign in to an ACP-compatible engine such as OpenCode, then check again.</p><Button onClick={() => void detect()}>Check again</Button></div> : null}
           <label>Home folder
             <span className="harbor-home-picker">
-              <input readOnly value={homePath} placeholder="Optional — engine working directory" />
+              <input readOnly value={homePick?.path ?? ""} placeholder="Optional — engine working directory" />
               <Button type="button" onClick={() => {
-                void call("workspace_pick_folder").then((path) => {
-                  if (path) setHomePath(path);
+                void call("workspace_pick_folder").then((pick) => {
+                  if (pick) setHomePick(pick);
                 }).catch(() => setError("Could not choose a folder. Please try again."));
               }}>Choose…</Button>
             </span>

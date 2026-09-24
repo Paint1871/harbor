@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { call } from "../ipc";
 import { Button } from "@harbor/ui/Button";
 import { Segmented } from "@harbor/ui/Segmented";
-import type { DetectedEngine, Workspace, WorkspaceSetup } from "@harbor/schema/commands";
+import type { DetectedEngine, FolderPick, Workspace, WorkspaceSetup } from "@harbor/schema/commands";
 import { settingsGet, settingsSet } from "../settings";
 
 const MAX_EXTRA_TERMINALS = 4;
@@ -71,7 +71,7 @@ export function AddWorkspace({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const setupTouched = useRef(false);
-  const [folder, setFolder] = useState("");
+  const [pick, setPick] = useState<FolderPick | null>(null);
   const [additionalTerminals, setAdditionalTerminals] = useState(DEFAULT_SETUP.additionalTerminals);
   const [browserPreview, setBrowserPreview] = useState(DEFAULT_SETUP.browserPreview);
   const [threadPane, setThreadPane] = useState(DEFAULT_SETUP.threadPane);
@@ -138,10 +138,10 @@ export function AddWorkspace({
     setBusy(true);
     setError(null);
     try {
-      const path = await call("workspace_pick_folder");
-      if (path) setFolder(path);
+      const result = await call("workspace_pick_folder");
+      if (result) setPick(result);
     } catch {
-      setError("The folder picker is unavailable. Paste the full folder path below.");
+      setError("The folder picker is unavailable.");
     } finally {
       setBusy(false);
     }
@@ -149,7 +149,7 @@ export function AddWorkspace({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || !folder.trim() || detectionState === "checking") return;
+    if (busy || !pick || detectionState === "checking") return;
     setBusy(true);
     setError(null);
     const setup: WorkspaceSetup = {
@@ -159,7 +159,7 @@ export function AddWorkspace({
       terminalEngineIds: terminalEngineIds.slice(0, totalTerminals).map((id) => id || SHELL_ENGINE_ID),
     };
     try {
-      const added = await call("workspace_add", { folder: folder.trim() });
+      const added = await call("workspace_add", { pickId: pick.id });
       await call("workspace_configure_tab", { workspaceId: added.id, setup });
       await settingsSet("workspace_launch_defaults", setup).catch(() => undefined);
       onAdded(added);
@@ -170,7 +170,7 @@ export function AddWorkspace({
     }
   }
 
-  const folderName = folder.trim().replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  const folderName = (pick?.path ?? "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
   const visibleTerminalEngineIds = Array.from(
     { length: totalTerminals },
     (_, index) => terminalEngineIds[index] || (detectionState === "ready" ? preferredEngineId(engines) : SHELL_ENGINE_ID),
@@ -212,12 +212,12 @@ export function AddWorkspace({
             <input
               id="add-folder-path"
               autoFocus
+              readOnly
               disabled={busy}
-              value={folder}
+              value={pick?.path ?? ""}
               spellCheck={false}
               autoComplete="off"
-              onChange={(event) => setFolder(event.target.value)}
-              placeholder="/Users/you/projects/your-app"
+              placeholder="Pick a folder…"
             />
             <button
               type="button"
@@ -231,7 +231,7 @@ export function AddWorkspace({
           <p className="harbor-workspace-folder-hint">
             {folderName
               ? <>Opens as <strong>{folderName}</strong>.</>
-              : "Paste a path, or pick the folder from Finder."}
+              : "Pick the folder in the system dialog."}
           </p>
         </div>
 
@@ -415,7 +415,7 @@ export function AddWorkspace({
         {error ? <p role="alert" className="harbor-inline-error">{error}</p> : null}
         <div className="harbor-dialog-actions">
           <Button type="button" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy || !folder.trim() || detectionState === "checking"}>
+          <Button type="submit" variant="primary" disabled={busy || !pick || detectionState === "checking"}>
             {busy ? "Opening…" : detectionState === "checking" ? "Checking CLIs…" : "Open folder"}
           </Button>
         </div>

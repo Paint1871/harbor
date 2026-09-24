@@ -147,8 +147,8 @@ export function AgentMode({
       {creating ? (
         <NewAgent
           onClose={() => setCreating(false)}
-          onCreate={async (input) => {
-            const created = await call("agent_create", { input });
+          onCreate={async (input, homePickId) => {
+            const created = await call("agent_create", { input, homePickId });
             setAgents((current) => [...current, created]);
             setSelected(created.id);
             setCreating(false);

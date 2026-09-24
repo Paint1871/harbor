@@ -69,9 +69,16 @@ interface PermissionCardProps {
   onResolve: (optionId: string | null, cancelled: boolean) => void;
 }
 
+/// The newest mounted card owns the keyboard. Without a single owner, one
+/// keypress would resolve every pending permission card on screen at once.
+const shortcutOwners: symbol[] = [];
+
 export function PermissionCard({ request, onResolve }: PermissionCardProps) {
   useEffect(() => {
+    const token = Symbol(request.id);
+    shortcutOwners.push(token);
     const onKeyDown = (event: KeyboardEvent) => {
+      if (shortcutOwners[shortcutOwners.length - 1] !== token) return;
       const stealFromComposer = event.key === "Enter" || event.key === "Escape";
       if (permissionTargetIsField(event.target) && !stealFromComposer) return;
       const result = permissionShortcut(event.key, request.options);
@@ -81,8 +88,12 @@ export function PermissionCard({ request, onResolve }: PermissionCardProps) {
       onResolve(result.optionId, result.cancelled);
     };
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onResolve, request.options]);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      const index = shortcutOwners.indexOf(token);
+      if (index !== -1) shortcutOwners.splice(index, 1);
+    };
+  }, [onResolve, request.id, request.options]);
 
   return (
     <Card className="harbor-permission">

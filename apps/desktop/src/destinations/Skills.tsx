@@ -27,7 +27,7 @@ export function Skills() {
     }
   }, [selectedId, visible]);
 
-  async function useSkill() {
+  async function openSkill() {
     if (busyAction) return;
     setBusyAction("use");
     setNotice(null);
@@ -93,7 +93,7 @@ export function Skills() {
           <p>{selected.description}</p>
           <div className="harbor-skill-tags">{selected.tags.map((tag) => <span key={tag} className="harbor-chip">{tag}</span>)}</div>
           <div className="harbor-skill-brief"><span className="harbor-eyebrow">STARTING BRIEF</span><p>{selected.brief}</p></div>
-          <div className="harbor-skill-actions"><Button variant="primary" disabled={busyAction !== null || !visible.length} onClick={() => void useSkill()}>{busyAction === "use" ? "Opening…" : "Use in Agent"} <span aria-hidden="true">↗</span></Button><Button variant="ghost" disabled={busyAction !== null || !visible.length} onClick={() => void copyBrief()}>{busyAction === "copy" ? "Copying…" : "Copy brief"}</Button></div>
+          <div className="harbor-skill-actions"><Button variant="primary" disabled={busyAction !== null || !visible.length} onClick={() => void openSkill()}>{busyAction === "use" ? "Opening…" : "Use in Agent"} <span aria-hidden="true">↗</span></Button><Button variant="ghost" disabled={busyAction !== null || !visible.length} onClick={() => void copyBrief()}>{busyAction === "copy" ? "Copying…" : "Copy brief"}</Button></div>
         </article>
       </div>
       {notice ? <p className="harbor-destination-notice" role="status">{notice}</p> : null}

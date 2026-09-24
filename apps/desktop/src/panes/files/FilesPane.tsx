@@ -5,6 +5,9 @@ import { Editor } from "./Editor";
 import { TabBar } from "./TabBar";
 import { PaneHeader } from "../PaneHeader";
 import { confirmCloseDirtyTab } from "./helpers";
+import { discardDirtySource, hasUnsavedBuffers, saveUnsavedBuffers } from "./dirtyFiles";
+
+const PANE_CLOSE_SAVE_FAILED = "Some files could not be saved. Close anyway?";
 
 interface FilesPaneProps {
   workspaceId?: string;
@@ -49,6 +52,9 @@ export function FilesPane({ workspaceId: givenId, focused, onFocus, expanded = f
 
   function closeTab(path: string) {
     if (!confirmCloseDirtyTab(Boolean(dirty[path]), (message) => window.confirm(message))) return;
+    // A confirmed discard must reach the registry before the editor unmounts,
+    // or its unmount flush would write the very changes the user dropped.
+    if (dirty[path] && workspaceId) discardDirtySource(workspaceId, path);
     const index = open.indexOf(path);
     const next = open.filter((item) => item !== path);
     setOpen(next);
@@ -58,9 +64,22 @@ export function FilesPane({ workspaceId: givenId, focused, onFocus, expanded = f
     }
   }
 
+  function requestClose() {
+    if (!onClose) return;
+    if (!hasUnsavedBuffers()) {
+      onClose();
+      return;
+    }
+    // Flush dirty buffers first; only if a write genuinely fails does the
+    // user decide whether to lose it.
+    void saveUnsavedBuffers(2000).then((failed) => {
+      if (!failed.length || window.confirm(PANE_CLOSE_SAVE_FAILED)) onClose();
+    });
+  }
+
   return (
     <section className="harbor-pane harbor-files" data-focused={focused} onClick={onFocus} aria-label="Files">
-      <PaneHeader title="Files" live={focused} expanded={expanded} onExpand={onExpand} onSplit={onSplit} onClose={onClose} />
+      <PaneHeader title="Files" live={focused} expanded={expanded} onExpand={onExpand} onSplit={onSplit} onClose={requestClose} />
       <div className="harbor-files-body">
         <div className="harbor-files-tree" style={{ width }}>
           <Tree

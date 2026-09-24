@@ -25,7 +25,7 @@ export function Dashboard() {
     void Promise.all([
       call("agent_list"),
       call("workspace_list"),
-      call("thread_list", { workspaceId: null }),
+      call("thread_list_all", {}),
     ])
       .then(([agents, workspaces, threads]) => {
         if (cancelled) return;

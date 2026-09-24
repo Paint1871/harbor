@@ -1,0 +1,10 @@
+# cargo-audit configuration for the workspace.
+#
+# RUSTSEC-2023-0071 (rsa Marvin timing attack): the `rsa` crate sits in
+# Cargo.lock only because `sqlx` lists `sqlx-mysql` as an optional
+# dependency. The workspace builds sqlx with `default-features = false` and
+# the `sqlite` feature — `cargo tree -i rsa --target all` confirms rsa is in
+# no active target's dependency graph, and no fixed rsa release exists to
+# upgrade to. Revisit when sqlx changes its optional deps.
+[advisories]
+ignore = ["RUSTSEC-2023-0071"]

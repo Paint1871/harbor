@@ -142,4 +142,23 @@ describe("runDueRoutines", () => {
       mode: "agent",
     });
   });
+
+  it("a second concurrent tick shares the same run instead of double-firing", async () => {
+    let resolveChat: ((value: unknown) => void) | undefined;
+    invoke.mockImplementation((command: string) => {
+      if (command === "settings_get") return Promise.resolve([routine()]);
+      if (command === "agent_chat_create") {
+        return new Promise((resolve) => { resolveChat = resolve; });
+      }
+      return Promise.resolve();
+    });
+    const first = runDueRoutines(monday);
+    const second = runDueRoutines(monday);
+    expect(second).toBe(first);
+    await vi.waitFor(() => { expect(resolveChat).toBeDefined(); });
+    resolveChat?.({ id: "chat-1", agentId: "agent-1" });
+    await Promise.all([first, second]);
+    const creates = invoke.mock.calls.filter(([command]) => command === "agent_chat_create");
+    expect(creates).toHaveLength(1);
+  });
 });

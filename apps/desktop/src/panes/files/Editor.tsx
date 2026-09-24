@@ -15,6 +15,7 @@ import { toml } from "@codemirror/legacy-modes/mode/toml";
 import { search, searchKeymap } from "@codemirror/search";
 import { filesystemError, readWorkspaceFile, writeWorkspaceFile } from "./fs";
 import { fileBasename, fileExtension, languageIdFor } from "./helpers";
+import { registerDirtySource, type DirtySource } from "./dirtyFiles";
 
 interface EditorProps {
   path?: string;
@@ -92,6 +93,7 @@ export function Editor({ path, workspaceId, onDirtyChange }: EditorProps) {
   const themeCompartment = useRef(new Compartment());
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
+  const dirtyRef = useRef(false);
   const [state, setState] = useState<"idle" | "loading" | "saved" | "dirty" | "saving" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -115,6 +117,8 @@ export function Editor({ path, workspaceId, onDirtyChange }: EditorProps) {
     }
     let cancelled = false;
     let revision = 0;
+    let source: DirtySource | null = null;
+    let unregisterSource: (() => void) | null = null;
     setState("loading");
     setError(null);
 
@@ -124,6 +128,7 @@ export function Editor({ path, workspaceId, onDirtyChange }: EditorProps) {
       void writeWorkspaceFile(workspaceId, path, current.state.doc.toString())
         .then(() => {
           if (cancelled || revision !== targetRevision) return;
+          dirtyRef.current = false;
           setState("saved");
           setError(null);
           onDirtyChangeRef.current?.(path, false);
@@ -160,6 +165,7 @@ export function Editor({ path, workspaceId, onDirtyChange }: EditorProps) {
               EditorView.updateListener.of((update) => {
                 if (update.docChanged) {
                   revision += 1;
+                  dirtyRef.current = true;
                   setState("dirty");
                   onDirtyChangeRef.current?.(path, true);
                 }
@@ -174,8 +180,27 @@ export function Editor({ path, workspaceId, onDirtyChange }: EditorProps) {
           }),
           parent: host.current,
         });
+        dirtyRef.current = false;
         setState("saved");
         onDirtyChangeRef.current?.(path, false);
+
+        // The buffer registers itself so pane- and window-close guards can
+        // flush it even while this component is mounted in the background.
+        source = {
+          workspaceId,
+          path,
+          discarded: false,
+          isDirty: () => dirtyRef.current,
+          read: () => (view.current ? { content: view.current.state.doc.toString(), revision } : null),
+          markSaved: (savedRevision) => {
+            if (cancelled || savedRevision !== revision) return;
+            dirtyRef.current = false;
+            setState("saved");
+            setError(null);
+            onDirtyChangeRef.current?.(path, false);
+          },
+        };
+        unregisterSource = registerDirtySource(source);
       })
       .catch((reason) => {
         if (cancelled) return;
@@ -186,6 +211,14 @@ export function Editor({ path, workspaceId, onDirtyChange }: EditorProps) {
       });
     return () => {
       cancelled = true;
+      const current = view.current;
+      // Tab switches and pane closes unmount the editor; a dirty buffer is
+      // flushed to disk instead of being dropped with the component. The
+      // discard flag is set when the user explicitly confirmed losing it.
+      if (current && dirtyRef.current && !source?.discarded) {
+        void writeWorkspaceFile(workspaceId, path, current.state.doc.toString()).catch(() => undefined);
+      }
+      unregisterSource?.();
       view.current?.destroy();
       view.current = null;
       onDirtyChangeRef.current?.(path, false);

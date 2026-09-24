@@ -2,21 +2,60 @@ use harbor_core::SqlitePool;
 use harbor_plugins::github::{self, DeviceStart};
 use serde_json::{Value, json};
 use std::io;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 pub(crate) fn keyring_dir() -> std::path::PathBuf {
     crate::application_data_root().join("keyring")
 }
 
+/// A stalled socket or a blackholed connection must not park a host thread
+/// forever: connect and total timeouts, plus a byte cap on every body read.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// GitHub API responses for the read-only tools are kilobytes; the cap is a
+/// hard error rather than a silent truncation that could hide mangled JSON.
+const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
+
+fn http_client() -> reqwest::blocking::Client {
+    reqwest::blocking::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .unwrap_or_else(|_| reqwest::blocking::Client::new())
+}
+
+fn bounded_body(
+    mut response: reqwest::blocking::Response,
+    context: &str,
+) -> Result<String, String> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    response
+        .by_ref()
+        .take(MAX_RESPONSE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("{context}: {error}"))?;
+    if bytes.len() as u64 > MAX_RESPONSE_BYTES {
+        return Err(format!(
+            "{context}: response exceeded {MAX_RESPONSE_BYTES} bytes"
+        ));
+    }
+    String::from_utf8(bytes).map_err(|_| format!("{context}: response was not utf-8"))
+}
+
 fn post_form(url: &str, body: &str) -> Result<String, String> {
-    reqwest::blocking::Client::new()
+    let response = http_client()
         .post(url)
         .header("Accept", "application/json")
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(body.to_string())
         .send()
-        .and_then(|response| response.text())
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("GitHub device flow failed: {}", response.status()));
+    }
+    bounded_body(response, "GitHub device flow failed")
 }
 
 fn start_device(client_id: &str) -> Result<DeviceStart, String> {
@@ -144,8 +183,11 @@ pub async fn configure(
 }
 
 pub async fn disconnect(pool: &SqlitePool, id: String) -> Result<(), String> {
+    // Credential first: if the keychain cannot confirm removal, the row must
+    // keep saying "connected" — marking it disconnected while a token
+    // survives would hide a still-reachable credential.
     harbor_plugins::keyring::delete(&keyring_dir(), &id).map_err(|error| error.to_string())?;
-    harbor_core::commands::plugin_mark_disconnected(pool, &id)
+    harbor_core::commands::plugin_disconnect(pool, id)
         .await
         .map_err(|error| error.to_string())
 }
@@ -207,21 +249,33 @@ impl SidecarBackend {
     /// next call, without a respawn. The spawn-time env list is the fallback
     /// for when the pool cannot be opened, so a session keeps its spawn-time
     /// access through a database outage rather than going silent mid-turn.
+    /// A plugin row that exists and is not `connected` makes every grant
+    /// inert: disconnecting cuts live access immediately.
     fn granted(&mut self, plugin: &str) -> bool {
-        if let Some(agent_id) = self.agent_id.clone()
-            && let Some(pool) = self.pool()
-            && let Ok(granted) = tauri::async_runtime::block_on(
-                harbor_core::plugins::agent_grant_enabled(pool, &agent_id, plugin),
-            )
-        {
-            return granted;
+        let agent_id = self.agent_id.clone();
+        if let Some(pool) = self.pool() {
+            if let Ok(Some(status)) =
+                tauri::async_runtime::block_on(harbor_core::plugins::plugin_status(pool, plugin))
+                && status != "connected"
+            {
+                return false;
+            }
+            if let Some(agent_id) = agent_id
+                && let Ok(granted) = tauri::async_runtime::block_on(
+                    harbor_core::plugins::agent_grant_enabled(pool, &agent_id, plugin),
+                )
+            {
+                return granted;
+            }
         }
         self.env_grants.iter().any(|id| id == plugin)
     }
 
     /// A tool call without a grant becomes an approval request the builder can
     /// answer under Plugins — or a plain refusal when there is no agent to
-    /// attach the request to.
+    /// attach the request to. A plugin that is not connected cannot be
+    /// granted into usefulness, so it refuses outright instead of queueing an
+    /// approval the builder could never satisfy.
     fn request_access(&mut self, plugin: &str) -> String {
         let Some(agent_id) = self.agent_id.clone() else {
             return format!("{plugin} is not granted for this session");
@@ -229,6 +283,12 @@ impl SidecarBackend {
         let Some(pool) = self.pool() else {
             return format!("{plugin} is not granted for this agent");
         };
+        if let Ok(Some(status)) =
+            tauri::async_runtime::block_on(harbor_core::plugins::plugin_status(pool, plugin))
+            && status != "connected"
+        {
+            return format!("{plugin} is not connected — connect it under Plugins first");
+        }
         match tauri::async_runtime::block_on(harbor_core::plugins::approval_state(
             pool, plugin, &agent_id, "grant",
         )) {
@@ -319,7 +379,7 @@ impl harbor_plugins::mcp::ToolBackend for SidecarBackend {
             .send()
             .map_err(|error| error.to_string())?;
         let status = response.status();
-        let body = response.text().map_err(|error| error.to_string())?;
+        let body = bounded_body(response, "GitHub API request failed")?;
         if !status.is_success() {
             return Err(format!("GitHub API returned {status}"));
         }
@@ -363,7 +423,7 @@ pub fn run_mcp_sidecar() -> i32 {
         keyring_dir: std::env::var(harbor_plugins::mcp::KEYRING_ENV)
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| keyring_dir()),
-        client: reqwest::blocking::Client::new(),
+        client: http_client(),
     };
     match harbor_plugins::mcp::serve(io::stdin().lock(), io::stdout(), &mut backend) {
         Ok(()) => 0,
@@ -403,7 +463,7 @@ mod tests {
             db_path,
             pool: None,
             keyring_dir: std::env::temp_dir().join("missing-keyring-dir"),
-            client: reqwest::blocking::Client::new(),
+            client: http_client(),
         }
     }
 
@@ -481,7 +541,8 @@ mod tests {
         );
 
         // Allowing the request turns the grant on; the same sidecar session
-        // sees it on the next call without a respawn.
+        // sees it on the next call without a respawn. The grant only applies
+        // while the plugin is connected — approve alone is not enough.
         runtime
             .block_on(harbor_core::plugins::resolve_approval(
                 &pool,
@@ -489,7 +550,15 @@ mod tests {
                 true,
             ))
             .unwrap();
-
+        assert!(!backend.granted("github"));
+        runtime
+            .block_on(harbor_core::plugins::mark_connected(
+                &pool,
+                "github",
+                "GitHub",
+                Some("octocat"),
+            ))
+            .unwrap();
         assert!(backend.granted("github"));
         // The tool itself still needs a stored credential — the grant is not
         // one — so the call now fails on the keyring, not the grant.
@@ -525,11 +594,25 @@ mod tests {
         });
         // Granted when the session spawned, then switched off under Plugins
         // while it ran. The spawn env still carries it; the database wins.
+        // The plugin must read as connected — a disconnected plugin's grants
+        // are inert regardless of their enabled flag.
+        runtime
+            .block_on(harbor_core::plugins::mark_connected(
+                &pool,
+                "github",
+                "GitHub",
+                Some("octocat"),
+            ))
+            .unwrap();
         runtime
             .block_on(harbor_core::plugins::set_agent_grant(
                 &pool, &agent.id, "github", true,
             ))
             .unwrap();
+        {
+            let mut live = backend(&["github"], Some(agent.id.clone()), Some(db_path.clone()));
+            assert!(live.granted("github"));
+        }
         runtime
             .block_on(harbor_core::plugins::set_agent_grant(
                 &pool, &agent.id, "github", false,
@@ -539,6 +622,21 @@ mod tests {
         assert!(
             !backend.granted("github"),
             "a revoked grant must stop applying without a respawn"
+        );
+
+        // And a disconnect cuts access even if a grant row still reads
+        // enabled — the plugin status gates every call.
+        runtime
+            .block_on(harbor_core::plugins::set_agent_grant(
+                &pool, &agent.id, "github", true,
+            ))
+            .unwrap();
+        runtime
+            .block_on(harbor_core::plugins::mark_disconnected(&pool, "github"))
+            .unwrap();
+        assert!(
+            !backend.granted("github"),
+            "a disconnected plugin's grants are inert"
         );
     }
 

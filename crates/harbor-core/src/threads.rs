@@ -54,6 +54,30 @@ pub async fn list(
         .collect())
 }
 
+/// Every thread, workspace-scoped or not — the dashboard counts across the
+/// whole machine, not one folder.
+pub async fn list_all(pool: &SqlitePool) -> Result<Vec<ThreadRecord>, Error> {
+    let rows = sqlx::query_as::<_, (String, Option<String>, String, String, i64, i64)>(
+        "SELECT id, workspace_id, title, engine_id, pinned, unread FROM threads
+         ORDER BY pinned DESC, updated_at DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, workspace_id, title, engine_id, pinned, unread)| ThreadRecord {
+                id,
+                workspace_id,
+                title,
+                engine_id,
+                pinned: pinned != 0,
+                unread: unread != 0,
+            },
+        )
+        .collect())
+}
+
 /// Read one thread's persisted transcript without starting its engine.
 pub async fn history(pool: &SqlitePool, id: &str) -> Result<Vec<crate::types::ChatMessage>, Error> {
     context(pool, id).await?;
@@ -138,6 +162,27 @@ pub async fn pin(pool: &SqlitePool, id: &str, pinned: bool) -> Result<(), Error>
     Ok(())
 }
 
+/// An assistant reply the builder has not opened yet is unread; selecting the
+/// thread marks it read again.
+pub async fn mark_read(pool: &SqlitePool, id: &str) -> Result<(), Error> {
+    sqlx::query("UPDATE threads SET unread = 0, updated_at = ?1 WHERE id = ?2")
+        .bind(now())
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// A fresh reply also bumps the thread in the updated_at ordering.
+pub async fn mark_unread(pool: &SqlitePool, id: &str) -> Result<(), Error> {
+    sqlx::query("UPDATE threads SET unread = 1, updated_at = ?1 WHERE id = ?2")
+        .bind(now())
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Switching engines abandons the old agent's session and its option values —
 /// both belong to the process we are leaving behind.
 pub async fn set_engine(pool: &SqlitePool, id: &str, engine_id: &str) -> Result<(), Error> {
@@ -156,25 +201,6 @@ pub async fn set_engine(pool: &SqlitePool, id: &str, engine_id: &str) -> Result<
     if result.rows_affected() == 0 {
         return Err(Error::Message("thread not found".into()));
     }
-    Ok(())
-}
-
-pub async fn grant_root(pool: &SqlitePool, id: &str, path: &str) -> Result<(), Error> {
-    let (extra,): (String,) = sqlx::query_as("SELECT extra_roots_json FROM threads WHERE id = ?1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| Error::Message("thread not found".into()))?;
-    let mut roots: Vec<String> = serde_json::from_str(&extra).unwrap_or_default();
-    if !roots.iter().any(|root| root == path) {
-        roots.push(path.into());
-    }
-    sqlx::query("UPDATE threads SET extra_roots_json = ?1, updated_at = ?2 WHERE id = ?3")
-        .bind(serde_json::to_string(&roots)?)
-        .bind(now())
-        .bind(id)
-        .execute(pool)
-        .await?;
     Ok(())
 }
 
@@ -283,6 +309,10 @@ pub struct ThreadContext {
     pub workspace_folder: Option<String>,
     pub extra_roots: Vec<String>,
     pub acp_session: Option<String>,
+    /// Stored engine options (`config_json`), minus host-internal keys like
+    /// `attachedFiles`. Re-applied when a session spawns so a respawn does not
+    /// silently reset the model or mode the builder chose.
+    pub config: Vec<(String, Value)>,
 }
 
 type ThreadRow = (
@@ -292,11 +322,12 @@ type ThreadRow = (
     Option<String>,
     String,
     Option<String>,
+    String,
 );
 
 pub async fn context(pool: &SqlitePool, id: &str) -> Result<ThreadContext, Error> {
     let row: Option<ThreadRow> = sqlx::query_as(
-        "SELECT t.id, t.engine_id, t.workspace_id, w.folder, t.extra_roots_json, t.acp_session
+        "SELECT t.id, t.engine_id, t.workspace_id, w.folder, t.extra_roots_json, t.acp_session, t.config_json
          FROM threads t
          LEFT JOIN workspaces w ON w.id = t.workspace_id
          WHERE t.id = ?1",
@@ -304,7 +335,7 @@ pub async fn context(pool: &SqlitePool, id: &str) -> Result<ThreadContext, Error
     .bind(id)
     .fetch_optional(pool)
     .await?;
-    let (id, engine_id, workspace_id, workspace_folder, extra, acp_session) =
+    let (id, engine_id, workspace_id, workspace_folder, extra, acp_session, config_json) =
         row.ok_or_else(|| Error::Message("thread not found".into()))?;
     Ok(ThreadContext {
         id,
@@ -313,6 +344,7 @@ pub async fn context(pool: &SqlitePool, id: &str) -> Result<ThreadContext, Error
         workspace_folder,
         extra_roots: serde_json::from_str(&extra).unwrap_or_default(),
         acp_session,
+        config: crate::config::stored_options(&config_json),
     })
 }
 

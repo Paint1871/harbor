@@ -1,4 +1,4 @@
-name: Release macOS
+name: Release
 
 on:
   workflow_dispatch:
@@ -9,18 +9,155 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  macos:
-    name: Signed macOS (placeholder)
-    runs-on: macos-14
+  build:
+    name: Bundle ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macos-aarch64, os: macos-14, platform: macos, arch: aarch64 }
+          - { name: windows-x86_64, os: windows-latest, platform: windows, arch: x86_64 }
+          - { name: linux-x86_64, os: ubuntu-22.04, platform: linux, arch: x86_64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Linux bundle dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libssl-dev
+      - run: pnpm install --frozen-lockfile
+      - name: Build the desktop bundle
+        working-directory: apps/desktop
+        run: pnpm tauri build
+        env:
+          # macOS code-signing and notarization credentials. Without them the
+          # bundle builds unsigned and the minisign signature below is the
+          # only integrity guarantee — releasing.md documents how to set these.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH }}
+      - name: Collect the installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          bundle=apps/desktop/src-tauri/target/release/bundle
+          case "${{ matrix.platform }}" in
+            macos)   cp "$bundle"/dmg/*.dmg dist/ ;;
+            windows) cp "$bundle"/nsis/*.exe dist/ ;;
+            linux)   cp "$bundle"/appimage/*.AppImage dist/
+                     cp "$bundle"/deb/*.deb dist/ ;;
+          esac
+          ls -la dist/
+      - name: Sign the installer (minisign)
+        shell: bash
+        env:
+          MINISIGN_KEY_B64: ${{ secrets.MINISIGN_KEY_B64 }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MINISIGN_KEY_B64:-}" ]; then
+            echo "MINISIGN_KEY_B64 secret is missing; unsigned releases are refused." >&2
+            exit 1
+          fi
+          printf '%s' "$MINISIGN_KEY_B64" | base64 -d > minisign.key
+          chmod 600 minisign.key
+          for f in dist/*; do
+            cargo run -p harbor-updater --locked --example release_sign -- \
+              minisign.key "$f" "$f.minisig"
+          done
+          shred -u minisign.key 2>/dev/null || rm -f minisign.key
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.name }}
+          path: dist/*
+
+  publish:
+    name: Manifest + GitHub release
+    needs: build
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal
-      - name: Refuse unsigned
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Resolve version
+        id: ver
         run: |
           set -euo pipefail
-          if grep -q placeholder apps/desktop/src-tauri/minisign.pub; then
-            echo "minisign.pub is a placeholder; this workflow will not publish an update."
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$(python3 -c "import json; print(json.load(open('apps/desktop/src-tauri/tauri.conf.json'))['version'])")" >> "$GITHUB_OUTPUT"
           fi
-          cargo test -p harbor-updater --locked
+      - name: Build the signed-manifest payload
+        run: |
+          set -euo pipefail
+          args=()
+          for f in dist/*.dmg; do [ -e "$f" ] && args+=("macos=aarch64=$f"); done
+          for f in dist/*.exe; do [ -e "$f" ] && args+=("windows=x86_64=$f"); done
+          for f in dist/*.AppImage; do [ -e "$f" ] && args+=("linux=x86_64=$f"); done
+          if [ ${#args[@]} -eq 0 ]; then
+            echo "no artifacts collected" >&2
+            exit 1
+          fi
+          python3 scripts/release_manifest.py \
+            "${{ steps.ver.outputs.version }}" "0.1.0" dist/manifest.json "${args[@]}"
+          cat dist/manifest.json
+      - name: Sign the manifest
+        env:
+          MINISIGN_KEY_B64: ${{ secrets.MINISIGN_KEY_B64 }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$MINISIGN_KEY_B64" | base64 -d > minisign.key
+          chmod 600 minisign.key
+          cargo run -p harbor-updater --locked --example release_sign -- \
+            minisign.key dist/manifest.json dist/manifest.json.minisig
+          shred -u minisign.key 2>/dev/null || rm -f minisign.key
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.ver.outputs.version }}"
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            gh release create "$tag" \
+              --title "Harbor ${{ steps.ver.outputs.version }}" \
+              --notes "Release ${{ steps.ver.outputs.version }}" \
+              --target "${{ github.sha }}" \
+              dist/*
+          else
+            gh release create "$tag" \
+              --title "Harbor ${{ steps.ver.outputs.version }}" \
+              --notes "Release ${{ steps.ver.outputs.version }}" \
+              dist/*
+          fi

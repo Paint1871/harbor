@@ -26,6 +26,8 @@
     "allow-workspace-pin",
     "allow-workspace-rename",
     "allow-thread-list",
+    "allow-thread-list-all",
+    "allow-thread-mark-read",
     "allow-thread-create",
     "allow-thread-history",
     "allow-thread-rename",
@@ -36,7 +38,6 @@
     "allow-thread-set-config",
     "allow-thread-set-engine",
     "allow-thread-config-options",
-    "allow-thread-grant-root",
     "allow-thread-attach-files",
     "allow-acp-permission-resolve",
     "allow-session-watch",
@@ -106,25 +107,13 @@
     "allow-dictation-prepare-model",
     "allow-updater-install",
     "allow-updater-reveal",
+    "notification:default",
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
     "fs:allow-read-dir",
     {
       "identifier": "fs:scope",
       "allow": []
-    },
-    {
-      "identifier": "http:default",
-      "allow": [
-        {
-          "url": "https://github.com/**"
-        },
-        {
-          "url": "https://api.github.com/**"
-        }
-      ]
-    },
-    "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text"
+    }
   ]
 }

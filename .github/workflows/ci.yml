@@ -52,6 +52,24 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  audits:
+    name: Dependency audits
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      # Reads .cargo/audit.toml for justified ignores (e.g. a lockfile-only
+      # transitive entry no release fixes).
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=moderate
+
   workspace:
     name: pnpm workspace
     runs-on: ubuntu-22.04

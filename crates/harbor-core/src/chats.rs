@@ -24,6 +24,8 @@ pub struct ChatContext {
     pub home_path: String,
     pub extra_dirs: Vec<String>,
     pub acp_session: Option<String>,
+    /// Stored engine options, re-applied when a fresh session spawns.
+    pub config: Vec<(String, Value)>,
 }
 
 type ChatRow = (String, String, String, String);
@@ -127,11 +129,11 @@ pub async fn history(pool: &SqlitePool, chat_id: &str) -> Result<Vec<ChatMessage
         .collect())
 }
 
-type ContextRow = (String, String, String, String, Option<String>);
+type ContextRow = (String, String, String, String, Option<String>, String);
 
 pub async fn context(pool: &SqlitePool, chat_id: &str) -> Result<ChatContext, Error> {
     let row: Option<ContextRow> = sqlx::query_as(
-        "SELECT c.id, c.agent_id, a.engine_id, a.home_path, c.acp_session
+        "SELECT c.id, c.agent_id, a.engine_id, a.home_path, c.acp_session, c.config_json
          FROM agent_chats c
          JOIN agents a ON a.id = c.agent_id
          WHERE c.id = ?1",
@@ -139,7 +141,7 @@ pub async fn context(pool: &SqlitePool, chat_id: &str) -> Result<ChatContext, Er
     .bind(chat_id)
     .fetch_optional(pool)
     .await?;
-    let (id, agent_id, engine_id, home_path, acp_session) =
+    let (id, agent_id, engine_id, home_path, acp_session, config_json) =
         row.ok_or_else(|| Error::Message("chat not found".into()))?;
     let extra_dirs = crate::places::paths_for(pool, &agent_id).await?;
     Ok(ChatContext {
@@ -149,6 +151,7 @@ pub async fn context(pool: &SqlitePool, chat_id: &str) -> Result<ChatContext, Er
         home_path,
         extra_dirs,
         acp_session,
+        config: crate::config::stored_options(&config_json),
     })
 }
 

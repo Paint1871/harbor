@@ -147,6 +147,14 @@ pub async fn thread_list(
     crate::threads::list(pool, workspace_id.as_deref()).await
 }
 
+pub async fn thread_list_all(pool: &SqlitePool) -> Result<Vec<ThreadRecord>, Error> {
+    crate::threads::list_all(pool).await
+}
+
+pub async fn thread_mark_read(pool: &SqlitePool, id: String) -> Result<(), Error> {
+    crate::threads::mark_read(pool, &id).await
+}
+
 pub async fn thread_create(
     pool: &SqlitePool,
     workspace_id: Option<String>,
@@ -195,10 +203,6 @@ pub async fn thread_set_engine(
     engine_id: String,
 ) -> Result<(), Error> {
     crate::threads::set_engine(pool, &id, &engine_id).await
-}
-
-pub async fn thread_grant_root(pool: &SqlitePool, id: String, path: String) -> Result<(), Error> {
-    crate::threads::grant_root(pool, &id, &path).await
 }
 
 pub async fn thread_attach_files(

@@ -5,7 +5,7 @@ use std::{
     process::{Command, Stdio},
     sync::{OnceLock, mpsc},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::types::{DetectedEngine, EngineSpec};
@@ -124,8 +124,63 @@ fn probe_login_shell_path(shell: &Path) -> Option<String> {
             return None;
         }
     };
+    // The output is in hand, but a process that closed its stdout and still
+    // refuses to die must not stall startup either — reap it only briefly.
+    for _ in 0..40 {
+        match child.try_wait() {
+            Ok(Some(_)) | Err(_) => return parse_probe(&text),
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+        }
+    }
+    let _ = child.kill();
     let _ = child.wait();
     parse_probe(&text)
+}
+
+/// A bounded subprocess run: both pipes are drained on threads so a chatty
+/// child never deadlocks on a full pipe, and a child that outlives `limit` is
+/// killed instead of hanging the caller forever.
+fn run_capped(
+    command: &mut Command,
+    limit: Duration,
+    output_cap: u64,
+) -> std::io::Result<(std::process::ExitStatus, String, String)> {
+    fn drainer<S: Read + Send + 'static>(stream: S, cap: u64) -> mpsc::Receiver<String> {
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = stream.take(cap + 1).read_to_end(&mut buf);
+            let _ = sender.send(String::from_utf8_lossy(&buf).into_owned());
+        });
+        receiver
+    }
+    let mut child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let stdout = drainer(child.stdout.take().expect("stdout is piped"), output_cap);
+    let stderr = drainer(child.stderr.take().expect("stderr is piped"), output_cap);
+    let deadline = Instant::now() + limit;
+    let status = loop {
+        match child.try_wait()? {
+            Some(status) => break status,
+            None => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "process timed out",
+                    ));
+                }
+                thread::sleep(Duration::from_millis(25));
+            }
+        }
+    };
+    let stdout = stdout.recv().unwrap_or_default();
+    let stderr = stderr.recv().unwrap_or_default();
+    Ok((status, stdout, stderr))
 }
 
 fn login_shell_path() -> Option<&'static str> {
@@ -242,7 +297,8 @@ pub fn install_adapter(engine_id: &str) -> Result<PathBuf, String> {
     let path = runtime_path();
     let npm = resolve_on_path("npm", &path, None)
         .ok_or_else(|| "npm was not found. Install Node.js, then try again.".to_string())?;
-    let output = Command::new(&npm)
+    let mut install = Command::new(&npm);
+    install
         .args([
             "install",
             "--prefix",
@@ -256,13 +312,12 @@ pub fn install_adapter(engine_id: &str) -> Result<PathBuf, String> {
             "error",
             &package,
         ])
-        .env("PATH", &path)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| format!("npm could not be started. {error}"))?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr);
-        let detail = detail.lines().next_back().unwrap_or("npm failed").trim();
+        .env("PATH", &path);
+    // A wedged network or registry must not pin the install forever.
+    let (status, _stdout, stderr) = run_capped(&mut install, Duration::from_secs(300), 256 * 1024)
+        .map_err(|error| format!("npm could not be started or finished in time. {error}"))?;
+    if !status.success() {
+        let detail = stderr.lines().next_back().unwrap_or("npm failed").trim();
         return Err(format!("{package} could not be installed. {detail}"));
     }
     if let Err(reason) = verify_adapter_integrity(&root, name, version, &integrity) {

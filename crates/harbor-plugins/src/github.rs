@@ -130,8 +130,24 @@ where
     }
 }
 
+/// The verification link leaves the app through the system browser, so it
+/// must be a real GitHub https URL — a compromised or buggy response must
+/// never send the builder's browser somewhere else carrying the user code.
+fn verification_uri_allowed(uri: &str) -> bool {
+    let Some(rest) = uri.strip_prefix("https://") else {
+        return false;
+    };
+    let host = rest.split('/').next().unwrap_or("");
+    let host = host.split(':').next().unwrap_or("");
+    host == "github.com" || host.ends_with(".github.com")
+}
+
 pub fn parse_device_start(json: &str) -> Result<DeviceStart, String> {
-    serde_json::from_str(json).map_err(|error| error.to_string())
+    let start: DeviceStart = serde_json::from_str(json).map_err(|error| error.to_string())?;
+    if !verification_uri_allowed(&start.verification_uri) {
+        return Err("device flow returned an unexpected verification URL".into());
+    }
+    Ok(start)
 }
 
 pub fn parse_token_poll(json: &str) -> Result<TokenPoll, String> {

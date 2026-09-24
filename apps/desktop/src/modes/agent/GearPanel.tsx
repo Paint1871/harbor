@@ -130,11 +130,11 @@ export function GearPanel({ agent, chats = [], onAgentChange, onDeleted, onOpenC
     setBusy(true);
     setError(null);
     try {
-      const path = await call("workspace_pick_folder");
-      if (!path) return;
-      await call("agent_update", { input: { id: agent.id, homePath: path } });
-      setHomePath(path);
-      onAgentChange?.({ ...agent, homePath: path, name, brief, engineId, messaging, faceIndex });
+      const pick = await call("workspace_pick_folder");
+      if (!pick) return;
+      await call("agent_update", { input: { id: agent.id }, homePickId: pick.id });
+      setHomePath(pick.path);
+      onAgentChange?.({ ...agent, homePath: pick.path, name, brief, engineId, messaging, faceIndex });
     } catch (reason) {
       setError(`The home folder could not be set. ${String(reason)}`);
     } finally {
@@ -147,9 +147,9 @@ export function GearPanel({ agent, chats = [], onAgentChange, onDeleted, onOpenC
     setBusy(true);
     setError(null);
     try {
-      const path = await call("workspace_pick_folder");
-      if (!path) return;
-      await call("places_grant", { agentId: agent.id, path });
+      const pick = await call("workspace_pick_folder");
+      if (!pick) return;
+      await call("places_grant", { agentId: agent.id, pickId: pick.id });
       setPlaces(await call("places_list", { agentId: agent.id }));
     } catch (reason) {
       setError(`That folder could not be granted. ${String(reason)}`);

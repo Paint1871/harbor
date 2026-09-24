@@ -12,6 +12,12 @@ export interface Workspace {
   pinned: boolean;
 }
 
+/** One native folder pick. `id` is a single-use host capability; `path` is display-only. */
+export interface FolderPick {
+  id: string;
+  path: string;
+}
+
 export interface WorkspaceSetup {
   additionalTerminals: number;
   browserPreview: boolean;
@@ -260,8 +266,8 @@ export interface HarborCommands {
   usage_bridge_connect: { args: { connected: boolean }; returns: BridgeStatus };
 
   workspace_list: { args: undefined; returns: Workspace[] };
-  workspace_pick_folder: { args: undefined; returns: string | null };
-  workspace_add: { args: { folder: string }; returns: Workspace };
+  workspace_pick_folder: { args: undefined; returns: FolderPick | null };
+  workspace_add: { args: { pickId: string }; returns: Workspace };
   workspace_remove: { args: { id: string }; returns: void };
   workspace_pin: { args: { id: string; pinned: boolean }; returns: void };
   workspace_rename: { args: { id: string; title: string }; returns: Workspace };
@@ -277,7 +283,8 @@ export interface HarborCommands {
 
   pty_spawn: {
     args: { paneId: string; workspaceId: string; cols: number; rows: number; shell?: string | null; engineId?: string | null };
-    returns: void;
+    /** The spawn generation — pty-exit events carry one so a respawned pane can ignore the old process's exit. */
+    returns: number;
   };
   pty_write_b64: { args: { paneId: string; b64: string }; returns: void };
   pty_resize: { args: { paneId: string; cols: number; rows: number }; returns: void };
@@ -292,6 +299,8 @@ export interface HarborCommands {
   open_external_url: { args: { url: string }; returns: void };
 
   thread_list: { args: { workspaceId: string | null }; returns: ThreadRecord[] };
+  thread_list_all: { args: Record<string, never>; returns: ThreadRecord[] };
+  thread_mark_read: { args: { id: string }; returns: void };
   thread_history: { args: { id: string }; returns: ChatMessage[] };
   thread_create: { args: { workspaceId: string | null; engineId: string }; returns: ThreadRecord };
   thread_rename: { args: { id: string; title: string }; returns: void };
@@ -303,12 +312,11 @@ export interface HarborCommands {
   /** Shaped by the engine, so the caller parses it rather than trusting a type. */
   thread_config_options: { args: { id: string }; returns: unknown };
   thread_set_config: { args: { id: string; optionId: string; value: unknown }; returns: void };
-  thread_grant_root: { args: { id: string; path: string }; returns: void };
   thread_attach_files: { args: { id: string; paths: string[] }; returns: void };
 
   agent_list: { args: undefined; returns: AgentRecord[] };
-  agent_create: { args: { input: CreateAgent }; returns: AgentRecord };
-  agent_update: { args: { input: UpdateAgent }; returns: void };
+  agent_create: { args: { input: CreateAgent; homePickId?: string }; returns: AgentRecord };
+  agent_update: { args: { input: UpdateAgent; homePickId?: string }; returns: void };
   agent_delete: { args: { id: string }; returns: void };
   agent_draft_with_ai: { args: { hint: string }; returns: CreateAgent };
   agent_chat_list: { args: { agentId: string }; returns: AgentChat[] };
@@ -325,7 +333,7 @@ export interface HarborCommands {
   memory_upsert: { args: { agentId: string; body: string }; returns: Memory };
   memory_delete: { args: { id: string }; returns: void };
   places_list: { args: { agentId: string }; returns: Place[] };
-  places_grant: { args: { agentId: string; path: string }; returns: void };
+  places_grant: { args: { agentId: string; pickId: string }; returns: void };
   places_revoke: { args: { id: string }; returns: void };
   session_search: {
     args: { agentId?: string | null; workspaceId?: string | null; query: string };

@@ -7,14 +7,22 @@ Last reviewed 2026-09-21.
 
 ## Release gates that have not been run
 
-- No signed or notarized macOS build
-- No Windows preview installer (the Windows PTY workflow is the gate for that)
-- `apps/desktop/src-tauri/minisign.pub` now holds the real release public key
-  and `updater_install` downloads, verifies, and stages a signed artifact —
-  but no signed release has been published yet, so the update path has never
-  run end-to-end in the wild. The signing and publishing steps are written
-  down in [releasing.md](releasing.md); the secret key's custody is the open
-  operational question there, not a code one.
+- `.github/workflows/release.yml` builds macOS/Windows/Ubuntu bundles, signs
+  every artifact and `manifest.json` with the release key, and publishes a
+  GitHub release — but the workflow has never run, so none of that is proven
+  yet. macOS code-signing/notarization additionally needs the `APPLE_*`
+  secrets; without them the bundle is unsigned for Gatekeeper and must not
+  ship to end users.
+- `apps/desktop/src-tauri/minisign.pub` holds the real release public key and
+  `updater_install` downloads, verifies, and stages a signed artifact against
+  the signed manifest — but no signed release has been published yet, so the
+  update path has never run end-to-end in the wild. The signing and
+  publishing steps are written down in [releasing.md](releasing.md); the
+  secret key's custody is the open operational question there, not a code
+  one.
+- No desktop end-to-end run on Windows or Linux exists; the ACP handshake and
+  Windows PTY workflows are the only cross-platform gates that actually run
+  in CI.
 
 ## Known gaps
 
@@ -23,8 +31,10 @@ Last reviewed 2026-09-21.
   fallback; that is intentional. The settings page states this instead of
   offering buttons that would fail.
 - **Settings.** Recheck engines is a live host action. UI zoom, startup mode,
-  default shell (including PowerShell/cmd), desktop notifications, notification
-  sound, and per-kind notification filters honor their stored values.
+  default shell (including PowerShell/cmd), notification sound, and per-kind
+  notification filters honor their stored values. Desktop notifications fire
+  as real OS toasts via `tauri-plugin-notification` when the window is not
+  focused — the in-app bell still carries the event either way.
 - **Voice.** Dictation and a title-bar mute orb are not shipped. Welcome has a
   decorative orbit; hold-to-talk is a no-op.
 - **Faces.** `face_preview` returns an SVG data URL. New agents get a stable
@@ -56,7 +66,10 @@ Last reviewed 2026-09-21.
 Agent, Code, and Chat modes run against real local state. Terminals are PTYs.
 Chat and Agent conversations use ACP v1. Workspaces, threads, agents, memory,
 layout, and notifications persist in SQLite; full-text search covers both
-agent chats and workspace threads. GitHub Device Flow stores tokens in the
+agent chats and workspace threads. A reply landing in a folder thread nobody
+is watching marks it `unread`, which drives the thread list filter and the
+dashboard's "waiting on you" count across all workspaces; opening the thread
+marks it read again. GitHub Device Flow stores tokens in the
 OS keyring. ACP adapters install under the app-data directory only, pinned to
 an exact version and verified against the published `dist.integrity` hash
 before they run. Scheduled routines (weekdays/weekly) fire while the app is

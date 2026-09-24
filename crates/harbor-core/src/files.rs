@@ -70,6 +70,16 @@ pub async fn write(
         // at the target path.
         let tmp = resolved.with_file_name(format!(".harbor-tmp-{}", uuid::Uuid::now_v7()));
         fs::write(&tmp, contents)?;
+        // The temp file only carries the process umask. Copy the replaced
+        // file's permission bits (Unix mode incl. the executable bit) so an
+        // atomic save does not silently strip them. Ownership and extended
+        // attributes are not portable through std; a chmod failure on exotic
+        // filesystems must not block the save itself.
+        if let Ok(meta) = fs::symlink_metadata(&resolved)
+            && meta.is_file()
+        {
+            let _ = fs::set_permissions(&tmp, meta.permissions());
+        }
         fs::rename(&tmp, &resolved)?;
         Ok(())
     })
@@ -166,6 +176,33 @@ mod tests {
             read(&pool, &workspace.id, outside.to_str().expect("utf-8 path"))
                 .await
                 .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn atomic_write_preserves_the_replaced_files_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("ws");
+        fs::create_dir(&root).unwrap();
+        let script = root.join("run.sh");
+        fs::write(&script, "#!/bin/sh\necho old\n").unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o750)).unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let workspace = crate::workspaces::add(&pool, root.display().to_string())
+            .await
+            .unwrap();
+
+        write(&pool, &workspace.id, "run.sh", "#!/bin/sh\necho new\n")
+            .await
+            .unwrap();
+
+        let mode = fs::metadata(&script).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o750);
+        assert_eq!(
+            fs::read_to_string(&script).unwrap(),
+            "#!/bin/sh\necho new\n"
         );
     }
 }

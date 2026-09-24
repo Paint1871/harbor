@@ -104,7 +104,7 @@ it("renames a thread from the rail and only deletes it after the ask", async () 
 
 it("adds and selects the native-picked folder without creating a thread automatically", async () => {
   invoke.mockImplementation((command) => {
-    if (command === "workspace_pick_folder") return Promise.resolve(workspace.folder);
+    if (command === "workspace_pick_folder") return Promise.resolve({ id: "pick-1", path: workspace.folder });
     if (command === "workspace_add") return Promise.resolve(workspace);
     return Promise.resolve([]);
   });
@@ -115,7 +115,7 @@ it("adds and selects the native-picked folder without creating a thread automati
   await waitFor(() => expect(path.value).toBe(workspace.folder));
   fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
   await screen.findByText("Let’s work on Project.");
-  expect(invoke).toHaveBeenCalledWith("workspace_add", { folder: workspace.folder });
+  expect(invoke).toHaveBeenCalledWith("workspace_add", { pickId: "pick-1" });
   expect(invoke.mock.calls.some(([command]) => command === "thread_create")).toBe(false);
 });
 
@@ -125,7 +125,7 @@ it("attaches a folder through thread_attach_files", async () => {
     if (command === "engines_detect") return Promise.resolve([{ id: "opencode", displayName: "OpenCode", status: "ready", supportsChat: true }]);
     if (command === "thread_create") return Promise.resolve(thread);
     if (command === "thread_history") return Promise.resolve([]);
-    if (command === "workspace_pick_folder") return Promise.resolve("/tmp/notes");
+    if (command === "workspace_pick_folder") return Promise.resolve({ id: "pick-2", path: "/tmp/notes" });
     if (command === "thread_attach_files") return Promise.resolve();
     return Promise.resolve([]);
   });

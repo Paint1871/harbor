@@ -70,13 +70,24 @@ export function isRoutineDue(routine: Routine, now: Date): boolean {
   return start !== null && (routine.lastFiredAt ?? 0) < start;
 }
 
+/** One scheduler tick at a time — overlapping runs would each see `due`
+ *  routines and prepare duplicate chats before either stamps `lastFiredAt`. */
+let dueRoutinesInFlight: Promise<number> | null = null;
+
 /**
  * Fires every due routine once: a chat is prepared with the brief waiting in
  * the composer and an inbox event points back to it. The engine only starts
  * when the builder reviews and sends, so a schedule can never burn tokens on
  * its own. A routine that fails to fire is still stamped so it cannot loop.
  */
-export async function runDueRoutines(now: Date = new Date()): Promise<number> {
+export function runDueRoutines(now: Date = new Date()): Promise<number> {
+  dueRoutinesInFlight ??= runDueRoutinesInner(now).finally(() => {
+    dueRoutinesInFlight = null;
+  });
+  return dueRoutinesInFlight;
+}
+
+async function runDueRoutinesInner(now: Date): Promise<number> {
   const routines = readRoutines(await settingsGet(ROUTINES_KEY));
   const due = routines.filter((routine) => isRoutineDue(routine, now));
   if (!due.length) return 0;

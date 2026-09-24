@@ -1,10 +1,16 @@
+use harbor_paths::assert_within;
 use std::fs;
-use std::io;
-use std::path::Path;
-use std::process::Command;
+use std::io::{self, Read};
+use std::path::{Component, Path};
+use std::process::{Command, Stdio};
 
 /// Skip dumping untracked payloads larger than this; the panel still lists the path.
 const UNTRACKED_CONTENT_MAX: usize = 64 * 1024;
+/// The changes panel is a preview: cap the whole `git diff` payload instead of
+/// buffering an unbounded stream into memory.
+const DIFF_OUTPUT_MAX: usize = 4 * 1024 * 1024;
+/// `git status --porcelain` is just paths, but bound it anyway.
+const STATUS_OUTPUT_MAX: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileDiff {
@@ -12,15 +18,111 @@ pub struct FileDiff {
     pub patch: String,
 }
 
-/// Unified diff per changed file in a workspace folder, plus untracked paths.
-pub fn unified_diffs(folder: &str) -> io::Result<Vec<FileDiff>> {
-    let output = Command::new("git")
-        .args(["-C", folder, "diff", "--no-color", "--", "."])
-        .output()?;
-    if !output.status.success() {
-        return Ok(vec![]);
+/// `git` resolves through well-known install locations before PATH: a
+/// user-writable PATH entry planted by a hostile tool must not win a command
+/// that reads and writes the workspace. Unknown layouts (NixOS, custom
+/// prefixes) still fall back to PATH so git keeps working there.
+#[cfg(not(windows))]
+fn git_command() -> Command {
+    const KNOWN: &[&str] = &[
+        "/usr/bin/git",
+        "/usr/local/bin/git",
+        "/opt/homebrew/bin/git",
+        "/bin/git",
+    ];
+    for path in KNOWN {
+        if Path::new(path).is_file() {
+            return Command::new(path);
+        }
     }
-    let mut diffs = split_diffs(&String::from_utf8_lossy(&output.stdout));
+    Command::new("git")
+}
+
+/// The official Git for Windows installer lands in %ProgramFiles%\Git.
+#[cfg(windows)]
+fn git_command() -> Command {
+    let program_files = std::env::var_os("ProgramFiles")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Program Files"));
+    let candidate = program_files.join(r"Git\cmd\git.exe");
+    if candidate.is_file() {
+        Command::new(candidate)
+    } else {
+        Command::new("git")
+    }
+}
+
+/// Run git with piped, capped stdout. Returns the output plus whether it was
+/// truncated; `Ok(None)` means git failed without producing usable output.
+fn git_output(folder: &str, args: &[&str], limit: usize) -> io::Result<Option<(Vec<u8>, bool)>> {
+    let mut child = git_command()
+        .arg("-C")
+        .arg("-C")
+        .arg(folder)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut buf = Vec::new();
+    child
+        .stdout
+        .take()
+        .expect("stdout is piped")
+        .take(limit as u64 + 1)
+        .read_to_end(&mut buf)?;
+    let truncated = buf.len() > limit;
+    if truncated {
+        buf.truncate(limit);
+        // Do not drain the rest — the process is no longer useful.
+        let _ = child.kill();
+    }
+    let status = child.wait()?;
+    if !status.success() && !truncated {
+        return Ok(None);
+    }
+    Ok(Some((buf, truncated)))
+}
+
+/// Unified diff per changed file in a workspace folder, plus untracked paths.
+/// Staged and unstaged changes are both included; external diff drivers and
+/// textconv are disabled so a repo config cannot run arbitrary commands here.
+pub fn unified_diffs(folder: &str) -> io::Result<Vec<FileDiff>> {
+    let diff_args = [
+        "diff",
+        "--no-color",
+        "--no-ext-diff",
+        "--no-textconv",
+        "HEAD",
+        "--",
+        ".",
+    ];
+    let mut diffs = match git_output(folder, &diff_args, DIFF_OUTPUT_MAX)? {
+        Some((raw, truncated)) => {
+            let mut diffs = split_diffs(&String::from_utf8_lossy(&raw));
+            if truncated && let Some(last) = diffs.last_mut() {
+                last.patch
+                    .push_str("\n… truncated — the diff exceeds the preview limit …\n");
+            }
+            diffs
+        }
+        // A repository without commits has no HEAD; its index is the diff.
+        None => git_output(
+            folder,
+            &[
+                "diff",
+                "--no-color",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--cached",
+                "--",
+                ".",
+            ],
+            DIFF_OUTPUT_MAX,
+        )?
+        .map(|(raw, _)| split_diffs(&String::from_utf8_lossy(&raw)))
+        .unwrap_or_default(),
+    };
     diffs.extend(collect_untracked_diffs(folder)?);
     Ok(diffs)
 }
@@ -53,19 +155,15 @@ fn split_diffs(raw: &str) -> Vec<FileDiff> {
 }
 
 fn collect_untracked_diffs(folder: &str) -> io::Result<Vec<FileDiff>> {
-    let output = Command::new("git")
-        .args([
-            "-C",
-            folder,
-            "status",
-            "--porcelain",
-            "--untracked-files=all",
-        ])
-        .output()?;
-    if !output.status.success() {
+    let Some((raw, _)) = git_output(
+        folder,
+        &["status", "--porcelain", "--untracked-files=all"],
+        STATUS_OUTPUT_MAX,
+    )?
+    else {
         return Ok(vec![]);
-    }
-    Ok(untracked_diffs(&String::from_utf8_lossy(&output.stdout))
+    };
+    Ok(untracked_diffs(&String::from_utf8_lossy(&raw))
         .into_iter()
         .map(|diff| {
             let preview = read_untracked_preview(folder, &diff.path);
@@ -200,12 +298,28 @@ fn untracked_patch(path: &str, contents: Option<&[u8]>) -> String {
 }
 
 fn read_untracked_preview(folder: &str, relative: &str) -> Option<Vec<u8>> {
-    let path = Path::new(folder).join(relative);
-    let meta = fs::metadata(&path).ok()?;
-    if !meta.is_file() || meta.len() > UNTRACKED_CONTENT_MAX as u64 {
+    let relative_path = Path::new(relative);
+    // The path list comes from `git status`, but never trust it blindly: no
+    // absolute paths and no `..` escapes.
+    if relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|part| matches!(part, Component::ParentDir))
+    {
         return None;
     }
-    fs::read(path).ok()
+    let path = Path::new(folder).join(relative_path);
+    // A symlink's target may live anywhere on disk — the preview must not
+    // follow it. `symlink_metadata` inspects the link itself, not the target.
+    let meta = fs::symlink_metadata(&path).ok()?;
+    if meta.file_type().is_symlink() || !meta.is_file() || meta.len() > UNTRACKED_CONTENT_MAX as u64
+    {
+        return None;
+    }
+    // A parent directory may itself be a link out of the workspace; resolve
+    // and read the canonical path so the content provably stays inside.
+    let resolved = assert_within(Path::new(folder), &path).ok()?;
+    fs::read(resolved).ok()
 }
 
 #[cfg(test)]
@@ -282,5 +396,48 @@ mod tests {
         let skipped = untracked_patch("huge.md", Some(&huge));
         assert_eq!(skipped, "untracked\nnew file: huge.md\n");
         assert!(!skipped.contains("xxx"));
+    }
+
+    #[test]
+    fn untracked_preview_reads_a_real_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.md"), b"hi").unwrap();
+        let folder = dir.path().to_str().unwrap();
+        assert_eq!(
+            read_untracked_preview(folder, "notes.md"),
+            Some(b"hi".to_vec())
+        );
+    }
+
+    #[test]
+    fn untracked_preview_refuses_dotdot_and_absolute_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.txt"), b"a").unwrap();
+        let folder = dir.path().to_str().unwrap();
+        assert_eq!(read_untracked_preview(folder, "../escape"), None);
+        assert_eq!(read_untracked_preview(folder, "a/../../escape"), None);
+        assert_eq!(read_untracked_preview(folder, "/etc/hosts"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn untracked_preview_refuses_a_symlink_out_of_the_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        fs::write(outside.path(), b"secret").unwrap();
+        std::os::unix::fs::symlink(outside.path(), dir.path().join("link.txt")).unwrap();
+        let folder = dir.path().to_str().unwrap();
+        assert_eq!(read_untracked_preview(folder, "link.txt"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn untracked_preview_refuses_a_symlinked_parent_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("secret.txt"), b"secret").unwrap();
+        std::os::unix::fs::symlink(outside.path(), dir.path().join("sub")).unwrap();
+        let folder = dir.path().to_str().unwrap();
+        assert_eq!(read_untracked_preview(folder, "sub/secret.txt"), None);
     }
 }

@@ -276,8 +276,16 @@ pub async fn mark_disconnected(pool: &SqlitePool, id: &str) -> Result<(), Error>
     Ok(())
 }
 
+/// Disconnect tears down everything the connection created: the row goes back
+/// to `available` and every agent grant is revoked. Without the revoke, a
+/// reconnect would silently re-arm grants the builder never re-approved.
 pub async fn disconnect(pool: &SqlitePool, id: &str) -> Result<(), Error> {
-    mark_disconnected(pool, id).await
+    mark_disconnected(pool, id).await?;
+    sqlx::query("UPDATE plugin_grants SET enabled = 0 WHERE plugin_id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 async fn ensure_plugin(pool: &SqlitePool, plugin_id: &str) -> Result<(), Error> {
@@ -415,6 +423,17 @@ pub async fn agent_grant_enabled(
             .fetch_optional(pool)
             .await?;
     Ok(row.is_some_and(|(enabled,)| enabled != 0))
+}
+
+/// The plugin's connection status, or `None` when no row exists yet. A
+/// missing row is neutral — the plugin was never connected rather than
+/// proven disconnected.
+pub async fn plugin_status(pool: &SqlitePool, id: &str) -> Result<Option<String>, Error> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT status FROM plugins WHERE id = ?1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|(status,)| status))
 }
 
 pub async fn resolve_approval(pool: &SqlitePool, id: &str, allow: bool) -> Result<(), Error> {
@@ -579,6 +598,41 @@ mod tests {
         assert_eq!(grants.len(), 1);
         assert_eq!(grants[0].plugin_id, "github");
         assert!(!grants[0].enabled);
+    }
+
+    #[tokio::test]
+    async fn disconnect_revokes_the_plugins_grants() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = db::open(&dir.path().join("db.sqlite")).await.unwrap();
+        let agent = crate::agents::create(
+            &pool,
+            CreateAgent {
+                name: "Plug".into(),
+                brief: String::new(),
+                engine_id: "opencode".into(),
+                face_index: None,
+                home_path: None,
+            },
+        )
+        .await
+        .unwrap();
+        connect(&pool, "github").await.unwrap();
+        set_agent_grant(&pool, &agent.id, "github", true)
+            .await
+            .unwrap();
+        assert!(
+            agent_grant_enabled(&pool, &agent.id, "github")
+                .await
+                .unwrap()
+        );
+
+        disconnect(&pool, "github").await.unwrap();
+
+        assert!(
+            !agent_grant_enabled(&pool, &agent.id, "github")
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]

@@ -60,7 +60,6 @@ it("omits faceIndex when the picker is never used", async () => {
     name: "Mate",
     brief: "",
     engineId: "opencode",
-    homePath: undefined,
   });
   expect(onCreate.mock.calls[0]?.[0].faceIndex).toBeUndefined();
 });

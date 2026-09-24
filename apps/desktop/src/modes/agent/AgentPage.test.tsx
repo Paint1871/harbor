@@ -91,7 +91,7 @@ beforeEach(() => {
     }
     if (command === "places_list") return Promise.resolve(places);
     if (command === "places_grant") {
-      places = [...places, { id: "place-new", path: String(args?.path ?? "") }];
+      places = [...places, { id: "place-new", path: String(args?.pickId ?? "") }];
       return Promise.resolve();
     }
     if (command === "places_revoke") {
@@ -100,7 +100,7 @@ beforeEach(() => {
     }
     if (command === "agent_update") return Promise.resolve();
     if (command === "face_preview") return Promise.resolve("data:image/svg+xml,face");
-    if (command === "workspace_pick_folder") return Promise.resolve("/tmp/project");
+    if (command === "workspace_pick_folder") return Promise.resolve({ id: "pick-1", path: "/tmp/project" });
     if (command === "acp_permission_resolve") return Promise.resolve();
     if (command === "session_search") return Promise.resolve([]);
     if (command === "plugin_list") return Promise.resolve([{
@@ -205,7 +205,7 @@ it("lists places on open and revokes by id", async () => {
 
 it("searches past chats and can open a hit", async () => {
   const hits: SearchHit[] = [{ chatId: "weekly", chatKind: "agent", prose: "alpha rust backend", createdAt: Math.floor(Date.now() / 1000) }];
-  invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+  invoke.mockImplementation((command: string, _args?: Record<string, unknown>) => {
     if (command === "session_search") return Promise.resolve(hits);
     if (command === "memory_list" || command === "places_list" || command === "plugin_grants_list") return Promise.resolve([]);
     return Promise.resolve([]);
@@ -236,7 +236,7 @@ it("toggles the GitHub plugin grant for the current agent", async () => {
 
 it("completes a teammate name into the draft, and mails the handoff only when sent", async () => {
   const other: AgentRecord = { ...agent, id: "agent-2", name: "Reviewer" };
-  invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+  invoke.mockImplementation((command: string, _args?: Record<string, unknown>) => {
     if (command === "agent_list") return Promise.resolve([agent, other]);
     if (command === "agent_chat_list") return Promise.resolve(chats);
     if (command === "agent_chat_history") return Promise.resolve([]);
@@ -342,7 +342,8 @@ it("sets a home folder from gear", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Set home folder" }));
   await waitFor(() =>
     expect(invoke).toHaveBeenCalledWith("agent_update", {
-      input: { id: "agent-1", homePath: "/tmp/project" },
+      input: { id: "agent-1" },
+      homePickId: "pick-1",
     }),
   );
 });

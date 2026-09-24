@@ -102,3 +102,36 @@ it("does not steal letter keys from a text field", () => {
   expect(onResolve).not.toHaveBeenCalled();
   composer.remove();
 });
+
+it("resolves only the newest card when several are mounted", () => {
+  const first = vi.fn();
+  const second = vi.fn();
+  render(
+    <>
+      <PermissionCard request={{ ...request, id: "older", title: "Older" }} onResolve={first} />
+      <PermissionCard request={{ ...request, id: "newer", title: "Newer" }} onResolve={second} />
+    </>,
+  );
+  fireEvent.keyDown(window, { key: "a" });
+  expect(first).not.toHaveBeenCalled();
+  expect(second).toHaveBeenCalledTimes(1);
+  expect(second).toHaveBeenCalledWith("once", false);
+});
+
+it("hands the shortcuts to the next card after the newest unmounts", () => {
+  const first = vi.fn();
+  const second = vi.fn();
+  const view = render(
+    <>
+      <PermissionCard request={{ ...request, id: "older", title: "Older" }} onResolve={first} />
+      <PermissionCard request={{ ...request, id: "newer", title: "Newer" }} onResolve={second} />
+    </>,
+  );
+  view.rerender(
+    <PermissionCard request={{ ...request, id: "older", title: "Older" }} onResolve={first} />,
+  );
+  fireEvent.keyDown(window, { key: "d" });
+  expect(second).not.toHaveBeenCalled();
+  expect(first).toHaveBeenCalledTimes(1);
+  expect(first).toHaveBeenCalledWith("deny", false);
+});

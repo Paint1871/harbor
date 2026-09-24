@@ -9,14 +9,76 @@ use harbor_core::types::{
     WorkspaceTab,
 };
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_fs::FsExt;
 
 fn map_err(error: harbor_core::error::Error) -> String {
     error.to_string()
+}
+
+/// The native folder picker is the only door into `fs:scope`. It stores the
+/// picked path host-side and hands the renderer an opaque, single-use pick id;
+/// commands that create filesystem access consume the id instead of trusting a
+/// renderer-supplied path.
+#[derive(Default)]
+pub struct PendingPicks(Mutex<HashMap<String, (String, Instant)>>);
+
+/// Long enough to finish the dialog flow that follows the pick, short enough
+/// that a leaked id cannot be redeemed far in the future.
+const PICK_TTL: Duration = Duration::from_secs(10 * 60);
+
+impl PendingPicks {
+    fn insert(&self, path: &str) -> String {
+        let mut picks = self.0.lock().unwrap();
+        picks.retain(|_, (_, at)| at.elapsed() < PICK_TTL);
+        let id = uuid::Uuid::now_v7().simple().to_string();
+        picks.insert(id.clone(), (path.to_string(), Instant::now()));
+        id
+    }
+
+    fn take(&self, id: &str) -> Result<String, String> {
+        match self.0.lock().unwrap().remove(id) {
+            Some((path, at)) if at.elapsed() < PICK_TTL => Ok(path),
+            _ => Err("that folder selection expired — pick it again".into()),
+        }
+    }
+}
+
+/// What the renderer sees after a native pick: a display path plus the
+/// single-use capability that lets exactly one follow-up command use it.
+#[derive(serde::Serialize)]
+pub struct FolderPick {
+    id: String,
+    path: String,
+}
+
+fn allow_workspace_directory(app: &AppHandle, folder: &str) {
+    let _ = app.fs_scope().allow_directory(Path::new(folder), true);
+}
+
+/// Drop `folder` from the fs scope once nothing in the database references it
+/// anymore — workspaces, places, and agent home folders share the scope.
+async fn revoke_folder_scope(app: &AppHandle, pool: &SqlitePool, folder: &str) {
+    let referenced: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+             SELECT 1 FROM workspaces WHERE folder = ?1
+             UNION ALL SELECT 1 FROM places WHERE path = ?1
+             UNION ALL SELECT 1 FROM agents WHERE home_path = ?1
+         )",
+    )
+    .bind(folder)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(true);
+    if !referenced {
+        let _ = app.fs_scope().forbid_directory(Path::new(folder), true);
+    }
 }
 
 fn fetch_url(url: &str) -> Result<String, String> {
@@ -37,8 +99,10 @@ fn fetch_url(url: &str) -> Result<String, String> {
 /// exhaust memory before verification ever runs.
 const MAX_ARTIFACT_BYTES: u64 = 512 * 1024 * 1024;
 
-/// Artifacts are binary; a longer budget than the metadata fetch.
-fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
+/// Artifacts are binary; a longer budget than the metadata fetch. Streams
+/// through `out` so a multi-hundred-megabyte release never sits in memory —
+/// the cap applies to bytes actually written.
+fn fetch_stream(url: &str, out: &mut dyn std::io::Write) -> Result<(), String> {
     use std::io::Read;
     let response = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
@@ -57,15 +121,12 @@ fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     {
         return Err("update artifact is too large".into());
     }
-    let mut bytes = Vec::new();
-    response
-        .take(MAX_ARTIFACT_BYTES + 1)
-        .read_to_end(&mut bytes)
+    let copied = std::io::copy(&mut response.take(MAX_ARTIFACT_BYTES + 1), out)
         .map_err(|error| error.to_string())?;
-    if bytes.len() as u64 > MAX_ARTIFACT_BYTES {
+    if copied > MAX_ARTIFACT_BYTES {
         return Err("update artifact is too large".into());
     }
-    Ok(bytes)
+    Ok(())
 }
 
 #[tauri::command]
@@ -128,13 +189,6 @@ pub async fn engine_install_adapter(
     Ok(engines)
 }
 
-fn allow_workspace_directory(app: &AppHandle, folder: &str) {
-    // The native picker and the persisted workspace list both feed the
-    // Tauri filesystem scope. The custom Rust commands still enforce their
-    // own root check, but this keeps plugin-backed file APIs usable too.
-    let _ = app.fs_scope().allow_directory(Path::new(folder), true);
-}
-
 #[tauri::command]
 pub async fn workspace_list(
     app: AppHandle,
@@ -149,35 +203,38 @@ pub async fn workspace_list(
     Ok(workspaces)
 }
 
-/// The native picker selects a folder and grants its recursive filesystem scope.
+/// The native picker stores the chosen folder host-side and returns a
+/// single-use pick id. No filesystem scope is granted until a command consumes
+/// the pick and persists a row that needs the folder.
 #[tauri::command]
-pub async fn workspace_pick_folder(app: AppHandle) -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+pub async fn workspace_pick_folder(
+    app: AppHandle,
+    picks: State<'_, PendingPicks>,
+) -> Result<Option<FolderPick>, String> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
             .set_title("Choose a workspace folder")
             .blocking_pick_folder()
-            .map(|path| {
-                path.into_path()
-                    .map(|path| {
-                        let value = path.to_string_lossy().into_owned();
-                        allow_workspace_directory(&app, &value);
-                        value
-                    })
-                    .map_err(|error| error.to_string())
-            })
-            .transpose()
+            .and_then(|path| path.into_path().ok())
+            .map(|path| path.to_string_lossy().into_owned())
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    Ok(picked.map(|path| FolderPick {
+        id: picks.insert(&path),
+        path,
+    }))
 }
 
 #[tauri::command]
 pub async fn workspace_add(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
-    folder: String,
+    picks: State<'_, PendingPicks>,
+    pick_id: String,
 ) -> Result<Workspace, String> {
+    let folder = picks.take(&pick_id)?;
     let workspace = harbor_core::commands::workspace_add(&pool, folder)
         .await
         .map_err(map_err)?;
@@ -186,10 +243,23 @@ pub async fn workspace_add(
 }
 
 #[tauri::command]
-pub async fn workspace_remove(pool: State<'_, SqlitePool>, id: String) -> Result<(), String> {
+pub async fn workspace_remove(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    id: String,
+) -> Result<(), String> {
+    let folder: Option<String> = sqlx::query_scalar("SELECT folder FROM workspaces WHERE id = ?1")
+        .bind(&id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|error| error.to_string())?;
     harbor_core::commands::workspace_remove(&pool, id)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    if let Some(folder) = folder {
+        revoke_folder_scope(&app, &pool, &folder).await;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -338,6 +408,20 @@ pub async fn thread_list(
 }
 
 #[tauri::command]
+pub async fn thread_list_all(pool: State<'_, SqlitePool>) -> Result<Vec<ThreadRecord>, String> {
+    harbor_core::commands::thread_list_all(&pool)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn thread_mark_read(pool: State<'_, SqlitePool>, id: String) -> Result<(), String> {
+    harbor_core::commands::thread_mark_read(&pool, id)
+        .await
+        .map_err(map_err)
+}
+
+#[tauri::command]
 pub async fn thread_history(
     pool: State<'_, SqlitePool>,
     id: String,
@@ -454,17 +538,6 @@ pub async fn thread_set_engine(
 }
 
 #[tauri::command]
-pub async fn thread_grant_root(
-    pool: State<'_, SqlitePool>,
-    id: String,
-    path: String,
-) -> Result<(), String> {
-    harbor_core::commands::thread_grant_root(&pool, id, path)
-        .await
-        .map_err(map_err)
-}
-
-#[tauri::command]
 pub async fn thread_attach_files(
     pool: State<'_, SqlitePool>,
     id: String,
@@ -495,8 +568,29 @@ pub async fn agent_list(
 pub async fn agent_create(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
+    picks: State<'_, PendingPicks>,
     input: CreateAgent,
+    home_pick_id: Option<String>,
 ) -> Result<AgentRecord, String> {
+    let mut input = input;
+    // A home folder is a filesystem grant, so it must come from the picker.
+    match home_pick_id {
+        Some(pick_id) => {
+            input.home_path = Some(
+                harbor_core::places::canonicalize_folder(&picks.take(&pick_id)?)
+                    .map_err(map_err)?,
+            );
+        }
+        None => {
+            if input
+                .home_path
+                .as_deref()
+                .is_some_and(|path| !path.trim().is_empty())
+            {
+                return Err("the home folder must be chosen in the folder picker".into());
+            }
+        }
+    }
     let home = input.home_path.clone();
     let agent = harbor_core::commands::agent_create(&pool, input)
         .await
@@ -511,28 +605,79 @@ pub async fn agent_create(
 pub async fn agent_update(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
+    picks: State<'_, PendingPicks>,
     input: UpdateAgent,
+    home_pick_id: Option<String>,
 ) -> Result<(), String> {
+    let mut input = input;
+    let existing_home: Option<String> =
+        sqlx::query_scalar("SELECT home_path FROM agents WHERE id = ?1")
+            .bind(&input.id)
+            .fetch_optional(&*pool)
+            .await
+            .map_err(|error| error.to_string())?
+            .flatten();
+    match home_pick_id {
+        Some(pick_id) => {
+            input.home_path = Some(
+                harbor_core::places::canonicalize_folder(&picks.take(&pick_id)?)
+                    .map_err(map_err)?,
+            );
+        }
+        None => {
+            // Without a pick the renderer may only keep the stored value or
+            // clear it — a different path would be a fabricated grant.
+            if let Some(path) = &input.home_path {
+                let trimmed = path.trim();
+                if trimmed.is_empty() {
+                    input.home_path = Some(String::new());
+                } else if existing_home.as_deref() != Some(trimmed) {
+                    return Err("the home folder must be chosen in the folder picker".into());
+                }
+            }
+        }
+    }
     let home = input.home_path.clone();
     harbor_core::commands::agent_update(&pool, input)
         .await
         .map_err(map_err)?;
-    if let Some(path) = home.filter(|path| !path.trim().is_empty()) {
-        allow_workspace_directory(&app, &path);
+    // `home == None` keeps the stored value; `Some("")` clears it.
+    let effective = match &home {
+        Some(path) if !path.trim().is_empty() => Some(path.clone()),
+        Some(_) => None,
+        None => existing_home.clone(),
+    };
+    if let Some(path) = &effective {
+        allow_workspace_directory(&app, path);
+    }
+    let previous = existing_home.filter(|path| !path.trim().is_empty());
+    if let Some(previous) = previous.filter(|old| effective.as_ref() != Some(old)) {
+        revoke_folder_scope(&app, &pool, &previous).await;
     }
     Ok(())
 }
 
 #[tauri::command]
 pub async fn agent_delete(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     registry: State<'_, AcpRegistry>,
     id: String,
 ) -> Result<(), String> {
+    let home: Option<String> = sqlx::query_scalar("SELECT home_path FROM agents WHERE id = ?1")
+        .bind(&id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|error| error.to_string())?
+        .flatten();
     crate::acp_host::drop_agent_sessions(&pool, &registry, &id).await;
     harbor_core::commands::agent_delete(&pool, id)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    if let Some(home) = home.filter(|path| !path.trim().is_empty()) {
+        revoke_folder_scope(&app, &pool, &home).await;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -698,20 +843,38 @@ pub async fn places_list(
 pub async fn places_grant(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
+    picks: State<'_, PendingPicks>,
     agent_id: String,
-    path: String,
+    pick_id: String,
 ) -> Result<(), String> {
-    allow_workspace_directory(&app, &path);
-    harbor_core::commands::places_grant(&pool, agent_id, path)
+    // Canonicalize before validating so the scope below covers the exact
+    // canonical path the row stores — e.g. macOS resolves /tmp to /private/tmp.
+    let path = harbor_core::places::canonicalize_folder(&picks.take(&pick_id)?).map_err(map_err)?;
+    harbor_core::commands::places_grant(&pool, agent_id, path.clone())
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    allow_workspace_directory(&app, &path);
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn places_revoke(pool: State<'_, SqlitePool>, id: String) -> Result<(), String> {
+pub async fn places_revoke(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    id: String,
+) -> Result<(), String> {
+    let path: Option<String> = sqlx::query_scalar("SELECT path FROM places WHERE id = ?1")
+        .bind(&id)
+        .fetch_optional(&*pool)
+        .await
+        .map_err(|error| error.to_string())?;
     harbor_core::commands::places_revoke(&pool, id)
         .await
-        .map_err(map_err)
+        .map_err(map_err)?;
+    if let Some(path) = path {
+        revoke_folder_scope(&app, &pool, &path).await;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -789,6 +952,16 @@ pub async fn notify(
             .flatten();
         if should_emit_notification(enabled.as_ref()) {
             let _ = app.emit("notification", row);
+            // An OS toast only helps when the reply is not already on screen —
+            // while the window has focus the in-app event is the signal.
+            let focused = app
+                .get_webview_window("main")
+                .and_then(|window| window.is_focused().ok())
+                .unwrap_or(false);
+            if !focused {
+                use tauri_plugin_notification::NotificationExt;
+                let _ = app.notification().builder().title(title).body(body).show();
+            }
         }
     }
 }
@@ -1055,21 +1228,11 @@ pub async fn updater_install() -> Result<String, String> {
     if !check.available {
         return Err("no signed update is available".into());
     }
-    let artifact_url = check
-        .artifact_url
+    // The staged file keeps the name the signed manifest declared — not
+    // whatever a redirect or URL tail might suggest.
+    let name = check
+        .file_name
         .clone()
-        .unwrap_or_else(|| "harbor-update".into());
-    let verified = tauri::async_runtime::spawn_blocking(move || {
-        harbor_updater::install_release(&check, fetch_bytes)
-    })
-    .await
-    .map_err(|error| error.to_string())?
-    .map_err(|error| error.to_string())?;
-
-    let name = artifact_url
-        .split('?')
-        .next()
-        .and_then(|path| path.rsplit('/').next())
         .filter(|name| {
             // Whitelist a portable filename: separators, drive qualifiers, and
             // dot-only names can never reach the staged path on any OS.
@@ -1079,14 +1242,28 @@ pub async fn updater_install() -> Result<String, String> {
                     .chars()
                     .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_'))
         })
-        .unwrap_or("harbor-update");
+        .unwrap_or_else(|| "harbor-update".into());
     let dir = crate::application_data_root().join("updates");
     std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
-    let path = dir.join(name);
-    // Temp file + rename: a crash mid-write can never leave a truncated file
-    // at the final staged path.
+    let path = dir.join(&name);
+    // Stream into a temp file while the digest is verified: a crash mid-write
+    // or a hash mismatch can never leave a bad artifact at the staged path.
     let staging = dir.join(format!(".{name}.download"));
-    std::fs::write(&staging, &verified).map_err(|error| error.to_string())?;
+    let staging_path = staging.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let written = std::fs::File::create(&staging_path)
+            .map_err(|error| error.to_string())
+            .and_then(|mut file| {
+                harbor_updater::install_release(&check, fetch_stream, &mut file)
+                    .map_err(|error| error.to_string())
+            });
+        if written.is_err() {
+            let _ = std::fs::remove_file(&staging_path);
+        }
+        written
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     std::fs::rename(&staging, &path).map_err(|error| error.to_string())?;
     // One staged artifact is enough; older downloads and interrupted temp
     // files are removed once the new one is safely in place.
@@ -1118,19 +1295,26 @@ pub fn updater_reveal(path: String) -> Result<(), String> {
     }
     #[cfg(target_os = "macos")]
     let mut command = {
-        let mut command = Command::new("open");
+        let mut command = Command::new("/usr/bin/open");
         command.arg("-R").arg(&target);
         command
     };
     #[cfg(target_os = "windows")]
     let mut command = {
-        let mut command = Command::new("explorer");
+        let mut command = Command::new(windows_dir().join("explorer.exe"));
         command.arg(format!("/select,{}", target.display()));
         command
     };
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let mut command = {
-        let mut command = Command::new("xdg-open");
+        let mut command = Command::new(system_helper(
+            &[
+                "/usr/bin/xdg-open",
+                "/usr/local/bin/xdg-open",
+                "/bin/xdg-open",
+            ],
+            "xdg-open",
+        ));
         command.arg(target.parent().unwrap_or(dir.as_path()));
         command
     };
@@ -1154,7 +1338,12 @@ pub fn engine_usage() -> Vec<harbor_core::usage::EngineUsage> {
 pub fn usage_bridge_status() -> Result<crate::usage_bridge::BridgeStatus, String> {
     let settings =
         crate::usage_bridge::settings_path().ok_or("could not resolve the home directory")?;
-    Ok(crate::usage_bridge::status(&crate::usage_dir(), &settings))
+    let exe = std::env::current_exe().map_err(|error| error.to_string())?;
+    Ok(crate::usage_bridge::status(
+        &crate::usage_dir(),
+        &settings,
+        &exe,
+    ))
 }
 
 /// Editing a file another application owns is the builder's call, never a side
@@ -1164,10 +1353,10 @@ pub fn usage_bridge_connect(connected: bool) -> Result<crate::usage_bridge::Brid
     let usage_dir = crate::usage_dir();
     let settings =
         crate::usage_bridge::settings_path().ok_or("could not resolve the home directory")?;
-    if !connected {
-        return crate::usage_bridge::disconnect(&usage_dir, &settings);
-    }
     let exe = std::env::current_exe().map_err(|error| error.to_string())?;
+    if !connected {
+        return crate::usage_bridge::disconnect(&usage_dir, &settings, &exe);
+    }
     crate::usage_bridge::connect(&usage_dir, &settings, &exe)
 }
 
@@ -1225,28 +1414,53 @@ fn open_in_system_browser(url: &str) -> Result<(), String> {
     }
 }
 
+/// System helpers resolve by absolute path first: PATH can carry a
+/// user-writable entry, and a planted `open`/`xdg-open` would run with
+/// Harbor's privileges on every external link. The bare-name fallback keeps
+/// unknown layouts (NixOS, custom prefixes) working.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn system_helper(known: &[&str], fallback: &str) -> std::path::PathBuf {
+    known
+        .iter()
+        .map(std::path::PathBuf::from)
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| std::path::PathBuf::from(fallback))
+}
+
+#[cfg(windows)]
+fn windows_dir() -> std::path::PathBuf {
+    std::env::var_os("SystemRoot")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Windows"))
+}
+
 #[cfg(target_os = "macos")]
 fn system_open_command(url: &str) -> Command {
-    let mut command = Command::new("open");
+    let mut command = Command::new("/usr/bin/open");
     command.arg(url);
     command
 }
 
 #[cfg(target_os = "linux")]
 fn system_open_command(url: &str) -> Command {
-    let mut command = Command::new("xdg-open");
+    let mut command = Command::new(system_helper(
+        &[
+            "/usr/bin/xdg-open",
+            "/usr/local/bin/xdg-open",
+            "/bin/xdg-open",
+        ],
+        "xdg-open",
+    ));
     command.arg(url);
     command
 }
 
 #[cfg(windows)]
 fn system_open_command(url: &str) -> Command {
-    use std::os::windows::process::CommandExt;
-    let mut command = Command::new("cmd");
-    command.arg("/c");
-    // `start` treats the first quoted token as a window title; wrap the URL
-    // so cmd does not split on `&` in a query string.
-    command.raw_arg(format!("start \"\" \"{url}\""));
+    // rundll32 gets the URL as a literal argv entry — no cmd parsing, no %
+    // expansion, no `start` title quoting to get wrong.
+    let mut command = Command::new(windows_dir().join(r"System32\rundll32.exe"));
+    command.arg("url.dll,FileProtocolHandler").arg(url);
     command
 }
 
@@ -1288,6 +1502,8 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         fs_write,
         fs_list,
         thread_list,
+        thread_list_all,
+        thread_mark_read,
         thread_create,
         thread_history,
         thread_rename,
@@ -1298,7 +1514,6 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
         thread_set_config,
         thread_set_engine,
         thread_config_options,
-        thread_grant_root,
         thread_attach_files,
         agent_list,
         agent_create,
@@ -1357,6 +1572,22 @@ pub fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sy
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_pick_is_redeemed_exactly_once() {
+        let picks = super::PendingPicks::default();
+        let id = picks.insert("/tmp/project");
+        assert_eq!(picks.take(&id).unwrap(), "/tmp/project");
+        assert!(picks.take(&id).is_err(), "a second redemption must fail");
+    }
+
+    #[test]
+    fn fabricated_pick_ids_never_resolve() {
+        let picks = super::PendingPicks::default();
+        picks.insert("/tmp/project");
+        assert!(picks.take("not-a-real-pick").is_err());
+        assert!(picks.take("").is_err());
+    }
+
     #[test]
     fn allowed_external_url_accepts_http_and_https_only() {
         assert_eq!(

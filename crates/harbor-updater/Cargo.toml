@@ -9,4 +9,10 @@ description = "minisign-checked Harbor updates"
 [dependencies]
 minisign-verify = "=0.2.5"
 serde_json = "=1.0.151"
+sha2 = "=0.10.9"
 thiserror = "=2.0.20"
+
+[dev-dependencies]
+# Signs manifests with a throwaway keypair in tests — the baked release key's
+# secret never exists in CI, so this is how the signed pipeline gets covered.
+minisign = "=0.9.1"

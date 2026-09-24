@@ -34,7 +34,7 @@ describe("Dashboard", () => {
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "agent_list") return Promise.resolve([{ id: "a1" }, { id: "a2" }]);
       if (command === "workspace_list") return Promise.resolve([{ id: "w1" }]);
-      if (command === "thread_list") return Promise.resolve([]);
+      if (command === "thread_list_all") return Promise.resolve([]);
       return Promise.resolve([]);
     });
     render(
@@ -52,7 +52,7 @@ describe("Dashboard", () => {
     mocks.invoke.mockImplementation((command: string) => {
       if (command === "agent_list") return Promise.resolve([]);
       if (command === "workspace_list") return Promise.resolve([]);
-      if (command === "thread_list") {
+      if (command === "thread_list_all") {
         return Promise.resolve([
           { id: "thread-1", workspaceId: "ws-1", engineId: "opencode", title: "Launch", pinned: false, unread: true },
         ]);

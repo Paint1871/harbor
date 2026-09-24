@@ -59,8 +59,17 @@ fn bridge_command(exe: &Path) -> String {
     }
 }
 
-fn is_bridge(command: &str) -> bool {
-    command.contains("usage-bridge")
+/// Harbor's own entry is exactly `'<exe>' usage-bridge`. A looser substring
+/// match would eat a status line that merely mentions the word
+/// (`~/bin/my-usage-bridge.py` is somebody's own script, not our bridge).
+/// The quoted-path + trailing-token shape also recognizes entries written by
+/// a Harbor exe at a different path (app moved between connect and now).
+fn is_bridge(command: &str, exe: &Path) -> bool {
+    let trimmed = command.trim();
+    if trimmed == bridge_command(exe) {
+        return true;
+    }
+    trimmed.ends_with(" usage-bridge") && (trimmed.starts_with('\'') || trimmed.starts_with('"'))
 }
 
 fn read_state(usage_dir: &Path) -> BridgeState {
@@ -90,12 +99,12 @@ fn read_settings(path: &Path) -> Result<Value, String> {
     }
 }
 
-pub fn status(usage_dir: &Path, settings: &Path) -> BridgeStatus {
+pub fn status(usage_dir: &Path, settings: &Path, exe: &Path) -> BridgeStatus {
     let connected = read_settings(settings)
         .ok()
         .and_then(|settings| {
             let line = settings.get("statusLine")?;
-            Some(is_bridge(line.get("command")?.as_str()?))
+            Some(is_bridge(line.get("command")?.as_str()?, exe))
         })
         .unwrap_or(false);
     BridgeStatus {
@@ -125,7 +134,7 @@ pub fn connect(usage_dir: &Path, path: &Path, exe: &Path) -> Result<BridgeStatus
         .get("statusLine")
         .and_then(|line| line.get("command"))
         .and_then(Value::as_str)
-        .filter(|command| !is_bridge(command))
+        .filter(|command| !is_bridge(command, exe))
         .map(str::to_string);
     if previous.is_some() {
         write_json(
@@ -139,17 +148,29 @@ pub fn connect(usage_dir: &Path, path: &Path, exe: &Path) -> Result<BridgeStatus
 
     settings["statusLine"] = json!({ "type": "command", "command": bridge_command(exe) });
     write_json(path, &settings)?;
-    Ok(status(usage_dir, path))
+    Ok(status(usage_dir, path, exe))
 }
 
 /// Puts the builder's own status line back, or removes the entry Harbor added.
-pub fn disconnect(usage_dir: &Path, path: &Path) -> Result<BridgeStatus, String> {
-    let mut settings = read_settings(path)?;
+/// If the settings file no longer parses at all, the untouched pre-connect
+/// copy is the honest way back — that is what the backup exists for.
+pub fn disconnect(usage_dir: &Path, path: &Path, exe: &Path) -> Result<BridgeStatus, String> {
+    let mut settings = match read_settings(path) {
+        Ok(settings) => settings,
+        Err(error) => {
+            let backup = usage_dir.join(SETTINGS_BACKUP);
+            if !backup.is_file() {
+                return Err(error);
+            }
+            std::fs::copy(&backup, path).map_err(|copy| copy.to_string())?;
+            read_settings(path)?
+        }
+    };
     let ours = settings
         .get("statusLine")
         .and_then(|line| line.get("command"))
         .and_then(Value::as_str)
-        .is_some_and(is_bridge);
+        .is_some_and(|command| is_bridge(command, exe));
     if ours {
         match read_state(usage_dir).chained {
             Some(command) => {
@@ -165,7 +186,10 @@ pub fn disconnect(usage_dir: &Path, path: &Path) -> Result<BridgeStatus, String>
     }
     let _ = std::fs::remove_file(usage_dir.join(BRIDGE_STATE));
     let _ = std::fs::remove_file(usage_dir.join(harbor_core::usage::CLAUDE_CODE_CACHE));
-    Ok(status(usage_dir, path))
+    // Settings are healthy again, so the pre-connect snapshot goes stale; the
+    // next connect takes a fresh one.
+    let _ = std::fs::remove_file(usage_dir.join(SETTINGS_BACKUP));
+    Ok(status(usage_dir, path, exe))
 }
 
 /// Runs as the status-line command: keep the limits, then hand the same stdin
@@ -231,8 +255,8 @@ mod tests {
         .unwrap();
 
         {
-            let connected =
-                connect(&usage, &settings, Path::new("/opt/Harbor.app/harbor")).unwrap();
+            let exe = Path::new("/opt/Harbor.app/harbor");
+            let connected = connect(&usage, &settings, exe).unwrap();
             assert!(connected.connected);
             assert_eq!(connected.chained.as_deref(), Some("~/mine.sh"));
 
@@ -246,7 +270,7 @@ mod tests {
             assert_eq!(written["theme"], "dark");
             assert!(usage.join(SETTINGS_BACKUP).exists());
 
-            let off = disconnect(&usage, &settings).unwrap();
+            let off = disconnect(&usage, &settings, exe).unwrap();
             assert!(!off.connected);
             let restored: Value =
                 serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
@@ -263,8 +287,9 @@ mod tests {
         std::fs::write(&settings, r#"{"theme":"dark"}"#).unwrap();
 
         {
-            connect(&usage, &settings, Path::new("/opt/harbor")).unwrap();
-            disconnect(&usage, &settings).unwrap();
+            let exe = Path::new("/opt/harbor");
+            connect(&usage, &settings, exe).unwrap();
+            disconnect(&usage, &settings, exe).unwrap();
             let after: Value =
                 serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
             assert!(after.get("statusLine").is_none());
@@ -277,13 +302,47 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let usage = dir.path().join("usage");
         let settings = dir.path().join(".claude/settings.json");
-        assert!(!status(&usage, &settings).connected);
-        assert!(
-            connect(&usage, &settings, Path::new("/opt/harbor"))
-                .unwrap()
-                .connected
-        );
-        assert!(status(&usage, &settings).connected);
+        let exe = Path::new("/opt/harbor");
+        assert!(!status(&usage, &settings, exe).connected);
+        assert!(connect(&usage, &settings, exe).unwrap().connected);
+        assert!(status(&usage, &settings, exe).connected);
+    }
+
+    #[test]
+    fn a_command_that_mentions_usage_bridge_is_not_ours() {
+        let exe = Path::new("/opt/harbor");
+        // A substring match would have claimed somebody's own script.
+        assert!(!is_bridge("python ~/bin/my-usage-bridge.py", exe));
+        assert!(is_bridge("'/opt/harbor' usage-bridge", exe));
+        // Entries from an exe at a different path still count as ours.
+        assert!(is_bridge("'/opt/moved/harbor' usage-bridge", exe));
+        assert!(!is_bridge("usage-bridge --alone", exe));
+    }
+
+    #[test]
+    fn a_corrupt_settings_file_falls_back_to_the_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let usage = dir.path().join("usage");
+        let settings = dir.path().join(".claude/settings.json");
+        std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+        let exe = Path::new("/opt/harbor");
+
+        std::fs::write(
+            &settings,
+            r#"{"theme":"dark","statusLine":{"type":"command","command":"~/mine.sh"}}"#,
+        )
+        .unwrap();
+        connect(&usage, &settings, exe).unwrap();
+        assert!(usage.join(SETTINGS_BACKUP).exists());
+
+        // Whatever corrupted the file, disconnect leaves the pre-Harbor copy.
+        std::fs::write(&settings, "{ not json").unwrap();
+        let off = disconnect(&usage, &settings, exe).unwrap();
+        assert!(!off.connected);
+        let restored: Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(restored["statusLine"]["command"], "~/mine.sh");
+        assert!(!usage.join(SETTINGS_BACKUP).exists());
     }
 
     #[test]

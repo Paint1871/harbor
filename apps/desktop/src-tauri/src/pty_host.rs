@@ -1,17 +1,39 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
 use harbor_core::SqlitePool;
 use harbor_paths::{ShellKind, quote_for_shell};
 use harbor_pty::LivePty;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::security::{ExecutableAllowlist, ExecutableKind};
 
+struct PtyEntry {
+    pty: LivePty,
+    /// Monotonic spawn generation. A respawned pane holds a newer generation,
+    /// so the old process's reader thread can tell its own exit from the
+    /// current terminal's and stay silent instead of reporting a dead pane.
+    generation: u64,
+}
+
 #[derive(Default)]
-pub struct PtyRegistry(Mutex<HashMap<String, LivePty>>);
+pub struct PtyRegistry {
+    entries: Mutex<HashMap<String, PtyEntry>>,
+    next_generation: AtomicU64,
+}
+
+impl PtyRegistry {
+    /// The generation a pane is currently registered under, if it has a PTY.
+    fn current_generation(&self, pane_id: &str) -> Option<u64> {
+        self.entries
+            .lock()
+            .ok()
+            .and_then(|entries| entries.get(pane_id).map(|entry| entry.generation))
+    }
+}
 
 use harbor_core::b64::{decode as b64_decode, encode as b64_encode};
 
@@ -111,10 +133,13 @@ pub async fn pty_spawn(
     rows: u16,
     shell: Option<String>,
     engine_id: Option<String>,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     if pane_id.trim().is_empty() || workspace_id.trim().is_empty() {
         return Err("pane and workspace are required".into());
     }
+    // Claim the generation up front: a previous PTY's exit racing this spawn
+    // must already lose the comparison once the new entry lands.
+    let generation = registry.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let cwd = workspace_root(&pool, &pane_id, &workspace_id).await?;
     let shells = allow.granted(ExecutableKind::LoginShell);
     let saved_shell = harbor_core::settings::get(&pool, "default_shell")
@@ -174,12 +199,12 @@ pub async fn pty_spawn(
     let cols = cols.clamp(20, 500);
     let rows = rows.clamp(4, 200);
     if let Some(previous) = registry
-        .0
+        .entries
         .lock()
         .map_err(|_| "pty registry".to_string())?
         .remove(&pane_id)
     {
-        let _ = previous.kill();
+        let _ = previous.pty.kill();
     }
     #[cfg(unix)]
     let (launch_cwd, launch_args) = launch_via_shell(&target, &target_args, cwd.as_path())?;
@@ -217,7 +242,16 @@ pub async fn pty_spawn(
                 serde_json::json!({ "paneId": emit_id, "b64": b64_encode(&chunk) }),
             );
         }
-        let _ = app.emit("pty-exit", serde_json::json!({ "paneId": emit_id }));
+        // The process ended. If the pane has since been respawned the registry
+        // holds a newer generation — this exit belongs to the old process and
+        // must not mark the live terminal dead or spam a "stopped" inbox item.
+        if app.state::<PtyRegistry>().current_generation(&emit_id) != Some(generation) {
+            return;
+        }
+        let _ = app.emit(
+            "pty-exit",
+            serde_json::json!({ "paneId": emit_id, "generation": generation }),
+        );
         // A terminal in a workspace the builder is not looking at just ended.
         tauri::async_runtime::block_on(crate::ipc::notify(
             &app,
@@ -231,11 +265,11 @@ pub async fn pty_spawn(
     // Insert only after the PTY has been created so a failed spawn never
     // leaves a stale registry entry behind.
     registry
-        .0
+        .entries
         .lock()
         .map_err(|_| "pty registry".to_string())?
-        .insert(pane_id, pty);
-    Ok(())
+        .insert(pane_id, PtyEntry { pty, generation });
+    Ok(generation)
 }
 
 #[tauri::command]
@@ -246,11 +280,12 @@ pub fn pty_write_b64(
 ) -> Result<(), String> {
     let bytes = b64_decode(&b64)?;
     registry
-        .0
+        .entries
         .lock()
         .map_err(|_| "pty registry".to_string())?
         .get(&pane_id)
         .ok_or_else(|| "pty not found".to_string())?
+        .pty
         .write(&bytes)
         .map_err(|error| error.to_string())
 }
@@ -265,42 +300,49 @@ pub fn pty_resize(
     let cols = cols.clamp(20, 500);
     let rows = rows.clamp(4, 200);
     registry
-        .0
+        .entries
         .lock()
         .map_err(|_| "pty registry".to_string())?
         .get(&pane_id)
         .ok_or_else(|| "pty not found".to_string())?
+        .pty
         .resize(cols, rows)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
 pub fn pty_kill(registry: State<PtyRegistry>, pane_id: String) -> Result<(), String> {
-    if let Some(pty) = registry
-        .0
+    if let Some(entry) = registry
+        .entries
         .lock()
         .map_err(|_| "pty registry".to_string())?
         .remove(&pane_id)
     {
-        pty.kill().map_err(|error| error.to_string())?;
+        entry.pty.kill().map_err(|error| error.to_string())?;
     }
     Ok(())
 }
 
 #[tauri::command]
 pub fn pty_pause(registry: State<PtyRegistry>, pane_id: String) -> Result<(), String> {
-    let guard = registry.0.lock().map_err(|_| "pty registry".to_string())?;
-    if let Some(pty) = guard.get(&pane_id) {
-        pty.pause().map_err(|error| error.to_string())?;
+    let guard = registry
+        .entries
+        .lock()
+        .map_err(|_| "pty registry".to_string())?;
+    if let Some(entry) = guard.get(&pane_id) {
+        entry.pty.pause().map_err(|error| error.to_string())?;
     }
     Ok(())
 }
 
 #[tauri::command]
 pub fn pty_resume(registry: State<PtyRegistry>, pane_id: String) -> Result<(), String> {
-    let guard = registry.0.lock().map_err(|_| "pty registry".to_string())?;
-    if let Some(pty) = guard.get(&pane_id) {
-        pty.resume().map_err(|error| error.to_string())?;
+    let guard = registry
+        .entries
+        .lock()
+        .map_err(|_| "pty registry".to_string())?;
+    if let Some(entry) = guard.get(&pane_id) {
+        entry.pty.resume().map_err(|error| error.to_string())?;
     }
     Ok(())
 }

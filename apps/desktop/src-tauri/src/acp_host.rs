@@ -36,6 +36,9 @@ struct LiveSession {
     session: Mutex<AcpHostSession>,
     stdin: Arc<Mutex<ChildStdin>>,
     acp_id: Mutex<Option<String>>,
+    /// What the process was spawned with. A mismatch means reuse would serve
+    /// the wrong engine, cwd, or roots — the session must be respawned.
+    fingerprint: String,
 }
 
 struct PendingPermission {
@@ -59,6 +62,8 @@ struct TurnContext {
     /// Released plugin ids the agent may use; the sidecar still needs a stored
     /// credential before it advertises any tool.
     granted_plugins: Vec<String>,
+    /// Engine options the builder chose earlier; re-applied on a fresh spawn.
+    config: Vec<(String, Value)>,
 }
 
 pub fn grant_engines(allow: &ExecutableAllowlist, engines: &[DetectedEngine]) {
@@ -157,6 +162,7 @@ async fn thread_turn_context(pool: &SqlitePool, thread_id: &str) -> Result<TurnC
         agent_id: None,
         // Folder threads belong to a workspace, not an agent — no plugin grants.
         granted_plugins: Vec::new(),
+        config: ctx.config,
     })
 }
 
@@ -186,6 +192,7 @@ async fn agent_turn_context(pool: &SqlitePool, chat_id: &str) -> Result<TurnCont
         kind: SessionKind::Agent,
         agent_id: Some(ctx.agent_id),
         granted_plugins,
+        config: ctx.config,
     })
 }
 
@@ -364,6 +371,25 @@ fn cancel_sync(registry: &AcpRegistry, session_ref: &str) -> Result<(), String> 
     .map_err(|error| error.to_string())
 }
 
+/// Everything that decides which process a session is. A different engine,
+/// working directory, or root set must respawn rather than reuse — the old
+/// session's answers belong to the old context. Plugin grants are left out on
+/// purpose: the sidecar re-checks the database per call, so toggling a grant
+/// under Plugins must not kill a running session.
+fn session_fingerprint(ctx: &TurnContext, command: &Path, args: &[String]) -> String {
+    let mut roots = ctx.extra_roots.clone();
+    roots.sort();
+    json!({
+        "engine": ctx.engine_id,
+        "command": command.to_string_lossy(),
+        "args": args,
+        "cwd": ctx.cwd,
+        "extraRoots": roots,
+        "agent": ctx.agent_id,
+    })
+    .to_string()
+}
+
 fn get_or_connect(
     registry: &AcpRegistry,
     key: &str,
@@ -372,13 +398,19 @@ fn get_or_connect(
     args: Vec<String>,
     hook: PermissionHook,
 ) -> Result<Arc<LiveSession>, String> {
+    let fingerprint = session_fingerprint(ctx, granted, &args);
     {
-        let sessions = registry
+        let mut sessions = registry
             .sessions
             .lock()
             .map_err(|_| "acp registry".to_string())?;
         if let Some(live) = sessions.get(key) {
-            return Ok(live.clone());
+            if live.fingerprint == fingerprint {
+                return Ok(live.clone());
+            }
+            // Context changed — the old process's remaining events must not
+            // leak into the new session. Dropping it kills the child.
+            sessions.remove(key);
         }
     }
     let spec = SpawnSpec {
@@ -404,6 +436,12 @@ fn get_or_connect(
     let kind = session
         .open_session(ctx.acp_session.clone(), &spec, &ctx.extra_roots)
         .map_err(|error| error.to_string())?;
+    // A respawn must not silently reset the options the builder chose — model,
+    // mode, effort. An option the new session does not know is skipped, not
+    // fatal.
+    for (option_id, value) in &ctx.config {
+        let _ = session.set_config_option(option_id, value.clone());
+    }
     let _ = session.take_notifications();
     session.resume_kind = kind;
     let stdin = session.stdin_handle();
@@ -412,13 +450,18 @@ fn get_or_connect(
         session: Mutex::new(session),
         stdin,
         acp_id: Mutex::new(acp_id),
+        fingerprint: fingerprint.clone(),
     });
     let mut sessions = registry
         .sessions
         .lock()
         .map_err(|_| "acp registry".to_string())?;
     if let Some(existing) = sessions.get(key) {
-        return Ok(existing.clone());
+        if existing.fingerprint == fingerprint {
+            return Ok(existing.clone());
+        }
+        // A concurrent spawn raced us for an older context — ours is newer.
+        sessions.remove(key);
     }
     sessions.insert(key.to_string(), live.clone());
     Ok(live)
@@ -459,42 +502,53 @@ async fn run_turn(
     let chat_kind = persist_kind.as_str();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         let live = get_or_connect(&registry, &session_key, &ctx, &granted, args, hook)?;
-        let acp_id = live
-            .acp_id
-            .lock()
-            .map_err(|_| "acp session".to_string())?
-            .clone();
-        if let Some(session_id) = acp_id.as_deref() {
-            let _ = block_on(persist_acp_session(
-                &persist_pool,
-                &persist_ref,
-                persist_kind,
-                session_id,
-            ));
-        }
-        let mut session = live.session.lock().map_err(|_| "acp session".to_string())?;
-        let result = session
-            .prompt(&prompt_parts)
-            .map_err(|error| error.to_string())?;
-        let notes = session.take_notifications();
-        if let Ok(mut stored) = live.acp_id.lock() {
-            *stored = session.session_id.clone();
-        }
-        Ok::<_, String>((
-            result,
-            notes,
-            session.session_id.clone(),
-            session.resume_kind,
-            session.config_options.clone(),
-        ))
+        let turn = (|| {
+            let acp_id = live
+                .acp_id
+                .lock()
+                .map_err(|_| "acp session".to_string())?
+                .clone();
+            if let Some(session_id) = acp_id.as_deref() {
+                let _ = block_on(persist_acp_session(
+                    &persist_pool,
+                    &persist_ref,
+                    persist_kind,
+                    session_id,
+                ));
+            }
+            let mut session = live.session.lock().map_err(|_| "acp session".to_string())?;
+            let result = session
+                .prompt(&prompt_parts)
+                .map_err(|error| error.to_string())?;
+            let notes = session.take_notifications();
+            if let Ok(mut stored) = live.acp_id.lock() {
+                *stored = session.session_id.clone();
+            }
+            Ok::<_, String>((
+                result,
+                notes,
+                session.session_id.clone(),
+                session.resume_kind,
+                session.config_options.clone(),
+            ))
+        })();
+        Ok::<_, String>((live, turn))
     })
     .await
     .map_err(|error| error.to_string())?;
-    let (result, notes, session_id, kind, config_options) = match outcome {
+    let (live, turn) = outcome?;
+    let (result, notes, session_id, kind, config_options) = match turn {
         Ok(value) => value,
         Err(error) => {
+            // Drop only the session that actually failed — a stale turn must
+            // not kill the replacement that now owns this key.
             let _ = registry_for_err.sessions.lock().map(|mut sessions| {
-                sessions.remove(session_ref);
+                if sessions
+                    .get(session_ref)
+                    .is_some_and(|current| Arc::ptr_eq(current, &live))
+                {
+                    sessions.remove(session_ref);
+                }
             });
             if error.contains("auth-required") {
                 let _ = app.emit(
@@ -508,6 +562,23 @@ async fn run_turn(
             return Err(error);
         }
     };
+    // The session was swapped mid-turn (engine switch, new roots, respawn):
+    // this reply belongs to a process that is already gone — discard it.
+    let still_current = registry_for_err
+        .sessions
+        .lock()
+        .map(|sessions| {
+            sessions
+                .get(session_ref)
+                .is_some_and(|current| Arc::ptr_eq(current, &live))
+        })
+        .unwrap_or(false);
+    if !still_current {
+        if persist_kind == SessionKind::Agent {
+            let _ = harbor_core::chats::set_status(pool, session_ref, "idle").await;
+        }
+        return Ok(());
+    }
     if let Some(session_id) = session_id.as_deref() {
         persist_acp_session(pool, session_ref, persist_kind, session_id).await?;
     }
@@ -548,6 +619,11 @@ async fn run_turn(
     let watched = app
         .try_state::<crate::ipc::Watching>()
         .is_some_and(|watching| crate::ipc::is_being_watched(app, &watching, session_ref));
+    // A reply the builder was not watching marks the folder thread unread —
+    // the same "did you see it" question the inbox row asks.
+    if chat_kind == "thread" && !prose.is_empty() && !watched {
+        let _ = harbor_core::threads::mark_unread(pool, session_ref).await;
+    }
     let stop = result
         .get("stopReason")
         .and_then(Value::as_str)
@@ -729,6 +805,23 @@ pub async fn drop_agent_sessions(pool: &SqlitePool, registry: &AcpRegistry, agen
     for chat in chats {
         drop_session(registry, &chat.id);
     }
+}
+
+/// A restart kills every engine process but leaves their database state
+/// behind. Rows stuck mid-turn would otherwise look alive forever: chats go
+/// back to idle and unanswered permission requests are cancelled, so a fresh
+/// session never inherits a dead one's state. Stored `acp_session` ids are
+/// kept — the engine may still be able to resume them; if not, open falls
+/// back to a new session.
+pub async fn reconcile_stale_sessions(pool: &SqlitePool) {
+    let _ = sqlx::query(
+        "UPDATE agent_chats SET status = 'idle' WHERE status IN ('running', 'needs_you')",
+    )
+    .execute(pool)
+    .await;
+    let _ = sqlx::query("UPDATE acp_permissions SET status = 'cancelled' WHERE status = 'pending'")
+        .execute(pool)
+        .await;
 }
 
 pub async fn set_live_config(
@@ -991,5 +1084,114 @@ mod tests {
                 .unwrap();
         assert_eq!(status, "selected");
         assert_eq!(selected.as_deref(), Some("opt-allow"));
+    }
+
+    fn test_ctx() -> super::TurnContext {
+        super::TurnContext {
+            engine_id: "opencode".into(),
+            cwd: "/tmp/work".into(),
+            extra_roots: vec!["/tmp/extra".into()],
+            acp_session: None,
+            kind: super::SessionKind::Thread,
+            agent_id: None,
+            granted_plugins: vec!["github".into()],
+            config: vec![],
+        }
+    }
+
+    #[test]
+    fn fingerprint_changes_with_spawn_context_but_not_grants() {
+        use std::path::Path;
+        let ctx = test_ctx();
+        let base = super::session_fingerprint(&ctx, Path::new("/usr/bin/opencode"), &[]);
+        assert_eq!(
+            base,
+            super::session_fingerprint(&ctx, Path::new("/usr/bin/opencode"), &[])
+        );
+
+        let other_engine = super::TurnContext {
+            engine_id: "claude-code".into(),
+            ..test_ctx()
+        };
+        assert_ne!(
+            base,
+            super::session_fingerprint(&other_engine, Path::new("/usr/bin/opencode"), &[])
+        );
+
+        let other_cwd = super::TurnContext {
+            cwd: "/tmp/other".into(),
+            ..test_ctx()
+        };
+        assert_ne!(
+            base,
+            super::session_fingerprint(&other_cwd, Path::new("/usr/bin/opencode"), &[])
+        );
+
+        let other_roots = super::TurnContext {
+            extra_roots: vec!["/tmp/a".into(), "/tmp/b".into()],
+            ..test_ctx()
+        };
+        assert_ne!(
+            base,
+            super::session_fingerprint(&other_roots, Path::new("/usr/bin/opencode"), &[])
+        );
+
+        // Grant toggles ride the live DB check — they must not force a respawn.
+        let other_grants = super::TurnContext {
+            granted_plugins: vec![],
+            ..test_ctx()
+        };
+        assert_eq!(
+            base,
+            super::session_fingerprint(&other_grants, Path::new("/usr/bin/opencode"), &[])
+        );
+    }
+
+    #[tokio::test]
+    async fn restart_reconciles_stale_chats_and_permissions() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = harbor_core::db::open(&dir.path().join("db.sqlite"))
+            .await
+            .unwrap();
+        let agent = harbor_core::agents::create(
+            &pool,
+            CreateAgent {
+                name: "Mate".into(),
+                brief: String::new(),
+                engine_id: "opencode".into(),
+                home_path: None,
+                face_index: None,
+            },
+        )
+        .await
+        .unwrap();
+        let chat = harbor_core::chats::create(&pool, &agent.id).await.unwrap();
+        harbor_core::chats::set_status(&pool, &chat.id, "running")
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO acp_permissions
+             (id, session_ref, session_kind, tool_title, path, command, options_json, status, created_at)
+             VALUES ('stale-perm', ?1, 'agent', 'Run', NULL, NULL, '[]', 'pending', 1)",
+        )
+        .bind(&chat.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        super::reconcile_stale_sessions(&pool).await;
+
+        let (status,): (String,) = sqlx::query_as("SELECT status FROM agent_chats WHERE id = ?1")
+            .bind(&chat.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(status, "idle");
+        let (perm,): (String,) =
+            sqlx::query_as("SELECT status FROM acp_permissions WHERE id = 'stale-perm'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(perm, "cancelled");
     }
 }

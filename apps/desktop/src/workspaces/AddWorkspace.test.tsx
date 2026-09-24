@@ -36,6 +36,7 @@ beforeEach(() => {
     if (command === "engines_detect") {
       return Promise.resolve([{ id: "claude-code", displayName: "Claude Code", path: "/usr/local/bin/claude", status: "ready", supportsChat: true, supportsTerminal: true }]);
     }
+    if (command === "workspace_pick_folder") return Promise.resolve({ id: "pick-1", path: workspace.folder });
     if (command === "workspace_add") return Promise.resolve(workspace);
     if (command === "workspace_configure_tab") return Promise.resolve();
     return Promise.resolve(null);
@@ -49,9 +50,10 @@ it("sends the launch profile and remembers it for the next workspace", async () 
   render(<AddWorkspace onAdded={onAdded} onClose={vi.fn()} />);
   await screen.findByText("1 installed CLI detected on this Mac.");
 
-  fireEvent.change(screen.getByRole("textbox", { name: "Folder path" }), {
-    target: { value: workspace.folder },
-  });
+  fireEvent.click(screen.getByRole("button", { name: "Browse…" }));
+  await waitFor(() =>
+    expect((screen.getByRole("textbox", { name: "Folder path" }) as HTMLInputElement).value).toBe(workspace.folder),
+  );
   fireEvent.change(screen.getByRole("slider", { name: "Additional terminals" }), {
     target: { value: "3" },
   });
@@ -86,9 +88,10 @@ it("applies one CLI to every terminal without asking per terminal", async () => 
   fireEvent.change(screen.getByRole("combobox", { name: "Terminal CLI" }), {
     target: { value: "shell" },
   });
-  fireEvent.change(screen.getByRole("textbox", { name: "Folder path" }), {
-    target: { value: workspace.folder },
-  });
+  fireEvent.click(screen.getByRole("button", { name: "Browse…" }));
+  await waitFor(() =>
+    expect((screen.getByRole("textbox", { name: "Folder path" }) as HTMLInputElement).value).toBe(workspace.folder),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
 
   await waitFor(() => expect(onAdded).toHaveBeenCalledWith(workspace));
@@ -115,9 +118,10 @@ it("keeps a different CLI choice for each terminal when asked", async () => {
   fireEvent.change(screen.getByRole("combobox", { name: "Terminal 2 CLI" }), {
     target: { value: "claude-code" },
   });
-  fireEvent.change(screen.getByRole("textbox", { name: "Folder path" }), {
-    target: { value: workspace.folder },
-  });
+  fireEvent.click(screen.getByRole("button", { name: "Browse…" }));
+  await waitFor(() =>
+    expect((screen.getByRole("textbox", { name: "Folder path" }) as HTMLInputElement).value).toBe(workspace.folder),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
 
   await waitFor(() => expect(onAdded).toHaveBeenCalledWith(workspace));

@@ -445,11 +445,35 @@ impl AcpHostSession {
         spec: &SpawnSpec,
         extra_roots: &[String],
     ) -> Result<ResumeKind, AcpError> {
-        let kind = resume_or_new(stored.as_deref(), &self.caps);
+        let mut kind = resume_or_new(stored.as_deref(), &self.caps);
         let params = session_params(kind, stored.clone(), spec, extra_roots, &self.caps);
-        let result = self
+        let result = match self
             .conn
-            .request(method_for(kind), serde_json::to_value(&params)?)?;
+            .request(method_for(kind), serde_json::to_value(&params)?)
+        {
+            Ok(result) => result,
+            // A stored session id can outlive the engine's own state — engine
+            // restart, wiped session store, a build that no longer resumes.
+            // Refusing the whole turn for that is wrong: start fresh and let
+            // the banner explain.
+            Err(error)
+                if matches!(
+                    kind,
+                    ResumeKind::Resumed | ResumeKind::LoadedNoReplayPersist
+                ) =>
+            {
+                kind = ResumeKind::FreshWithBanner;
+                let params = session_params(kind, None, spec, extra_roots, &self.caps);
+                match self
+                    .conn
+                    .request(method_for(kind), serde_json::to_value(&params)?)
+                {
+                    Ok(result) => result,
+                    Err(_) => return Err(error),
+                }
+            }
+            Err(error) => return Err(error),
+        };
         if matches!(kind, ResumeKind::LoadedNoReplayPersist) {
             self.conn.notifications.retain(|note| {
                 !should_drop_session_update(
@@ -475,12 +499,13 @@ impl AcpHostSession {
     }
 
     pub fn prompt(&mut self, parts: &[Value]) -> Result<Value, AcpError> {
-        self.conn.request(
+        self.conn.request_idle(
             "session/prompt",
             json!({
                 "sessionId": self.session_id,
                 "prompt": parts
             }),
+            crate::transport::TURN_IDLE,
         )
     }
 
@@ -528,5 +553,71 @@ impl AcpHostSession {
 
     pub fn take_notifications(&mut self) -> Vec<Value> {
         std::mem::take(&mut self.conn.notifications)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transport::AcpConn;
+    use std::time::Duration;
+
+    /// A fake engine as a shell script: answers initialize and session/new,
+    /// errors on session/resume — the stored-id-gone case.
+    #[cfg(unix)]
+    fn fake_engine(dir: &tempfile::TempDir, body: &str) -> SpawnSpec {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.path().join("fake-engine.sh");
+        std::fs::write(&path, body).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        SpawnSpec {
+            engine_id: "fake".into(),
+            command: path.display().to_string(),
+            args: vec![],
+            cwd: dir.path().display().to_string(),
+            mcp_servers: vec![],
+        }
+    }
+
+    #[cfg(unix)]
+    const RESUME_FAILING_ENGINE: &str = r#"#!/bin/sh
+while IFS= read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  case "$line" in
+    *initialize*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":1,"agentCapabilities":{"sessionCapabilities":{"resume":{}}}}}\n' "$id" ;;
+    *session/resume*)
+      printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32000,"message":"session gone"}}\n' "$id" ;;
+    *session/new*)
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"fresh-1"}}\n' "$id" ;;
+  esac
+done
+"#;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_resume_falls_back_to_a_fresh_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec = fake_engine(&dir, RESUME_FAILING_ENGINE);
+        let mut session = AcpHostSession::connect(spec.clone()).unwrap();
+        let kind = session
+            .open_session(Some("stale-id".into()), &spec, &[])
+            .unwrap();
+        assert_eq!(kind, ResumeKind::FreshWithBanner);
+        assert_eq!(session.session_id.as_deref(), Some("fresh-1"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_silent_engine_trips_the_deadline_and_stays_dead() {
+        // Reads every request but never answers one.
+        let dir = tempfile::tempdir().unwrap();
+        let spec = fake_engine(&dir, "#!/bin/sh\nwhile IFS= read -r line; do :; done\n");
+        let mut conn = AcpConn::spawn(&spec).unwrap();
+        let error = conn
+            .request_idle("initialize", json!({}), Duration::from_millis(300))
+            .unwrap_err();
+        assert!(error.to_string().contains("timed out"), "{error}");
+        assert!(conn.request("initialize", json!({})).is_err());
     }
 }

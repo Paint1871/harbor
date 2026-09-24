@@ -1,6 +1,6 @@
 //! Minimal stdio MCP server. Tokens stay in this process, never on the wire.
 
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
 
 use serde_json::{Value, json};
 
@@ -162,6 +162,33 @@ pub fn handle_message(backend: &mut dyn ToolBackend, message: &Value) -> Option<
     }
 }
 
+/// One JSON-RPC message is a few kilobytes of command; a megabyte is the
+/// generous bound. A peer streaming a single endless line must not grow this
+/// process without limit.
+const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
+
+/// Consume the remainder of an over-long line so the next read starts on a
+/// real message boundary again. `fill_buf`/`consume` scan without reading
+/// past the newline — the leftover is just as untrusted as the part seen.
+fn drain_line(reader: &mut impl BufRead) -> io::Result<()> {
+    loop {
+        let (consumed, done) = {
+            let buf = reader.fill_buf()?;
+            if buf.is_empty() {
+                return Ok(());
+            }
+            match buf.iter().position(|b| *b == b'\n') {
+                Some(pos) => (pos + 1, true),
+                None => (buf.len(), false),
+            }
+        };
+        reader.consume(consumed);
+        if done {
+            return Ok(());
+        }
+    }
+}
+
 /// Newline-delimited JSON-RPC on stdio. Never echoes the request; never prints secrets.
 pub fn serve<R, W>(mut reader: R, mut writer: W, backend: &mut dyn ToolBackend) -> io::Result<()>
 where
@@ -171,9 +198,18 @@ where
     let mut line = String::new();
     loop {
         line.clear();
-        let n = reader.read_line(&mut line)?;
+        let n = reader
+            .by_ref()
+            .take(MAX_MESSAGE_BYTES as u64 + 1)
+            .read_line(&mut line)?;
         if n == 0 {
             return Ok(());
+        }
+        if line.len() > MAX_MESSAGE_BYTES {
+            if !line.ends_with('\n') {
+                drain_line(&mut reader)?;
+            }
+            continue;
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -319,5 +355,24 @@ mod tests {
         assert_eq!(failed["result"]["isError"], true);
         assert_eq!(failed["result"]["content"][0]["text"], "boom");
         assert!(lines.next().is_none());
+    }
+
+    #[test]
+    fn an_overlong_line_is_dropped_and_framing_recovers() {
+        let mut backend = FakeBackend { available: true };
+        // A peer streaming one endless line must not grow this process; the
+        // line is dropped and the next real message still parses.
+        let mut input = vec![b'x'; MAX_MESSAGE_BYTES + 4096];
+        input.push(b'\n');
+        input.extend_from_slice(
+            br#"{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}
+"#,
+        );
+        let mut out = Vec::new();
+        serve(&input[..], &mut out, &mut backend).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(text.lines().count(), 1, "only the real message answered");
+        let listed: Value = serde_json::from_str(text.trim()).unwrap();
+        assert_eq!(listed["id"], 9);
     }
 }

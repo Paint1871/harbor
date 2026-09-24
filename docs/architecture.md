@@ -14,8 +14,13 @@ harbor (Tauri host)
 ```
 
 The renderer cannot spawn processes. File access is limited to host-granted
-roots. Each IPC command is individually allowlisted in
-`apps/desktop/src-tauri/permissions/` and `capabilities/`.
+roots, and those roots only ever come from the native picker: the host keeps
+the picked path and returns an opaque, single-use pick id that exactly one
+command can redeem — a renderer-supplied path can never create a grant. Each
+IPC command is individually allowlisted in
+`apps/desktop/src-tauri/permissions/` and `capabilities/`; scope entries are
+revoked when the last workspace, place, or agent home that referenced them is
+removed.
 
 ## Crates
 

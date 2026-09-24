@@ -28,7 +28,6 @@ jobs:
   opencode:
     name: OpenCode initialize + session/new
     runs-on: ubuntu-22.04
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,8 +36,10 @@ jobs:
       - name: Install pinned OpenCode CLI
         run: |
           set -euo pipefail
-          # Pin lives in packages/engine-catalog/src/catalog.json (minVersion).
-          npm install -g opencode-ai@latest
+          # The pin lives in packages/engine-catalog/src/catalog.json
+          # (minVersion); this job must fail loudly when upstream breaks ACP.
+          VERSION=$(node -p "require('./packages/engine-catalog/src/catalog.json').find((e) => e.id === 'opencode').minVersion")
+          npm install -g "opencode-ai@${VERSION}"
           command -v opencode
           opencode --version
       - name: initialize + session/new

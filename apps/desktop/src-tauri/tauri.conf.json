@@ -50,7 +50,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
+    "targets": "all",
     "category": "DeveloperTool",
     "shortDescription": "an open desktop host for coding agents",
     "icon": ["icons/icon.png"],

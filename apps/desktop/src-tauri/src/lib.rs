@@ -64,8 +64,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry>::new("local-navigation")
                 .on_navigation(|_, url| security::allows_navigation(url, cfg!(debug_assertions)))
@@ -97,8 +96,10 @@ pub fn run() {
             // Optional vendor logos live beside the database, never in the bundle.
             app.manage(ipc::EngineIconDir(data_root.join("engine-icons")));
             app.manage(ipc::Watching::default());
+            app.manage(ipc::PendingPicks::default());
             let db_path = database_path();
             let pool = tauri::async_runtime::block_on(harbor_core::db::open(&db_path))?;
+            tauri::async_runtime::block_on(acp_host::reconcile_stale_sessions(&pool));
             app.manage(pool);
             Ok(())
         })

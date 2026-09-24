@@ -98,6 +98,11 @@ export function TerminalPane({
     let cancelled = false;
     let spawned = false;
     let exited = false;
+    let lastGeneration: number | null = null;
+    // An exit can beat the spawn promise's resolution; remember its
+    // generation so the spawn completion honours it instead of reporting a
+    // dead process as running.
+    let exitBeforeSpawn: number | null = null;
     setError(null);
     let stopListen: (() => void) | undefined;
     let disposeInput: { dispose: () => void } | undefined;
@@ -187,8 +192,14 @@ export function TerminalPane({
             setError(errorText(reason));
           }
         }),
-        listen<{ paneId: string }>("pty-exit", (event) => {
+        listen<{ paneId: string; generation?: number }>("pty-exit", (event) => {
           if (event.payload.paneId !== paneId || cancelled) return;
+          // Exit events carry their spawn generation: a pane respawned while
+          // the old process wound down must not be marked dead by it.
+          if (typeof event.payload.generation === "number" && event.payload.generation !== lastGeneration) {
+            exitBeforeSpawn = event.payload.generation;
+            return;
+          }
           exited = true;
           spawned = false;
           setStatus("error");
@@ -206,7 +217,7 @@ export function TerminalPane({
       };
 
       setStatus("starting");
-      await call("pty_spawn", {
+      const generation = await call("pty_spawn", {
         paneId,
         workspaceId,
         cols: term.cols,
@@ -214,7 +225,20 @@ export function TerminalPane({
         shell: null,
         engineId: engineId ?? null,
       });
-      if (cancelled || exited) return;
+      if (cancelled) {
+        // The cleanup's kill ran before this spawn landed in the registry —
+        // send it again or the fresh PTY outlives its UI.
+        void call("pty_kill", { paneId }).catch(() => undefined);
+        return;
+      }
+      lastGeneration = generation;
+      exited = exitBeforeSpawn === generation;
+      exitBeforeSpawn = null;
+      if (exited) {
+        setStatus("error");
+        setError("The terminal process exited unexpectedly. Retry to start a fresh terminal.");
+        return;
+      }
       spawned = true;
       setStatus("running");
       resize();

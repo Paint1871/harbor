@@ -33,5 +33,7 @@ Never commit `.env` files, API keys, GitHub App client secrets, or code-signing
 material. `HARBOR_GITHUB_CLIENT_ID` is a public Device Flow client id; Harbor
 never ships a client secret.
 
-`apps/desktop/src-tauri/minisign.pub` is a placeholder. The updater will not
-authorize an install until a real release key is documented and substituted.
+`apps/desktop/src-tauri/minisign.pub` is the baked release public key; updates
+verify their signed manifest against it. The matching secret never enters the
+repository — release signing uses the `MINISIGN_KEY_B64`/`MINISIGN_PASSWORD`
+secrets described in `docs/releasing.md`.

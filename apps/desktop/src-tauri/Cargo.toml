@@ -26,14 +26,13 @@ harbor-speech = { path = "../../../crates/harbor-speech" }
 harbor-updater = { path = "../../../crates/harbor-updater" }
 tauri = { version = "=2.11.5", features = ["macos-private-api"] }
 tauri-plugin-fs = "=2.5.2"
-tauri-plugin-http = { version = "=2.6.0", default-features = false, features = ["rustls-tls"] }
-tauri-plugin-clipboard-manager = "=2.3.3"
 dirs = "=6.0.0"
 reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls", "blocking"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sqlx = { version = "=0.8.6", default-features = false, features = ["runtime-tokio", "sqlite"] }
 tauri-plugin-dialog = "=2.7.3"
+tauri-plugin-notification = "=2.4.0"
 tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "sync"] }
 uuid = { version = "=1.26.0", features = ["v7"] }
 

@@ -296,7 +296,7 @@ export function Plugins() {
             <span className="harbor-eyebrow">CONNECTION UPDATE</span>
             {device.userCode ? <p>Finish the browser sign-in with code <strong>{device.userCode}</strong> at {device.verificationUri}.</p> : null}
             {device.error ? <p>{device.error}</p> : null}
-            {device.verificationUri ? <button type="button" className="harbor-connection-link" onClick={() => window.open(device.verificationUri, "_blank", "noopener,noreferrer")}>Open sign-in page</button> : null}
+            {device.verificationUri ? <button type="button" className="harbor-connection-link" onClick={() => void call("open_external_url", { url: device.verificationUri ?? "" }).catch(() => undefined)}>Open sign-in page</button> : null}
           </div>
           <Button variant="ghost" onClick={() => setDevice(null)}>Dismiss</Button>
         </div>

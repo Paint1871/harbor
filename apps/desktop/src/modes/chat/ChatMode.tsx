@@ -170,6 +170,7 @@ export function ChatMode({
   useEffect(() => {
     const sessionRef = mode === "chat" ? active?.id ?? null : null;
     void call("session_watch", { sessionRef }).catch(() => undefined);
+    if (sessionRef) void call("thread_mark_read", { id: sessionRef }).catch(() => undefined);
     return () => { void call("session_watch", { sessionRef: null }).catch(() => undefined); };
   }, [active?.id, mode]);
 
@@ -290,10 +291,10 @@ export function ChatMode({
   async function attachFolder() {
     if (!active) return;
     try {
-      const folder = await call("workspace_pick_folder");
-      if (!folder) return;
-      await call("thread_attach_files", { id: active.id, paths: [folder] });
-      setAttached((current) => ({ ...current, [active.id]: [...(current[active.id] ?? []), folder] }));
+      const pick = await call("workspace_pick_folder");
+      if (!pick) return;
+      await call("thread_attach_files", { id: active.id, paths: [pick.path] });
+      setAttached((current) => ({ ...current, [active.id]: [...(current[active.id] ?? []), pick.path] }));
     } catch (reason) {
       setError(`Could not attach that folder. ${String(reason)}`);
     }

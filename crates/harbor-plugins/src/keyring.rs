@@ -89,8 +89,12 @@ pub fn load(dir: &Path, plugin_id: &str) -> Result<String, KeyringError> {
 }
 
 pub fn delete(dir: &Path, plugin_id: &str) -> Result<(), KeyringError> {
-    let _ = delete_os(plugin_id);
-    delete_file(dir, plugin_id)
+    // Both stores must confirm the token is gone. Swallowing the OS-keyring
+    // result would let a credential survive "disconnect" — it stays loadable
+    // the moment the keychain is reachable again.
+    let os = delete_os(plugin_id);
+    let file = delete_file(dir, plugin_id);
+    os.and(file)
 }
 
 #[cfg(test)]
